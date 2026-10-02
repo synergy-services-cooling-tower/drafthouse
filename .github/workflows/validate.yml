@@ -1,0 +1,141 @@
+name: validate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+
+      - name: Report Node version
+        run: node --version
+
+      - name: Install (no dependencies; still proves the tree installs)
+        run: npm ci
+
+      - name: Install the Rust toolchain pinned by rust/rust-toolchain.toml
+        run: |
+          channel="$(sed -n 's/^channel *= *"\([^"]*\)"$/\1/p' rust/rust-toolchain.toml)"
+          test -n "$channel"
+          rustup toolchain install --no-self-update --profile minimal "$channel"
+          rustup target add --toolchain "$channel" wasm32-unknown-unknown
+          rustup default "$channel"
+
+      - name: Cache cargo home and the crate target directory
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo
+            rust/target
+          key: ${{ runner.os }}-wasm-${{ hashFiles('rust/Cargo.lock', 'rust/rust-toolchain.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-wasm-
+
+      # `npm test` includes the deployment-shaped cockpit cases, which read the built plane - so
+      # this job builds the plane first (its own build, not the cockpit job's artifact).
+      - name: Install wasm-pack, then build the cockpit plane (the serving legs of the chain read it)
+        run: |
+          cargo install wasm-pack --version 0.15.0 --locked
+          cockpit/tools/build-web.sh release
+
+      - name: Validate
+        run: npm run validate
+
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+
+      - name: Install the Rust toolchain pinned by rust/rust-toolchain.toml
+        run: |
+          channel="$(sed -n 's/^channel *= *"\([^"]*\)"$/\1/p' rust/rust-toolchain.toml)"
+          test -n "$channel"
+          rustup toolchain install --no-self-update --profile minimal --component rustfmt --component clippy "$channel"
+          rustup default "$channel"
+
+      - name: cargo fmt --check
+        working-directory: rust
+        run: cargo fmt --check
+
+      - name: cargo clippy --all-targets -- -D warnings
+        working-directory: rust
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: cargo test --workspace
+        run: cargo test --workspace --manifest-path rust/Cargo.toml
+
+      - name: node scripts/parity/run.mjs
+        run: node scripts/parity/run.mjs
+
+  cockpit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+
+      - name: Install the Rust toolchain pinned by cockpit/rust-toolchain.toml
+        run: |
+          channel="$(sed -n 's/^channel *= *"\([^"]*\)"$/\1/p' cockpit/rust-toolchain.toml)"
+          test -n "$channel"
+          rustup toolchain install --no-self-update --profile minimal "$channel"
+          rustup target add --toolchain "$channel" wasm32-unknown-unknown
+          rustup default "$channel"
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --version 0.15.0 --locked
+
+      - name: Cache cargo home and the cockpit's target directory
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo
+            cockpit/target
+          key: ${{ runner.os }}-cockpit-${{ hashFiles('cockpit/Cargo.toml', 'cockpit/Cargo.lock', 'cockpit/rust-toolchain.toml', 'cockpit/contract/Cargo.toml', 'cockpit/seams/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cockpit-
+
+      - name: The cockpit's own Rust gates (tests, formatting, lints)
+        run: |
+          cargo test
+          cargo fmt --check
+          cargo clippy --all-targets -- -D warnings
+        working-directory: cockpit
+
+      - name: cockpit/tools/build-web.sh release (prints the gzip size, refuses above the limit)
+        run: cockpit/tools/build-web.sh release
+
+      - name: Pack the plane the release publishes, and verify every hash from the archive
+        run: |
+          node scripts/cockpit-artifact.mjs --write dist/cockpit
+          node scripts/cockpit-artifact.mjs --verify dist/cockpit
+
+          npm run server-smoke
+
+      - name: The deployment-shaped serving tests, against the plane this job built
+        run: |
+          node --test tests/deployment-serving.test.js
+          node scripts/deploytest-serve.mjs --check --dir cockpit

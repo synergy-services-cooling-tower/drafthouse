@@ -1,0 +1,349 @@
+{
+  "generatedBy": "tools/gen-duty.mjs",
+  "source": "../fixtures/engine-run.json",
+  "note": "The duty & site panel is seeded from the engine’s recorded run: every row carries the JSON path it was read from. The evidence domains are the feasible points of the recorded sweeps - the duty the engine’s own check accepted - and outside them the panel prints `out of fixture range` instead of a number. Regenerate with `node tools/gen-duty.mjs`.",
+  "duty": [
+    {
+      "key": "waterMassFlowKgS",
+      "plain": "water flow",
+      "unit": "m3/hr",
+      "value": 200,
+      "from": "../fixtures/engine-run.json -> provenance.duty.waterMassFlowKgS",
+      "mode": "m3Hr",
+      "note": "converted at 1000 kg/m3 (the brief's convention): 720 m3/hr. The engine's own pair is 200 kg/s = 724.81 m3/hr at its water density 993.36 kg/m3"
+    },
+    {
+      "key": "hotWaterC",
+      "plain": "hot water",
+      "unit": "C",
+      "value": 42,
+      "from": "../fixtures/engine-run.json -> provenance.duty.hotWaterC",
+      "mode": "",
+      "note": ""
+    },
+    {
+      "key": "targetColdWaterC",
+      "plain": "target cold water",
+      "unit": "C",
+      "value": 32,
+      "from": "../fixtures/engine-run.json -> provenance.duty.targetColdWaterC",
+      "mode": "",
+      "note": ""
+    },
+    {
+      "key": "wetBulbC",
+      "plain": "entering wet bulb",
+      "unit": "C",
+      "value": 27,
+      "from": "../fixtures/engine-run.json -> provenance.duty.wetBulbC",
+      "mode": "",
+      "note": "the recorded sweep accepted 21-27 C"
+    },
+    {
+      "key": "dryBulbC",
+      "plain": "dry bulb",
+      "unit": "C",
+      "value": 33,
+      "from": "../fixtures/engine-run.json -> provenance.duty.dryBulbC",
+      "mode": "",
+      "note": "the engine’s requirement record carries it; the fixture engine’s re-expression does not consume it"
+    },
+    {
+      "key": "pressurePa",
+      "plain": "barometric pressure",
+      "unit": "Pa",
+      "value": 101325,
+      "from": "../fixtures/engine-run.json -> provenance.duty.pressurePa",
+      "mode": "",
+      "note": "the site altitude row is derived from it through the ISA standard atmosphere (a definition)"
+    }
+  ],
+  "waterQuality": [
+    {
+      "key": "salinityGKg",
+      "plain": "salinity",
+      "unit": "g/kg",
+      "value": 0,
+      "from": "../fixtures/engine-run.json -> provenance.fixed.salinityGKg",
+      "mode": "",
+      "note": ""
+    },
+    {
+      "key": "cyclesOfConcentration",
+      "plain": "cycles of concentration",
+      "unit": "-",
+      "value": 4,
+      "from": "../fixtures/engine-run.json -> provenance.fixed.cyclesOfConcentration",
+      "mode": "",
+      "note": "the engine’s own makeup line reads it (blowdown factor n/(n-1), clamped at 1.01)"
+    }
+  ],
+  "waterQualityClasses": [
+    "clean",
+    "moderate",
+    "dirty"
+  ],
+  "waterQualityClass": "moderate",
+  "displayOnly": [
+    {
+      "key": "tds",
+      "plain": "TDS",
+      "unit": "mg/l",
+      "value": null,
+      "from": "../fixtures/engine-run.json -> no path - the fixture carries no TDS value",
+      "note": "recorded, not used by the engine yet: the fixture’s water-quality record has the class, the salinity and the cycles only"
+    },
+    {
+      "key": "chloride",
+      "plain": "chloride",
+      "unit": "mg/l",
+      "value": null,
+      "from": "../fixtures/engine-run.json -> no path - the fixture carries no chloride value",
+      "note": "recorded, not used by the engine yet"
+    },
+    {
+      "key": "ph",
+      "plain": "pH",
+      "unit": "-",
+      "value": null,
+      "from": "../fixtures/engine-run.json -> no path - the fixture carries no pH value",
+      "note": "recorded, not used by the engine yet"
+    }
+  ],
+  "limits": [
+    {
+      "key": "maxDriftPpm",
+      "plain": "max drift",
+      "unit": "ppm",
+      "value": 30,
+      "from": "../fixtures/engine-run.json -> provenance.fixed.maxDriftPpm",
+      "note": ""
+    },
+    {
+      "key": "maxElectricalInputKW",
+      "plain": "max electrical input",
+      "unit": "kW",
+      "value": 75,
+      "from": "../fixtures/engine-run.json -> provenance.fixed.maxElectricalInputKW",
+      "note": ""
+    },
+    {
+      "key": "maxFootprintM2",
+      "plain": "max footprint",
+      "unit": "m2",
+      "value": 130,
+      "from": "../fixtures/engine-run.json -> provenance.fixed.maxFootprintM2",
+      "note": ""
+    },
+    {
+      "key": "minimumThermalMarginC",
+      "plain": "minimum thermal margin",
+      "unit": "C",
+      "value": 0,
+      "from": "../fixtures/engine-run.json -> provenance.fixed.minimumThermalMarginC",
+      "note": ""
+    },
+    {
+      "key": "nozzlePressureDropPa",
+      "plain": "nozzle pressure drop",
+      "unit": "Pa",
+      "value": 65000,
+      "from": "../fixtures/engine-run.json -> rate.inputs.requirements.nozzlePressureDropPa",
+      "note": "recorded only in rate.inputs.requirements - the bundled fixture’s provenance block does not carry it"
+    }
+  ],
+  "psychro": {
+    "inlet": {
+      "dryBulbC": 33,
+      "wetBulbC": 27,
+      "relativeHumidity": 0.6312752448172374,
+      "humidityRatio": 0.0202263990025044,
+      "pressurePa": 101325,
+      "saturationHumidityRatio": 0.032660949039399555
+    },
+    "saturation": [
+      [
+        10,
+        0.007662539894579503
+      ],
+      [
+        11,
+        0.008198303086689833
+      ],
+      [
+        12,
+        0.008767354570760092
+      ],
+      [
+        13,
+        0.009371524825207414
+      ],
+      [
+        14,
+        0.010012736020260472
+      ],
+      [
+        15,
+        0.01069300676297008
+      ],
+      [
+        16,
+        0.011414457158681862
+      ],
+      [
+        17,
+        0.012179314217110505
+      ],
+      [
+        18,
+        0.012989917633990229
+      ],
+      [
+        19,
+        0.013848725982436045
+      ],
+      [
+        20,
+        0.014758323351653219
+      ],
+      [
+        21,
+        0.01572142647453011
+      ],
+      [
+        22,
+        0.016740892389991505
+      ],
+      [
+        23,
+        0.01781972669083325
+      ],
+      [
+        24,
+        0.01896109241316862
+      ],
+      [
+        25,
+        0.020168319629666122
+      ],
+      [
+        26,
+        0.021444915815541074
+      ],
+      [
+        27,
+        0.022794577063871013
+      ],
+      [
+        28,
+        0.024221200235353867
+      ],
+      [
+        29,
+        0.02572889613726089
+      ],
+      [
+        30,
+        0.027322003837187806
+      ],
+      [
+        31,
+        0.0290051062294823
+      ],
+      [
+        32,
+        0.030783046986101563
+      ],
+      [
+        33,
+        0.032660949039399555
+      ],
+      [
+        34,
+        0.03464423476222553
+      ],
+      [
+        35,
+        0.0367386480310709
+      ],
+      [
+        36,
+        0.03895027838120462
+      ],
+      [
+        37,
+        0.04128558748927251
+      ],
+      [
+        38,
+        0.04375143824920295
+      ],
+      [
+        39,
+        0.046355126742118224
+      ],
+      [
+        40,
+        0.04910441744104373
+      ],
+      [
+        41,
+        0.05200758203740458
+      ],
+      [
+        42,
+        0.05507344232970509
+      ],
+      [
+        43,
+        0.05831141767659913
+      ],
+      [
+        44,
+        0.06173157758836347
+      ],
+      [
+        45,
+        0.06534470011433335
+      ],
+      [
+        46,
+        0.06916233678138245
+      ],
+      [
+        47,
+        0.0731968849526461
+      ],
+      [
+        48,
+        0.07746166860959768
+      ],
+      [
+        49,
+        0.08197102871821098
+      ],
+      [
+        50,
+        0.08674042452598962
+      ]
+    ],
+    "waterDensityKgM3": 993.3603463994883,
+    "recordedWaterFlowM3Hr": 724.8125039515579,
+    "recordedWaterMassFlowKgS": 200
+  },
+  "evidence": {
+    "waterFlowM3Hr": [
+      504,
+      756
+    ],
+    "wetBulbC": [
+      21,
+      27
+    ],
+    "waterMassFlowKgS": [
+      140,
+      210
+    ],
+    "note": "the feasible points of anchor.sweeps (FILM-VF38): the duty the engine's own check accepted"
+  }
+}

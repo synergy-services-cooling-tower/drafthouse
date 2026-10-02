@@ -1,0 +1,3844 @@
+{
+ "provenance": {
+  "engine": "rust/target/wasm32-unknown-unknown/wasm/synergy_drafthouse.wasm built by the recorded command (sha256 in bundles/engine.manifest.json)",
+  "generatedBy": "tools/build-cockpit-fixture.py from fixtures/engine-run.json + fixtures-catalog.json",
+  "catalog": {
+   "id": "illustrative-catalog-v0.1",
+   "revision": "2026-08-13",
+   "status": "SYNTHETIC / NOT VENDOR DATA"
+  },
+  "anchorRun": "rate (single fill FILM-VF38 1.5 m, speed ratio 0.78) - headline numbers are the real engine's; the mixed stack re-expresses its fill terms per layer",
+  "duty": {
+   "waterMassFlowKgS": 200,
+   "hotWaterC": 42,
+   "targetColdWaterC": 32,
+   "wetBulbC": 27,
+   "dryBulbC": 33,
+   "pressurePa": 101325
+  },
+  "fixed": {
+   "waterQualityClass": "moderate",
+   "salinityGKg": 0,
+   "maxDriftPpm": 30,
+   "maxElectricalInputKW": 75,
+   "maxFootprintM2": 130,
+   "minimumThermalMarginC": 0,
+   "cyclesOfConcentration": 4
+  }
+ },
+ "fields": {
+  "towers": [
+   "id",
+   "type",
+   "fillAreaM2",
+   "airFreeAreaM2",
+   "driftAreaM2",
+   "inletAreaM2",
+   "plenumAreaM2",
+   "fanStackAreaM2",
+   "stackRecoveryFactor",
+   "inletLossCoefficient",
+   "distributionLossCoefficient",
+   "supportLossCoefficient",
+   "plenumLossCoefficient",
+   "fixedPressureLossPa",
+   "sprayZoneHeightM",
+   "rainZoneHeightM",
+   "footprintM2",
+   "maxWaterMassFlowKgS",
+   "fillDepthOptionsM",
+   "compatibleFanIds",
+   "sprayZone",
+   "rainZone"
+  ],
+  "fills": [
+   "id",
+   "compatibleTowerTypes",
+   "allowedWaterQualityClasses",
+   "thermal",
+   "pressure",
+   "limits"
+  ],
+  "driftEliminators": [
+   "id",
+   "maxWaterTemperatureC",
+   "curve"
+  ],
+  "fans": [
+   "id",
+   "stackAreaM2",
+   "pressureBasis",
+   "referenceDensityKgM3",
+   "stackRecoveryFactor",
+   "allowedSpeedRatio",
+   "driveEfficiency",
+   "motorEfficiency",
+   "curve"
+  ],
+  "nozzles": [
+   "id",
+   "name",
+   "dischargeCoefficient",
+   "orificeDiameterM",
+   "referenceWaterDensityKgM3"
+  ]
+ },
+ "catalog": {
+  "metadata": {
+   "id": "illustrative-catalog-v0.1",
+   "revision": "2026-08-13",
+   "status": "SYNTHETIC / NOT VENDOR DATA",
+   "cockpitExtension": "FILM-MF20 and FILM-WF25 are synthetic records derived by tools/build-cockpit-fixture.py from the catalog correlation form; they reproduce the anchor run's fill KaV/L and fill pressure as a two-layer split."
+  },
+  "waterQualityFactors": {
+   "clean": {
+    "thermalMultiplier": 1,
+    "pressureMultiplier": 1
+   },
+   "moderate": {
+    "thermalMultiplier": 0.92,
+    "pressureMultiplier": 1.12
+   },
+   "dirty": {
+    "thermalMultiplier": 0.8,
+    "pressureMultiplier": 1.35
+   }
+  },
+  "towers": [
+   {
+    "id": "IDCF-040",
+    "name": "Illustrative 40 m² Induced-Draft Counterflow Cell",
+    "type": "counterflow",
+    "draftType": "induced",
+    "fillAreaM2": 40,
+    "airFreeAreaM2": 40,
+    "driftAreaM2": 38,
+    "inletAreaM2": 22,
+    "stackRecoveryFactor": 0.35,
+    "fillDepthOptionsM": [
+     1.2,
+     1.5,
+     1.8
+    ],
+    "maxWaterMassFlowKgS": 155,
+    "footprintM2": 52,
+    "inletLossCoefficient": 3.2,
+    "distributionLossCoefficient": 4.6,
+    "supportLossCoefficient": 2.2,
+    "plenumLossCoefficient": 0.4,
+    "fixedPressureLossPa": 10,
+    "sprayZoneHeightM": 0.6,
+    "sprayZone": {
+     "coefficientPerM": 0.16,
+     "referenceWaterLoadingKgM2S": 3,
+     "referenceDryAirLoadingKgM2S": 2,
+     "waterExponent": -0.3,
+     "airExponent": 0.45
+    },
+    "rainZoneHeightM": 1.4,
+    "rainZone": {
+     "coefficientPerM": 0.13,
+     "referenceWaterLoadingKgM2S": 3,
+     "referenceDryAirLoadingKgM2S": 2,
+     "waterExponent": -0.35,
+     "airExponent": 0.5
+    },
+    "compatibleFanIds": [
+     "AX-420",
+     "AX-500"
+    ]
+   },
+   {
+    "id": "IDCF-064",
+    "name": "Illustrative 64 m² Induced-Draft Counterflow Cell",
+    "type": "counterflow",
+    "draftType": "induced",
+    "fillAreaM2": 64,
+    "airFreeAreaM2": 64,
+    "driftAreaM2": 61,
+    "inletAreaM2": 32,
+    "stackRecoveryFactor": 0.35,
+    "fillDepthOptionsM": [
+     1.2,
+     1.5,
+     1.8,
+     2.1
+    ],
+    "maxWaterMassFlowKgS": 265,
+    "footprintM2": 78,
+    "inletLossCoefficient": 3,
+    "distributionLossCoefficient": 4.4,
+    "supportLossCoefficient": 2.1,
+    "plenumLossCoefficient": 0.38,
+    "fixedPressureLossPa": 10,
+    "sprayZoneHeightM": 0.6,
+    "sprayZone": {
+     "coefficientPerM": 0.16,
+     "referenceWaterLoadingKgM2S": 3,
+     "referenceDryAirLoadingKgM2S": 2,
+     "waterExponent": -0.3,
+     "airExponent": 0.45
+    },
+    "rainZoneHeightM": 1.5,
+    "rainZone": {
+     "coefficientPerM": 0.13,
+     "referenceWaterLoadingKgM2S": 3,
+     "referenceDryAirLoadingKgM2S": 2,
+     "waterExponent": -0.35,
+     "airExponent": 0.5
+    },
+    "compatibleFanIds": [
+     "AX-500",
+     "AX-600"
+    ]
+   },
+   {
+    "id": "IDCF-096",
+    "name": "Illustrative 96 m² Induced-Draft Counterflow Cell",
+    "type": "counterflow",
+    "draftType": "induced",
+    "fillAreaM2": 96,
+    "airFreeAreaM2": 96,
+    "driftAreaM2": 92,
+    "inletAreaM2": 43,
+    "stackRecoveryFactor": 0.35,
+    "fillDepthOptionsM": [
+     1.2,
+     1.5,
+     1.8,
+     2.1
+    ],
+    "maxWaterMassFlowKgS": 410,
+    "footprintM2": 113,
+    "inletLossCoefficient": 2.8,
+    "distributionLossCoefficient": 4.2,
+    "supportLossCoefficient": 2,
+    "plenumLossCoefficient": 0.36,
+    "fixedPressureLossPa": 10,
+    "sprayZoneHeightM": 0.7,
+    "sprayZone": {
+     "coefficientPerM": 0.16,
+     "referenceWaterLoadingKgM2S": 3,
+     "referenceDryAirLoadingKgM2S": 2,
+     "waterExponent": -0.3,
+     "airExponent": 0.45
+    },
+    "rainZoneHeightM": 1.6,
+    "rainZone": {
+     "coefficientPerM": 0.13,
+     "referenceWaterLoadingKgM2S": 3,
+     "referenceDryAirLoadingKgM2S": 2,
+     "waterExponent": -0.35,
+     "airExponent": 0.5
+    },
+    "compatibleFanIds": [
+     "AX-600",
+     "AX-700"
+    ]
+   },
+   {
+    "id": "IDXF-080",
+    "name": "Illustrative 80 m² Induced-Draft Crossflow Cell",
+    "type": "crossflow",
+    "draftType": "induced",
+    "fillAreaM2": 80,
+    "airFreeAreaM2": 72,
+    "driftAreaM2": 76,
+    "inletAreaM2": 88,
+    "stackRecoveryFactor": 0.25,
+    "fillDepthOptionsM": [
+     1.2,
+     1.5,
+     1.8
+    ],
+    "maxWaterMassFlowKgS": 310,
+    "footprintM2": 118,
+    "inletLossCoefficient": 1.2,
+    "distributionLossCoefficient": 2.6,
+    "supportLossCoefficient": 1.6,
+    "plenumLossCoefficient": 0.34,
+    "fixedPressureLossPa": 8,
+    "sprayZoneHeightM": 0.5,
+    "sprayZone": {
+     "coefficientPerM": 0.16,
+     "referenceWaterLoadingKgM2S": 3,
+     "referenceDryAirLoadingKgM2S": 2,
+     "waterExponent": -0.3,
+     "airExponent": 0.45
+    },
+    "rainZoneHeightM": 0.9,
+    "rainZone": {
+     "coefficientPerM": 0.13,
+     "referenceWaterLoadingKgM2S": 3,
+     "referenceDryAirLoadingKgM2S": 2,
+     "waterExponent": -0.35,
+     "airExponent": 0.5
+    },
+    "compatibleFanIds": [
+     "AX-500",
+     "AX-600"
+    ]
+   }
+  ],
+  "fills": [
+   {
+    "id": "FILM-CF19",
+    "name": "Illustrative 19 mm Cross-Fluted Film Fill",
+    "geometry": "cross-fluted film",
+    "compatibleTowerTypes": [
+     "counterflow"
+    ],
+    "allowedWaterQualityClasses": [
+     "clean"
+    ],
+    "thermal": {
+     "coefficientPerM": 1.28,
+     "referenceWaterLoadingKgM2S": 3,
+     "referenceDryAirLoadingKgM2S": 2,
+     "waterExponent": -0.34,
+     "airExponent": 0.46
+    },
+    "pressure": {
+     "coefficientPaPerM": 78,
+     "referenceWaterLoadingKgM2S": 3,
+     "referenceDryAirLoadingKgM2S": 2,
+     "waterExponent": 0.18,
+     "airExponent": 1.78
+    },
+    "limits": {
+     "minWaterLoadingKgM2S": 1.5,
+     "maxWaterLoadingKgM2S": 5,
+     "minDryAirLoadingKgM2S": 1,
+     "maxDryAirLoadingKgM2S": 3.2,
+     "maxWaterTemperatureC": 55
+    },
+    "material": "PVC (illustrative)",
+    "characteristic": {
+     "atDryAirLoadingKgM2S": 2.178299700421475,
+     "points": [
+      {
+       "waterLoadingKgM2S": 0.6,
+       "kavlPerM": 2.301018358782047,
+       "paPerM": 67.96667027909615
+      },
+      {
+       "waterLoadingKgM2S": 0.8,
+       "kavlPerM": 2.0866082169348297,
+       "paPerM": 71.5788912176205
+      },
+      {
+       "waterLoadingKgM2S": 1,
+       "kavlPerM": 1.9341560424204847,
+       "paPerM": 74.51243724516293
+      },
+      {
+       "waterLoadingKgM2S": 1.2,
+       "kavlPerM": 1.8178995627938834,
+       "paPerM": 76.99834549640093
+      },
+      {
+       "waterLoadingKgM2S": 1.4,
+       "kavlPerM": 1.7250749815432505,
+       "paPerM": 79.16474469159371
+      },
+      {
+       "waterLoadingKgM2S": 1.6,
+       "kavlPerM": 1.6485066930520946,
+       "paPerM": 81.09057238778324
+      },
+      {
+       "waterLoadingKgM2S": 1.8,
+       "kavlPerM": 1.583794597176845,
+       "paPerM": 82.82812304479583
+      },
+      {
+       "waterLoadingKgM2S": 2,
+       "kavlPerM": 1.5280631771023574,
+       "paPerM": 84.41393940915957
+      },
+      {
+       "waterLoadingKgM2S": 2.2,
+       "kavlPerM": 1.4793393086464237,
+       "paPerM": 85.87462461227697
+      },
+      {
+       "waterLoadingKgM2S": 2.4,
+       "kavlPerM": 1.4362157554255395,
+       "paPerM": 87.23018480731093
+      },
+      {
+       "waterLoadingKgM2S": 2.6,
+       "kavlPerM": 1.3976568924283261,
+       "paPerM": 88.49606736254455
+      },
+      {
+       "waterLoadingKgM2S": 2.8,
+       "kavlPerM": 1.3628805014811207,
+       "paPerM": 89.68446354466262
+      },
+      {
+       "waterLoadingKgM2S": 3,
+       "kavlPerM": 1.3312826811620713,
+       "paPerM": 90.80517399435058
+      },
+      {
+       "waterLoadingKgM2S": 3.125,
+       "kavlPerM": 1.3129328101868907,
+       "paPerM": 91.47486410564855
+      },
+      {
+       "waterLoadingKgM2S": 3.2,
+       "kavlPerM": 1.3023883903944344,
+       "paPerM": 91.86620270753207
+      },
+      {
+       "waterLoadingKgM2S": 3.4,
+       "kavlPerM": 1.2758178587401143,
+       "paPerM": 92.87417610899546
+      },
+      {
+       "waterLoadingKgM2S": 3.6,
+       "kavlPerM": 1.2512631612757237,
+       "paPerM": 93.83464584674675
+      },
+      {
+       "waterLoadingKgM2S": 3.8,
+       "kavlPerM": 1.2284715014438976,
+       "paPerM": 94.75231215461409
+      },
+      {
+       "waterLoadingKgM2S": 4,
+       "kavlPerM": 1.2072330370480666,
+       "paPerM": 95.63119165097281
+      },
+      {
+       "waterLoadingKgM2S": 4.2,
+       "kavlPerM": 1.1873718543207576,
+       "paPerM": 96.47474544801797
+      },
+      {
+       "waterLoadingKgM2S": 4.4,
+       "kavlPerM": 1.168739168094082,
+       "paPerM": 97.28597837907456
+      },
+      {
+       "waterLoadingKgM2S": 4.6,
+       "kavlPerM": 1.1512081249355857,
+       "paPerM": 98.06751685638405
+      },
+      {
+       "waterLoadingKgM2S": 4.8,
+       "kavlPerM": 1.1346697795352445,
+       "paPerM": 98.82167067957697
+      },
+      {
+       "waterLoadingKgM2S": 5,
+       "kavlPerM": 1.1190299425956294,
+       "paPerM": 99.55048262635188
+      },
+      {
+       "waterLoadingKgM2S": 5.2,
+       "kavlPerM": 1.1042066848289658,
+       "paPerM": 100.25576862707818
+      },
+      {
+       "waterLoadingKgM2S": 5.4,
+       "kavlPerM": 1.0901283409899825,
+       "paPerM": 100.93915060061215
+      },
+      {
+       "waterLoadingKgM2S": 5.6,
+       "kavlPerM": 1.076731899303162,
+       "paPerM": 101.6020835111468
+      },
+      {
+       "waterLoadingKgM2S": 5.8,
+       "kavlPerM": 1.0639616910120506,
+       "paPerM": 102.24587783106263
+      },
+      {
+       "waterLoadingKgM2S": 6,
+       "kavlPerM": 1.0517683158862767,
+       "paPerM": 102.87171831968088
+      },
+      {
+       "waterLoadingKgM2S": 6.2,
+       "kavlPerM": 1.0401077548864182,
+       "paPerM": 103.48067982356703
+      },
+      {
+       "waterLoadingKgM2S": 6.4,
+       "kavlPerM": 1.0289406325028512,
+       "paPerM": 104.07374065068034
+      },
+      {
+       "waterLoadingKgM2S": 6.6,
+       "kavlPerM": 1.0182315997103533,
+       "paPerM": 104.65179395435167
+      },
+      {
+       "waterLoadingKgM2S": 6.8,
+       "kavlPerM": 1.0079488148177649,
+       "paPerM": 105.21565747400501
+      },
+      {
+       "waterLoadingKgM2S": 7,
+       "kavlPerM": 0.998063504304287,
+       "paPerM": 105.76608191073066
+      }
+     ]
+    }
+   },
+   {
+    "id": "FILM-OF25",
+    "name": "Illustrative 25 mm Offset-Fluted Film Fill",
+    "geometry": "offset-fluted film",
+    "compatibleTowerTypes": [
+     "counterflow",
+     "crossflow"
+    ],
+    "allowedWaterQualityClasses": [
+     "clean",
+     "moderate"
+    ],
+    "thermal": {
+     "coefficientPerM": 1.12,
+     "referenceWaterLoadingKgM2S": 3,
+     "referenceDryAirLoadingKgM2S": 2,
+     "waterExponent": -0.31,
+     "airExponent": 0.44
+    },
+    "pressure": {
+     "coefficientPaPerM": 61,
+     "referenceWaterLoadingKgM2S": 3,
+     "referenceDryAirLoadingKgM2S": 2,
+     "waterExponent": 0.14,
+     "airExponent": 1.72
+    },
+    "limits": {
+     "minWaterLoadingKgM2S": 1.3,
+     "maxWaterLoadingKgM2S": 5.4,
+     "minDryAirLoadingKgM2S": 0.9,
+     "maxDryAirLoadingKgM2S": 3.3,
+     "maxWaterTemperatureC": 60
+    },
+    "material": "PP (illustrative)",
+    "characteristic": {
+     "atDryAirLoadingKgM2S": 2.178299700421475,
+     "points": [
+      {
+       "waterLoadingKgM2S": 0.6,
+       "kavlPerM": 1.915213894927527,
+       "paPerM": 56.398138337810465
+      },
+      {
+       "waterLoadingKgM2S": 0.8,
+       "kavlPerM": 1.75180707320015,
+       "paPerM": 58.71596346765853
+      },
+      {
+       "waterLoadingKgM2S": 1,
+       "kavlPerM": 1.63472299423099,
+       "paPerM": 60.57920831499045
+      },
+      {
+       "waterLoadingKgM2S": 1.2,
+       "kavlPerM": 1.5448915054910008,
+       "paPerM": 62.14539716035016
+      },
+      {
+       "waterLoadingKgM2S": 1.4,
+       "kavlPerM": 1.4728023906768326,
+       "paPerM": 63.501139474539926
+      },
+      {
+       "waterLoadingKgM2S": 1.6,
+       "kavlPerM": 1.4130807393439333,
+       "paPerM": 64.69942052863712
+      },
+      {
+       "waterLoadingKgM2S": 1.8,
+       "kavlPerM": 1.3624158734433671,
+       "paPerM": 65.77513439500865
+      },
+      {
+       "waterLoadingKgM2S": 2,
+       "kavlPerM": 1.3186358319073477,
+       "paPerM": 66.75253955804288
+      },
+      {
+       "waterLoadingKgM2S": 2.2,
+       "kavlPerM": 1.2802451535376211,
+       "paPerM": 67.64921613897309
+      },
+      {
+       "waterLoadingKgM2S": 2.4,
+       "kavlPerM": 1.24617400179658,
+       "paPerM": 68.47833105917364
+      },
+      {
+       "waterLoadingKgM2S": 2.6,
+       "kavlPerM": 1.2156328672146228,
+       "paPerM": 69.2500134572162
+      },
+      {
+       "waterLoadingKgM2S": 2.8,
+       "kavlPerM": 1.1880239114021138,
+       "paPerM": 69.97223045098974
+      },
+      {
+       "waterLoadingKgM2S": 3,
+       "kavlPerM": 1.162884501789524,
+       "paPerM": 70.65136697589114
+      },
+      {
+       "waterLoadingKgM2S": 3.125,
+       "kavlPerM": 1.1482611329058228,
+       "paPerM": 71.05630114934205
+      },
+      {
+       "waterLoadingKgM2S": 3.2,
+       "kavlPerM": 1.1398499335072931,
+       "paPerM": 71.29262247475745
+      },
+      {
+       "waterLoadingKgM2S": 3.4,
+       "kavlPerM": 1.1186280551739496,
+       "paPerM": 71.90028995830896
+      },
+      {
+       "waterLoadingKgM2S": 3.6,
+       "kavlPerM": 1.0989815369465075,
+       "paPerM": 72.47795708733165
+      },
+      {
+       "waterLoadingKgM2S": 3.8,
+       "kavlPerM": 1.0807151920393645,
+       "paPerM": 73.02865412808117
+      },
+      {
+       "waterLoadingKgM2S": 4,
+       "kavlPerM": 1.063666727223075,
+       "paPerM": 73.55496483676329
+      },
+      {
+       "waterLoadingKgM2S": 4.2,
+       "kavlPerM": 1.0476998735326042,
+       "paPerM": 74.05911092589812
+      },
+      {
+       "waterLoadingKgM2S": 4.4,
+       "kavlPerM": 1.0326992028851878,
+       "paPerM": 74.54301734857704
+      },
+      {
+       "waterLoadingKgM2S": 4.6,
+       "kavlPerM": 1.018566160587157,
+       "paPerM": 75.00836341962345
+      },
+      {
+       "waterLoadingKgM2S": 4.8,
+       "kavlPerM": 1.0052159891060706,
+       "paPerM": 75.45662332079564
+      },
+      {
+       "waterLoadingKgM2S": 5,
+       "kavlPerM": 0.9925753148225351,
+       "paPerM": 75.88909853965772
+      },
+      {
+       "waterLoadingKgM2S": 5.2,
+       "kavlPerM": 0.9805802345782408,
+       "paPerM": 76.30694410303067
+      },
+      {
+       "waterLoadingKgM2S": 5.4,
+       "kavlPerM": 0.9691747836242028,
+       "paPerM": 76.71118998232897
+      },
+      {
+       "waterLoadingKgM2S": 5.6,
+       "kavlPerM": 0.9583096978913526,
+       "paPerM": 77.10275870324276
+      },
+      {
+       "waterLoadingKgM2S": 5.8,
+       "kavlPerM": 0.9479414057344493,
+       "paPerM": 77.48247994283452
+      },
+      {
+       "waterLoadingKgM2S": 6,
+       "kavlPerM": 0.9380312002956476,
+       "paPerM": 77.85110271441027
+      },
+      {
+       "waterLoadingKgM2S": 6.2,
+       "kavlPerM": 0.9285445552904813,
+       "paPerM": 78.20930560505855
+      },
+      {
+       "waterLoadingKgM2S": 6.4,
+       "kavlPerM": 0.9194505556135466,
+       "paPerM": 78.55770542919508
+      },
+      {
+       "waterLoadingKgM2S": 6.6,
+       "kavlPerM": 0.9107214205672826,
+       "paPerM": 78.89686458453212
+      },
+      {
+       "waterLoadingKgM2S": 6.8,
+       "kavlPerM": 0.9023321023407405,
+       "paPerM": 79.22729733807235
+      },
+      {
+       "waterLoadingKgM2S": 7,
+       "kavlPerM": 0.8942599460314892,
+       "paPerM": 79.54947522434733
+      }
+     ]
+    }
+   },
+   {
+    "id": "FILM-VF38",
+    "name": "Illustrative 38 mm Vertical-Fluted Fill",
+    "geometry": "vertical-fluted film",
+    "compatibleTowerTypes": [
+     "counterflow",
+     "crossflow"
+    ],
+    "allowedWaterQualityClasses": [
+     "clean",
+     "moderate",
+     "dirty"
+    ],
+    "thermal": {
+     "coefficientPerM": 0.94,
+     "referenceWaterLoadingKgM2S": 3,
+     "referenceDryAirLoadingKgM2S": 2,
+     "waterExponent": -0.27,
+     "airExponent": 0.39
+    },
+    "pressure": {
+     "coefficientPaPerM": 43,
+     "referenceWaterLoadingKgM2S": 3,
+     "referenceDryAirLoadingKgM2S": 2,
+     "waterExponent": 0.1,
+     "airExponent": 1.67
+    },
+    "limits": {
+     "minWaterLoadingKgM2S": 1.1,
+     "maxWaterLoadingKgM2S": 6.2,
+     "minDryAirLoadingKgM2S": 0.8,
+     "maxDryAirLoadingKgM2S": 3.5,
+     "maxWaterTemperatureC": 75
+    },
+    "material": "PP (illustrative)",
+    "characteristic": {
+     "atDryAirLoadingKgM2S": 2.178299700421475,
+     "points": [
+      {
+       "waterLoadingKgM2S": 0.6,
+       "kavlPerM": 1.5007692852160173,
+       "paPerM": 42.21898687834842
+      },
+      {
+       "waterLoadingKgM2S": 0.8,
+       "kavlPerM": 1.3886105930500983,
+       "paPerM": 43.451190607863005
+      },
+      {
+       "waterLoadingKgM2S": 1,
+       "kavlPerM": 1.307418935001381,
+       "paPerM": 44.43167465653404
+      },
+      {
+       "waterLoadingKgM2S": 1.2,
+       "kavlPerM": 1.244617301987612,
+       "paPerM": 45.249189751381806
+      },
+      {
+       "waterLoadingKgM2S": 1.4,
+       "kavlPerM": 1.1938786911990926,
+       "paPerM": 45.95211297293677
+      },
+      {
+       "waterLoadingKgM2S": 1.6,
+       "kavlPerM": 1.15160190634143,
+       "paPerM": 46.5698330091138
+      },
+      {
+       "waterLoadingKgM2S": 1.8,
+       "kavlPerM": 1.1155555316659131,
+       "paPerM": 47.121589639158
+      },
+      {
+       "waterLoadingKgM2S": 2,
+       "kavlPerM": 1.0842680773645466,
+       "paPerM": 47.620689792919556
+      },
+      {
+       "waterLoadingKgM2S": 2.2,
+       "kavlPerM": 1.0567217505681281,
+       "paPerM": 48.07673327061391
+      },
+      {
+       "waterLoadingKgM2S": 2.4,
+       "kavlPerM": 1.032185455597162,
+       "paPerM": 48.49688077680023
+      },
+      {
+       "waterLoadingKgM2S": 2.6,
+       "kavlPerM": 1.0101176658191449,
+       "paPerM": 48.88662065282773
+      },
+      {
+       "waterLoadingKgM2S": 2.8,
+       "kavlPerM": 0.9901069339427716,
+       "paPerM": 49.25025523186335
+      },
+      {
+       "waterLoadingKgM2S": 3,
+       "kavlPerM": 0.9718338718103597,
+       "paPerM": 49.591221745292565
+      },
+      {
+       "waterLoadingKgM2S": 3.125,
+       "kavlPerM": 0.961181193051513,
+       "paPerM": 49.79407676915621
+      },
+      {
+       "waterLoadingKgM2S": 3.2,
+       "kavlPerM": 0.95504596992612,
+       "paPerM": 49.91231117391485
+      },
+      {
+       "waterLoadingKgM2S": 3.4,
+       "kavlPerM": 0.9395404074735851,
+       "paPerM": 50.21582175392386
+      },
+      {
+       "waterLoadingKgM2S": 3.6,
+       "kavlPerM": 0.9251520068519633,
+       "paPerM": 50.503669287774684
+      },
+      {
+       "waterLoadingKgM2S": 3.8,
+       "kavlPerM": 0.9117445990930373,
+       "paPerM": 50.77746810407994
+      },
+      {
+       "waterLoadingKgM2S": 4,
+       "kavlPerM": 0.8992047094610636,
+       "paPerM": 51.038591587724106
+      },
+      {
+       "waterLoadingKgM2S": 4.2,
+       "kavlPerM": 0.8874368573671249,
+       "paPerM": 51.28821818491874
+      },
+      {
+       "waterLoadingKgM2S": 4.4,
+       "kavlPerM": 0.8763600022334016,
+       "paPerM": 51.527366884879676
+      },
+      {
+       "waterLoadingKgM2S": 4.6,
+       "kavlPerM": 0.8659048175525104,
+       "paPerM": 51.756924947774074
+      },
+      {
+       "waterLoadingKgM2S": 4.8,
+       "kavlPerM": 0.856011573232111,
+       "paPerM": 51.97766983236098
+      },
+      {
+       "waterLoadingKgM2S": 5,
+       "kavlPerM": 0.8466284712761049,
+       "paPerM": 52.19028672468873
+      },
+      {
+       "waterLoadingKgM2S": 5.2,
+       "kavlPerM": 0.8377103238362771,
+       "paPerM": 52.39538268877944
+      },
+      {
+       "waterLoadingKgM2S": 5.4,
+       "kavlPerM": 0.8292174929814702,
+       "paPerM": 52.593498193580174
+      },
+      {
+       "waterLoadingKgM2S": 5.6,
+       "kavlPerM": 0.8211150327651487,
+       "paPerM": 52.78511658065038
+      },
+      {
+       "waterLoadingKgM2S": 5.8,
+       "kavlPerM": 0.8133719892685377,
+       "paPerM": 52.97067190001302
+      },
+      {
+       "waterLoadingKgM2S": 6,
+       "kavlPerM": 0.8059608251768579,
+       "paPerM": 53.15055544135732
+      },
+      {
+       "waterLoadingKgM2S": 6.2,
+       "kavlPerM": 0.798856943387284,
+       "paPerM": 53.325121213574086
+      },
+      {
+       "waterLoadingKgM2S": 6.4,
+       "kavlPerM": 0.7920382900110428,
+       "paPerM": 53.49469057005564
+      },
+      {
+       "waterLoadingKgM2S": 6.6,
+       "kavlPerM": 0.7854850215090087,
+       "paPerM": 53.65955613517901
+      },
+      {
+       "waterLoadingKgM2S": 6.8,
+       "kavlPerM": 0.7791792240003093,
+       "paPerM": 53.8199851553083
+      },
+      {
+       "waterLoadingKgM2S": 7,
+       "kavlPerM": 0.7731046752951737,
+       "paPerM": 53.976222372932234
+      }
+     ]
+    }
+   },
+   {
+    "id": "TRICKLE-50",
+    "name": "Illustrative 50 mm Trickle Fill",
+    "geometry": "trickle grid",
+    "compatibleTowerTypes": [
+     "counterflow",
+     "crossflow"
+    ],
+    "allowedWaterQualityClasses": [
+     "moderate",
+     "dirty"
+    ],
+    "thermal": {
+     "coefficientPerM": 0.78,
+     "referenceWaterLoadingKgM2S": 3,
+     "referenceDryAirLoadingKgM2S": 2,
+     "waterExponent": -0.22,
+     "airExponent": 0.34
+    },
+    "pressure": {
+     "coefficientPaPerM": 31,
+     "referenceWaterLoadingKgM2S": 3,
+     "referenceDryAirLoadingKgM2S": 2,
+     "waterExponent": 0.08,
+     "airExponent": 1.58
+    },
+    "limits": {
+     "minWaterLoadingKgM2S": 0.9,
+     "maxWaterLoadingKgM2S": 7,
+     "minDryAirLoadingKgM2S": 0.7,
+     "maxDryAirLoadingKgM2S": 3.7,
+     "maxWaterTemperatureC": 85
+    },
+    "material": "PP (illustrative)",
+    "characteristic": {
+     "atDryAirLoadingKgM2S": 2.178299700421475,
+     "points": [
+      {
+       "waterLoadingKgM2S": 0.6,
+       "kavlPerM": 1.1441363928285793,
+       "paPerM": 31.191952333178666
+      },
+      {
+       "waterLoadingKgM2S": 0.8,
+       "kavlPerM": 1.0739678431228672,
+       "paPerM": 31.918146035515996
+      },
+      {
+       "waterLoadingKgM2S": 1,
+       "kavlPerM": 1.022518266295487,
+       "paPerM": 32.49304847582698
+      },
+      {
+       "waterLoadingKgM2S": 1.2,
+       "kavlPerM": 0.9823159614531866,
+       "paPerM": 32.97045633650049
+      },
+      {
+       "waterLoadingKgM2S": 1.4,
+       "kavlPerM": 0.9495610831060589,
+       "paPerM": 33.37956720112528
+      },
+      {
+       "waterLoadingKgM2S": 1.6,
+       "kavlPerM": 0.9220716699508976,
+       "paPerM": 33.7380561808131
+      },
+      {
+       "waterLoadingKgM2S": 1.8,
+       "kavlPerM": 0.8984856057885746,
+       "paPerM": 34.05746028693211
+      },
+      {
+       "waterLoadingKgM2S": 2,
+       "kavlPerM": 0.87789884156756,
+       "paPerM": 34.34573843178458
+      },
+      {
+       "waterLoadingKgM2S": 2.2,
+       "kavlPerM": 0.8596824980999476,
+       "paPerM": 34.60861924732409
+      },
+      {
+       "waterLoadingKgM2S": 2.4,
+       "kavlPerM": 0.8433825321648268,
+       "paPerM": 34.8503671532223
+      },
+      {
+       "waterLoadingKgM2S": 2.6,
+       "kavlPerM": 0.8286610738455509,
+       "paPerM": 35.07424459854365
+      },
+      {
+       "waterLoadingKgM2S": 2.8,
+       "kavlPerM": 0.8152603257412596,
+       "paPerM": 35.28280471772036
+      },
+      {
+       "waterLoadingKgM2S": 3,
+       "kavlPerM": 0.8029793909894718,
+       "paPerM": 35.47808409830512
+      },
+      {
+       "waterLoadingKgM2S": 3.125,
+       "kavlPerM": 0.7958002481390631,
+       "paPerM": 35.59413638696956
+      },
+      {
+       "waterLoadingKgM2S": 3.2,
+       "kavlPerM": 0.7916588657382808,
+       "paPerM": 35.66173403659284
+      },
+      {
+       "waterLoadingKgM2S": 3.4,
+       "kavlPerM": 0.781170282268657,
+       "paPerM": 35.835112467955604
+      },
+      {
+       "waterLoadingKgM2S": 3.6,
+       "kavlPerM": 0.7714086862669072,
+       "paPerM": 35.99934993899001
+      },
+      {
+       "waterLoadingKgM2S": 3.8,
+       "kavlPerM": 0.7622872989907798,
+       "paPerM": 36.155397964523615
+      },
+      {
+       "waterLoadingKgM2S": 4,
+       "kavlPerM": 0.7537336020586507,
+       "paPerM": 36.304065138798634
+      },
+      {
+       "waterLoadingKgM2S": 4.2,
+       "kavlPerM": 0.7456864149549243,
+       "paPerM": 36.44604455034623
+      },
+      {
+       "waterLoadingKgM2S": 4.4,
+       "kavlPerM": 0.73809367917908,
+       "paPerM": 36.581934903341384
+      },
+      {
+       "waterLoadingKgM2S": 4.6,
+       "kavlPerM": 0.7309107544319374,
+       "paPerM": 36.71225700666631
+      },
+      {
+       "waterLoadingKgM2S": 4.8,
+       "kavlPerM": 0.7240990918120724,
+       "paPerM": 36.837466801143734
+      },
+      {
+       "waterLoadingKgM2S": 5,
+       "kavlPerM": 0.7176251886505427,
+       "paPerM": 36.957965763799876
+      },
+      {
+       "waterLoadingKgM2S": 5.2,
+       "kavlPerM": 0.7114597565251831,
+       "paPerM": 37.07410929972319
+      },
+      {
+       "waterLoadingKgM2S": 5.4,
+       "kavlPerM": 0.7055770525867823,
+       "paPerM": 37.186213572215834
+      },
+      {
+       "waterLoadingKgM2S": 5.6,
+       "kavlPerM": 0.6999543373804298,
+       "paPerM": 37.29456110823461
+      },
+      {
+       "waterLoadingKgM2S": 5.8,
+       "kavlPerM": 0.694571431643364,
+       "paPerM": 37.399405434094774
+      },
+      {
+       "waterLoadingKgM2S": 6,
+       "kavlPerM": 0.6894103512753975,
+       "paPerM": 37.50097493646234
+      },
+      {
+       "waterLoadingKgM2S": 6.2,
+       "kavlPerM": 0.684455004588228,
+       "paPerM": 37.59947609931489
+      },
+      {
+       "waterLoadingKgM2S": 6.4,
+       "kavlPerM": 0.6796909395724042,
+       "paPerM": 37.69509623438044
+      },
+      {
+       "waterLoadingKgM2S": 6.6,
+       "kavlPerM": 0.675105131636953,
+       "paPerM": 37.78800579749344
+      },
+      {
+       "waterLoadingKgM2S": 6.8,
+       "kavlPerM": 0.6706858043281928,
+       "paPerM": 37.878360364175116
+      },
+      {
+       "waterLoadingKgM2S": 7,
+       "kavlPerM": 0.6664222770982556,
+       "paPerM": 37.9663023230155
+      }
+     ]
+    }
+   },
+   {
+    "id": "SPLASH-GRID",
+    "name": "Illustrative Open Splash Grid",
+    "geometry": "splash",
+    "compatibleTowerTypes": [
+     "counterflow",
+     "crossflow"
+    ],
+    "allowedWaterQualityClasses": [
+     "moderate",
+     "dirty"
+    ],
+    "thermal": {
+     "coefficientPerM": 0.62,
+     "referenceWaterLoadingKgM2S": 3,
+     "referenceDryAirLoadingKgM2S": 2,
+     "waterExponent": -0.18,
+     "airExponent": 0.31
+    },
+    "pressure": {
+     "coefficientPaPerM": 22,
+     "referenceWaterLoadingKgM2S": 3,
+     "referenceDryAirLoadingKgM2S": 2,
+     "waterExponent": 0.06,
+     "airExponent": 1.52
+    },
+    "limits": {
+     "minWaterLoadingKgM2S": 0.7,
+     "maxWaterLoadingKgM2S": 8,
+     "minDryAirLoadingKgM2S": 0.6,
+     "maxDryAirLoadingKgM2S": 4,
+     "maxWaterTemperatureC": 90
+    },
+    "material": "PP/FRP (illustrative)",
+    "characteristic": {
+     "atDryAirLoadingKgM2S": 2.178299700421475,
+     "points": [
+      {
+       "waterLoadingKgM2S": 0.6,
+       "kavlPerM": 0.8505570672464264,
+       "paPerM": 22.74352033406828
+      },
+      {
+       "waterLoadingKgM2S": 0.8,
+       "kavlPerM": 0.8076337976140927,
+       "paPerM": 23.139502192890927
+      },
+      {
+       "waterLoadingKgM2S": 1,
+       "kavlPerM": 0.7758373485071535,
+       "paPerM": 23.45139125662988
+      },
+      {
+       "waterLoadingKgM2S": 1.2,
+       "kavlPerM": 0.7507892717746126,
+       "paPerM": 23.709341229260005
+      },
+      {
+       "waterLoadingKgM2S": 1.4,
+       "kavlPerM": 0.7302433926655677,
+       "paPerM": 23.92964713202628
+      },
+      {
+       "waterLoadingKgM2S": 1.6,
+       "kavlPerM": 0.71290077305956,
+       "paPerM": 24.122138758996833
+      },
+      {
+       "waterLoadingKgM2S": 1.8,
+       "kavlPerM": 0.6979456930567872,
+       "paPerM": 24.293213261009154
+      },
+      {
+       "waterLoadingKgM2S": 2,
+       "kavlPerM": 0.6848339521614614,
+       "paPerM": 24.447272429125487
+      },
+      {
+       "waterLoadingKgM2S": 2.2,
+       "kavlPerM": 0.6731852628655124,
+       "paPerM": 24.587477371643047
+      },
+      {
+       "waterLoadingKgM2S": 2.4,
+       "kavlPerM": 0.6627239397783293,
+       "paPerM": 24.716176443602297
+      },
+      {
+       "waterLoadingKgM2S": 2.6,
+       "kavlPerM": 0.6532440758781155,
+       "paPerM": 24.835162916040257
+      },
+      {
+       "waterLoadingKgM2S": 2.8,
+       "kavlPerM": 0.6445880307273499,
+       "paPerM": 24.94583780414733
+      },
+      {
+       "waterLoadingKgM2S": 3,
+       "kavlPerM": 0.6366325749972076,
+       "paPerM": 25.049316934955225
+      },
+      {
+       "waterLoadingKgM2S": 3.125,
+       "kavlPerM": 0.6319717696035707,
+       "paPerM": 25.110745918573276
+      },
+      {
+       "waterLoadingKgM2S": 3.2,
+       "kavlPerM": 0.6292796484375978,
+       "paPerM": 25.14650373451274
+      },
+      {
+       "waterLoadingKgM2S": 3.4,
+       "kavlPerM": 0.6224500088727425,
+       "paPerM": 25.23814013286863
+      },
+      {
+       "waterLoadingKgM2S": 3.6,
+       "kavlPerM": 0.6160787545093839,
+       "paPerM": 25.324843045413527
+      },
+      {
+       "waterLoadingKgM2S": 3.8,
+       "kavlPerM": 0.6101120957213261,
+       "paPerM": 25.407131079363104
+      },
+      {
+       "waterLoadingKgM2S": 4,
+       "kavlPerM": 0.6045049815344931,
+       "paPerM": 25.485444453318472
+      },
+      {
+       "waterLoadingKgM2S": 4.2,
+       "kavlPerM": 0.5992193239239124,
+       "paPerM": 25.5601601027533
+      },
+      {
+       "waterLoadingKgM2S": 4.4,
+       "kavlPerM": 0.5942226485900999,
+       "paPerM": 25.631603305393728
+      },
+      {
+       "waterLoadingKgM2S": 4.6,
+       "kavlPerM": 0.5894870554105355,
+       "paPerM": 25.70005674776686
+      },
+      {
+       "waterLoadingKgM2S": 4.8,
+       "kavlPerM": 0.5849884073558789,
+       "paPerM": 25.765767681363272
+      },
+      {
+       "waterLoadingKgM2S": 5,
+       "kavlPerM": 0.5807056903990356,
+       "paPerM": 25.828953632697385
+      },
+      {
+       "waterLoadingKgM2S": 5.2,
+       "kavlPerM": 0.5766205030867325,
+       "paPerM": 25.88980700488311
+      },
+      {
+       "waterLoadingKgM2S": 5.4,
+       "kavlPerM": 0.5727166456138407,
+       "paPerM": 25.948498819720985
+      },
+      {
+       "waterLoadingKgM2S": 5.6,
+       "kavlPerM": 0.5689797860961245,
+       "paPerM": 26.005181786319664
+      },
+      {
+       "waterLoadingKgM2S": 5.8,
+       "kavlPerM": 0.5653971873429421,
+       "paPerM": 26.05999283688332
+      },
+      {
+       "waterLoadingKgM2S": 6,
+       "kavlPerM": 0.5619574814862702,
+       "paPerM": 26.11305523714849
+      },
+      {
+       "waterLoadingKgM2S": 6.2,
+       "kavlPerM": 0.5586504827921235,
+       "paPerM": 26.164480354451364
+      },
+      {
+       "waterLoadingKgM2S": 6.4,
+       "kavlPerM": 0.5554670311805976,
+       "paPerM": 26.214369148092924
+      },
+      {
+       "waterLoadingKgM2S": 6.6,
+       "kavlPerM": 0.5523988606283133,
+       "paPerM": 26.262813432836627
+      },
+      {
+       "waterLoadingKgM2S": 6.8,
+       "kavlPerM": 0.5494384878731146,
+       "paPerM": 26.30989695582574
+      },
+      {
+       "waterLoadingKgM2S": 7,
+       "kavlPerM": 0.5465791177920879,
+       "paPerM": 26.355696319090736
+      }
+     ]
+    }
+   },
+   {
+    "id": "FILM-MF20",
+    "name": "20 mm Micro-Fluted Film Fill",
+    "geometry": "micro-fluted film",
+    "compatibleTowerTypes": [
+     "counterflow"
+    ],
+    "allowedWaterQualityClasses": [
+     "clean",
+     "moderate"
+    ],
+    "thermal": {
+     "coefficientPerM": 1.312534,
+     "referenceWaterLoadingKgM2S": 3,
+     "referenceDryAirLoadingKgM2S": 2,
+     "waterExponent": -0.31,
+     "airExponent": 0.44
+    },
+    "pressure": {
+     "coefficientPaPerM": 56.85221,
+     "referenceWaterLoadingKgM2S": 3,
+     "referenceDryAirLoadingKgM2S": 2,
+     "waterExponent": 0.16,
+     "airExponent": 1.74
+    },
+    "limits": {
+     "minWaterLoadingKgM2S": 1.4,
+     "maxWaterLoadingKgM2S": 5.2,
+     "minDryAirLoadingKgM2S": 0.9,
+     "maxDryAirLoadingKgM2S": 3.3,
+     "maxWaterTemperatureC": 55
+    },
+    "material": "PVC (illustrative)",
+    "characteristic": {
+     "atDryAirLoadingKgM2S": 2.178299700421475,
+     "points": [
+      {
+       "waterLoadingKgM2S": 0.6,
+       "kavlPerM": 2.244449423540006,
+       "paPerM": 50.98525992001364
+      },
+      {
+       "waterLoadingKgM2S": 0.8,
+       "kavlPerM": 2.0529520937640053,
+       "paPerM": 53.386916221458165
+      },
+      {
+       "waterLoadingKgM2S": 1,
+       "kavlPerM": 1.9157406343839092,
+       "paPerM": 55.32742238285203
+      },
+      {
+       "waterLoadingKgM2S": 1.2,
+       "kavlPerM": 1.8104666314893976,
+       "paPerM": 56.9651751399003
+      },
+      {
+       "waterLoadingKgM2S": 1.4,
+       "kavlPerM": 1.7259850116469873,
+       "paPerM": 58.38764022400756
+      },
+      {
+       "waterLoadingKgM2S": 1.6,
+       "kavlPerM": 1.6559968885125447,
+       "paPerM": 59.64851483557437
+      },
+      {
+       "waterLoadingKgM2S": 1.8,
+       "kavlPerM": 1.5966224607447466,
+       "paPerM": 60.78326691990534
+      },
+      {
+       "waterLoadingKgM2S": 2,
+       "kavlPerM": 1.545316395532749,
+       "paPerM": 61.816617411049634
+      },
+      {
+       "waterLoadingKgM2S": 2.2,
+       "kavlPerM": 1.5003261538869177,
+       "paPerM": 62.76652231851925
+      },
+      {
+       "waterLoadingKgM2S": 2.4,
+       "kavlPerM": 1.4603979886375646,
+       "paPerM": 63.64645750184199
+      },
+      {
+       "waterLoadingKgM2S": 2.6,
+       "kavlPerM": 1.424606669407748,
+       "paPerM": 64.46680890796691
+      },
+      {
+       "waterLoadingKgM2S": 2.8,
+       "kavlPerM": 1.3922515861859481,
+       "paPerM": 65.23575944467184
+      },
+      {
+       "waterLoadingKgM2S": 3,
+       "kavlPerM": 1.3627905773855455,
+       "paPerM": 65.9598771873112
+      },
+      {
+       "waterLoadingKgM2S": 3.125,
+       "kavlPerM": 1.3456533730512599,
+       "paPerM": 66.39210540335917
+      },
+      {
+       "waterLoadingKgM2S": 3.2,
+       "kavlPerM": 1.3357962434161263,
+       "paPerM": 66.64451843089724
+      },
+      {
+       "waterLoadingKgM2S": 3.4,
+       "kavlPerM": 1.310926210508647,
+       "paPerM": 67.29411164119523
+      },
+      {
+       "waterLoadingKgM2S": 3.6,
+       "kavlPerM": 1.2879023505487026,
+       "paPerM": 67.91236233962088
+      },
+      {
+       "waterLoadingKgM2S": 3.8,
+       "kavlPerM": 1.266495923096603,
+       "paPerM": 68.50240404865771
+      },
+      {
+       "waterLoadingKgM2S": 4,
+       "kavlPerM": 1.2465167358473317,
+       "paPerM": 69.066911552497
+      },
+      {
+       "waterLoadingKgM2S": 4.2,
+       "kavlPerM": 1.2278050944707526,
+       "paPerM": 69.60818727073195
+      },
+      {
+       "waterLoadingKgM2S": 4.4,
+       "kavlPerM": 1.2102257281783098,
+       "paPerM": 70.12822808800449
+      },
+      {
+       "waterLoadingKgM2S": 4.6,
+       "kavlPerM": 1.193663140196521,
+       "paPerM": 70.62877773825309
+      },
+      {
+       "waterLoadingKgM2S": 4.8,
+       "kavlPerM": 1.1780180027190599,
+       "paPerM": 71.1113683506682
+      },
+      {
+       "waterLoadingKgM2S": 5,
+       "kavlPerM": 1.163204328808287,
+       "paPerM": 71.57735375260663
+      },
+      {
+       "waterLoadingKgM2S": 5.2,
+       "kavlPerM": 1.14914723001064,
+       "paPerM": 72.02793642543105
+      },
+      {
+       "waterLoadingKgM2S": 5.4,
+       "kavlPerM": 1.1357811209369728,
+       "paPerM": 72.46418951776661
+      },
+      {
+       "waterLoadingKgM2S": 5.6,
+       "kavlPerM": 1.123048268760829,
+       "paPerM": 72.8870749699052
+      },
+      {
+       "waterLoadingKgM2S": 5.8,
+       "kavlPerM": 1.1108976116377318,
+       "paPerM": 73.29745854920738
+      },
+      {
+       "waterLoadingKgM2S": 6,
+       "kavlPerM": 1.0992837887936135,
+       "paPerM": 73.69612241020604
+      },
+      {
+       "waterLoadingKgM2S": 6.2,
+       "kavlPerM": 1.088166338690747,
+       "paPerM": 74.08377565499431
+      },
+      {
+       "waterLoadingKgM2S": 6.4,
+       "kavlPerM": 1.0775090317514917,
+       "paPerM": 74.46106326585848
+      },
+      {
+       "waterLoadingKgM2S": 6.6,
+       "kavlPerM": 1.0672793116275516,
+       "paPerM": 74.82857370357661
+      },
+      {
+       "waterLoadingKgM2S": 6.8,
+       "kavlPerM": 1.0574478246550907,
+       "paPerM": 75.18684540470348
+      },
+      {
+       "waterLoadingKgM2S": 7,
+       "kavlPerM": 1.0479880214325845,
+       "paPerM": 75.53637236476443
+      }
+     ]
+    }
+   },
+   {
+    "id": "FILM-WF25",
+    "name": "25 mm Bottom-Supported Wide-Flute Fill",
+    "geometry": "wide-flute film, bottom-supported",
+    "compatibleTowerTypes": [
+     "counterflow"
+    ],
+    "allowedWaterQualityClasses": [
+     "clean",
+     "moderate",
+     "dirty"
+    ],
+    "thermal": {
+     "coefficientPerM": 0.909072,
+     "referenceWaterLoadingKgM2S": 3,
+     "referenceDryAirLoadingKgM2S": 2,
+     "waterExponent": -0.26,
+     "airExponent": 0.38
+    },
+    "pressure": {
+     "coefficientPaPerM": 43.20163,
+     "referenceWaterLoadingKgM2S": 3,
+     "referenceDryAirLoadingKgM2S": 2,
+     "waterExponent": 0.09,
+     "airExponent": 1.62
+    },
+    "limits": {
+     "minWaterLoadingKgM2S": 1.0,
+     "maxWaterLoadingKgM2S": 6.5,
+     "minDryAirLoadingKgM2S": 0.8,
+     "maxDryAirLoadingKgM2S": 3.6,
+     "maxWaterTemperatureC": 65
+    },
+    "material": "PP (illustrative)",
+    "characteristic": {
+     "atDryAirLoadingKgM2S": 2.178299700421475,
+     "points": [
+      {
+       "waterLoadingKgM2S": 0.6,
+       "kavlPerM": 1.4269993794710374,
+       "paPerM": 42.921491310135174
+      },
+      {
+       "waterLoadingKgM2S": 0.8,
+       "kavlPerM": 1.32415770744875,
+       "paPerM": 44.047299710841685
+      },
+      {
+       "waterLoadingKgM2S": 1,
+       "kavlPerM": 1.2495197049877507,
+       "paPerM": 44.940840512406474
+      },
+      {
+       "waterLoadingKgM2S": 1.2,
+       "kavlPerM": 1.1916699428280426,
+       "paPerM": 45.684355536938874
+      },
+      {
+       "waterLoadingKgM2S": 1.4,
+       "kavlPerM": 1.1448532466707004,
+       "paPerM": 46.32257720552306
+      },
+      {
+       "waterLoadingKgM2S": 1.6,
+       "kavlPerM": 1.105788104908416,
+       "paPerM": 46.88263242980639
+      },
+      {
+       "waterLoadingKgM2S": 1.8,
+       "kavlPerM": 1.0724381579712652,
+       "paPerM": 47.38225395260118
+      },
+      {
+       "waterLoadingKgM2S": 2,
+       "kavlPerM": 1.0434588107229705,
+       "paPerM": 47.83369061579742
+      },
+      {
+       "waterLoadingKgM2S": 2.2,
+       "kavlPerM": 1.0179189802416257,
+       "paPerM": 48.24576886418616
+      },
+      {
+       "waterLoadingKgM2S": 2.4,
+       "kavlPerM": 0.9951491732015942,
+       "paPerM": 48.625065838115795
+      },
+      {
+       "waterLoadingKgM2S": 2.6,
+       "kavlPerM": 0.9746530336512761,
+       "paPerM": 48.97661795478261
+      },
+      {
+       "waterLoadingKgM2S": 2.8,
+       "kavlPerM": 0.956053115813049,
+       "paPerM": 49.304369951952424
+      },
+      {
+       "waterLoadingKgM2S": 3,
+       "kavlPerM": 0.9390561972511772,
+       "paPerM": 49.611470920614785
+      },
+      {
+       "waterLoadingKgM2S": 3.125,
+       "kavlPerM": 0.9291420252330066,
+       "paPerM": 49.79407768943965
+      },
+      {
+       "waterLoadingKgM2S": 3.2,
+       "kavlPerM": 0.9234302878566085,
+       "paPerM": 49.900476033206836
+      },
+      {
+       "waterLoadingKgM2S": 3.4,
+       "kavlPerM": 0.9089889230387129,
+       "paPerM": 50.173487935771576
+      },
+      {
+       "waterLoadingKgM2S": 3.6,
+       "kavlPerM": 0.8955801500558167,
+       "paPerM": 50.43225828458154
+      },
+      {
+       "waterLoadingKgM2S": 3.8,
+       "kavlPerM": 0.8830786280233052,
+       "paPerM": 50.67826221898278
+      },
+      {
+       "waterLoadingKgM2S": 4,
+       "kavlPerM": 0.871379847255846,
+       "paPerM": 50.912754008153875
+      },
+      {
+       "waterLoadingKgM2S": 4.2,
+       "kavlPerM": 0.8603958240416794,
+       "paPerM": 51.13680932080727
+      },
+      {
+       "waterLoadingKgM2S": 4.4,
+       "kavlPerM": 0.8500518433566265,
+       "paPerM": 51.35135780857645
+      },
+      {
+       "waterLoadingKgM2S": 4.6,
+       "kavlPerM": 0.8402839593354028,
+       "paPerM": 51.55720855615322
+      },
+      {
+       "waterLoadingKgM2S": 4.8,
+       "kavlPerM": 0.8310370525697813,
+       "paPerM": 51.75507019792194
+      },
+      {
+       "waterLoadingKgM2S": 5,
+       "kavlPerM": 0.8222633025889305,
+       "paPerM": 51.94556699158222
+      },
+      {
+       "waterLoadingKgM2S": 5.2,
+       "kavlPerM": 0.8139209740363927,
+       "paPerM": 52.12925178848048
+      },
+      {
+       "waterLoadingKgM2S": 5.4,
+       "kavlPerM": 0.8059734427488889,
+       "paPerM": 52.3066165946255
+      },
+      {
+       "waterLoadingKgM2S": 5.6,
+       "kavlPerM": 0.798388407347329,
+       "paPerM": 52.47810124150756
+      },
+      {
+       "waterLoadingKgM2S": 5.8,
+       "kavlPerM": 0.7911372457524266,
+       "paPerM": 52.64410055964982
+      },
+      {
+       "waterLoadingKgM2S": 6,
+       "kavlPerM": 0.784194485988802,
+       "paPerM": 52.8049703555543
+      },
+      {
+       "waterLoadingKgM2S": 6.2,
+       "kavlPerM": 0.7775373679074029,
+       "paPerM": 52.961032424426946
+      },
+      {
+       "waterLoadingKgM2S": 6.4,
+       "kavlPerM": 0.7711454778233154,
+       "paPerM": 53.11257877997387
+      },
+      {
+       "waterLoadingKgM2S": 6.6,
+       "kavlPerM": 0.765000442073755,
+       "paPerM": 53.25987524393334
+      },
+      {
+       "waterLoadingKgM2S": 6.8,
+       "kavlPerM": 0.759085668523833,
+       "paPerM": 53.40316450851864
+      },
+      {
+       "waterLoadingKgM2S": 7,
+       "kavlPerM": 0.7533861273490987,
+       "paPerM": 53.54266876223558
+      }
+     ]
+    }
+   }
+  ],
+  "driftEliminators": [
+   {
+    "id": "DE-2P-LP",
+    "name": "Illustrative Two-Pass Low-Pressure Eliminator",
+    "material": "PVC (illustrative)",
+    "maxWaterTemperatureC": 60,
+    "curve": [
+     {
+      "faceVelocityMS": 1,
+      "driftPpm": 35,
+      "pressureDropPa": 7
+     },
+     {
+      "faceVelocityMS": 1.5,
+      "driftPpm": 45,
+      "pressureDropPa": 13
+     },
+     {
+      "faceVelocityMS": 2,
+      "driftPpm": 62,
+      "pressureDropPa": 23
+     },
+     {
+      "faceVelocityMS": 2.5,
+      "driftPpm": 88,
+      "pressureDropPa": 37
+     },
+     {
+      "faceVelocityMS": 3,
+      "driftPpm": 130,
+      "pressureDropPa": 55
+     },
+     {
+      "faceVelocityMS": 3.5,
+      "driftPpm": 200,
+      "pressureDropPa": 78
+     }
+    ]
+   },
+   {
+    "id": "DE-3P-10",
+    "name": "Illustrative Three-Pass 0.001% Eliminator",
+    "material": "PVC (illustrative)",
+    "maxWaterTemperatureC": 60,
+    "curve": [
+     {
+      "faceVelocityMS": 1,
+      "driftPpm": 4,
+      "pressureDropPa": 10
+     },
+     {
+      "faceVelocityMS": 1.5,
+      "driftPpm": 6,
+      "pressureDropPa": 18
+     },
+     {
+      "faceVelocityMS": 2,
+      "driftPpm": 9,
+      "pressureDropPa": 31
+     },
+     {
+      "faceVelocityMS": 2.5,
+      "driftPpm": 14,
+      "pressureDropPa": 49
+     },
+     {
+      "faceVelocityMS": 3,
+      "driftPpm": 23,
+      "pressureDropPa": 72
+     },
+     {
+      "faceVelocityMS": 3.5,
+      "driftPpm": 38,
+      "pressureDropPa": 101
+     }
+    ]
+   },
+   {
+    "id": "DE-4P-ULTRA",
+    "name": "Illustrative Four-Pass Ultra-Low Drift Eliminator",
+    "material": "PP (illustrative)",
+    "maxWaterTemperatureC": 80,
+    "curve": [
+     {
+      "faceVelocityMS": 1,
+      "driftPpm": 1.2,
+      "pressureDropPa": 15
+     },
+     {
+      "faceVelocityMS": 1.5,
+      "driftPpm": 1.8,
+      "pressureDropPa": 27
+     },
+     {
+      "faceVelocityMS": 2,
+      "driftPpm": 2.8,
+      "pressureDropPa": 45
+     },
+     {
+      "faceVelocityMS": 2.5,
+      "driftPpm": 4.8,
+      "pressureDropPa": 69
+     },
+     {
+      "faceVelocityMS": 3,
+      "driftPpm": 8.5,
+      "pressureDropPa": 100
+     },
+     {
+      "faceVelocityMS": 3.5,
+      "driftPpm": 15,
+      "pressureDropPa": 138
+     }
+    ]
+   }
+  ],
+  "fans": [
+   {
+    "id": "AX-420",
+    "name": "Illustrative 4.2 m Axial Fan",
+    "stackAreaM2": 13.854,
+    "pressureBasis": "total",
+    "referenceDensityKgM3": 1.2,
+    "allowedSpeedRatio": [
+     0.72,
+     1.12
+    ],
+    "nominalRpm": 277.0,
+    "driveEfficiency": 0.95,
+    "motorEfficiency": 0.94,
+    "curve": [
+     {
+      "flowM3S": 35,
+      "pressurePa": 390,
+      "efficiency": 0.61
+     },
+     {
+      "flowM3S": 65,
+      "pressurePa": 350,
+      "efficiency": 0.72
+     },
+     {
+      "flowM3S": 95,
+      "pressurePa": 275,
+      "efficiency": 0.81
+     },
+     {
+      "flowM3S": 120,
+      "pressurePa": 185,
+      "efficiency": 0.8
+     },
+     {
+      "flowM3S": 145,
+      "pressurePa": 65,
+      "efficiency": 0.66
+     }
+    ]
+   },
+   {
+    "id": "AX-500",
+    "name": "Illustrative 5.0 m Axial Fan",
+    "stackAreaM2": 19.635,
+    "pressureBasis": "total",
+    "referenceDensityKgM3": 1.2,
+    "allowedSpeedRatio": [
+     0.7,
+     1.13
+    ],
+    "nominalRpm": 233.0,
+    "driveEfficiency": 0.96,
+    "motorEfficiency": 0.95,
+    "curve": [
+     {
+      "flowM3S": 55,
+      "pressurePa": 520,
+      "efficiency": 0.63
+     },
+     {
+      "flowM3S": 100,
+      "pressurePa": 470,
+      "efficiency": 0.74
+     },
+     {
+      "flowM3S": 145,
+      "pressurePa": 380,
+      "efficiency": 0.83
+     },
+     {
+      "flowM3S": 185,
+      "pressurePa": 245,
+      "efficiency": 0.82
+     },
+     {
+      "flowM3S": 225,
+      "pressurePa": 70,
+      "efficiency": 0.67
+     }
+    ]
+   },
+   {
+    "id": "AX-600",
+    "name": "Illustrative 6.0 m Axial Fan",
+    "stackAreaM2": 28.274,
+    "pressureBasis": "total",
+    "referenceDensityKgM3": 1.2,
+    "allowedSpeedRatio": [
+     0.68,
+     1.14
+    ],
+    "nominalRpm": 194.0,
+    "driveEfficiency": 0.97,
+    "motorEfficiency": 0.955,
+    "curve": [
+     {
+      "flowM3S": 85,
+      "pressurePa": 650,
+      "efficiency": 0.65
+     },
+     {
+      "flowM3S": 145,
+      "pressurePa": 585,
+      "efficiency": 0.76
+     },
+     {
+      "flowM3S": 210,
+      "pressurePa": 465,
+      "efficiency": 0.85
+     },
+     {
+      "flowM3S": 270,
+      "pressurePa": 300,
+      "efficiency": 0.84
+     },
+     {
+      "flowM3S": 325,
+      "pressurePa": 85,
+      "efficiency": 0.69
+     }
+    ]
+   },
+   {
+    "id": "AX-700",
+    "name": "Illustrative 7.0 m Axial Fan",
+    "stackAreaM2": 38.485,
+    "pressureBasis": "total",
+    "referenceDensityKgM3": 1.2,
+    "allowedSpeedRatio": [
+     0.66,
+     1.15
+    ],
+    "nominalRpm": 166.0,
+    "driveEfficiency": 0.97,
+    "motorEfficiency": 0.96,
+    "curve": [
+     {
+      "flowM3S": 120,
+      "pressurePa": 760,
+      "efficiency": 0.66
+     },
+     {
+      "flowM3S": 205,
+      "pressurePa": 680,
+      "efficiency": 0.78
+     },
+     {
+      "flowM3S": 295,
+      "pressurePa": 535,
+      "efficiency": 0.86
+     },
+     {
+      "flowM3S": 375,
+      "pressurePa": 340,
+      "efficiency": 0.85
+     },
+     {
+      "flowM3S": 450,
+      "pressurePa": 95,
+      "efficiency": 0.7
+     }
+    ]
+   }
+  ],
+  "nozzles": [
+   {
+    "id": "NZ-20",
+    "name": "Illustrative 20 mm Full-Cone Nozzle",
+    "dischargeCoefficient": 0.72,
+    "orificeDiameterM": 0.02
+   },
+   {
+    "id": "NZ-25",
+    "name": "Illustrative 25 mm Full-Cone Nozzle",
+    "dischargeCoefficient": 0.74,
+    "orificeDiameterM": 0.025
+   },
+   {
+    "id": "NZ-32",
+    "name": "Illustrative 32 mm Full-Cone Nozzle",
+    "dischargeCoefficient": 0.76,
+    "orificeDiameterM": 0.032
+   },
+   {
+    "id": "NZ-40",
+    "name": "Illustrative 40 mm Full-Cone Nozzle",
+    "dischargeCoefficient": 0.77,
+    "orificeDiameterM": 0.04
+   }
+  ]
+ },
+ "defaultInput": {
+  "duty": {
+   "waterFlowM3Hr": 724.8125039515579,
+   "hotWaterC": 42,
+   "targetColdWaterC": 32,
+   "wetBulbC": 27,
+   "dryBulbC": 33,
+   "pressurePa": 101325,
+   "salinityGKg": 0,
+   "waterQualityClass": "moderate",
+   "cyclesOfConcentration": 4
+  },
+  "towerId": "IDCF-064",
+  "fillLayers": [
+   {
+    "fill_id": "FILM-MF20",
+    "depth_m": 0.45,
+    "thermal_multiplier": 0.92,
+    "pressure_multiplier": 1.12
+   },
+   {
+    "fill_id": "FILM-WF25",
+    "depth_m": 0.9,
+    "thermal_multiplier": 0.92,
+    "pressure_multiplier": 1.12
+   }
+  ],
+  "driftId": "DE-3P-10",
+  "fanId": "AX-500",
+  "speedRatio": 0.78,
+  "nozzleId": "NZ-20"
+ },
+ "anchor": {
+  "metrics": {
+   "rank": 1,
+   "towerId": "IDCF-064",
+   "fillId": "FILM-VF38",
+   "driftEliminatorId": "DE-3P-10",
+   "fanId": "AX-500",
+   "nozzleId": "NZ-20",
+   "fillDepthM": 1.5,
+   "speedRatio": 0.78,
+   "coldWaterC": 31.654595192803274,
+   "thermalMarginC": 0.3454048071967257,
+   "rangeC": 10.345404807196726,
+   "heatTransferKW": 8655.77168079408,
+   "electricalInputKW": 31.50326005213509,
+   "motorRequiredKW": 32.920906754481166,
+   "motorSelectedKW": 37,
+   "capacityKgS": 218.01841966807842,
+   "capabilityRatio": 1.11971630233056,
+   "totalPa": 190.14946659164616,
+   "fanFlowM3S": 124.84169957482814,
+   "fanPressurePa": 190.1494665960218,
+   "fanShaftPowerKW": 28.730973167547198,
+   "evaporationKgS": 3.1113332744473388,
+   "makeupKgS": 4.148444365929785
+  },
+  "candidate": {
+   "rank": 1,
+   "towerId": "IDCF-064",
+   "fillId": "FILM-VF38",
+   "driftId": "DE-3P-10",
+   "fanId": "AX-500",
+   "fillDepthM": 1.5,
+   "speedRatio": 0.78,
+   "model": "counterflow Merkel",
+   "coldWaterC": 31.654595192803274,
+   "thermalMarginC": 0.3454048071967257,
+   "approachC": 4.654595192803274,
+   "rangeC": 10.345404807196726,
+   "cpWaterKJkgK": 4.18338955415874,
+   "outletAirHumidityRatio": 0.04254407292213691,
+   "heatTransferKW": 8655.77168079408,
+   "electricalInputKW": 31.50326005213509,
+   "motorRequiredKW": 32.920906754481166,
+   "motorSelectedKW": 37,
+   "capacityKgS": 218.01841966807842,
+   "capabilityRatio": 1.11971630233056,
+   "waterVolumetricFlowM3S": 0.20133680665321052,
+   "nozzleOptionCount": 4,
+   "airside": {
+    "totalPa": 190.14946659164616,
+    "fillPa": 83.65404897218244,
+    "driftPa": 32.677068601537925,
+    "inletPa": 26.010286599500756,
+    "distributionPa": 9.537105086483612,
+    "supportPa": 4.551800154912632,
+    "plenumPa": 8.750757016767906,
+    "fanStackPa": 14.968400160260893,
+    "fixedPa": 10,
+    "driftPpm": 9.46585238931609,
+    "waterLoadingKgM2S": 3.125,
+    "dryAirLoadingKgM2S": 2.178299700421475,
+    "dryAirMassFlowKgS": 139.4111808269744,
+    "fillVelocityMS": 1.9506515558566897,
+    "driftVelocityMS": 2.046585238931609,
+    "inletVelocityMS": 3.9013031117133794,
+    "plenumVelocityMS": 6.35812068117281,
+    "fanStackVelocityMS": 6.35812068117281,
+    "fanPressureBasis": "total",
+    "areas": {
+     "fillAreaM2": 64,
+     "airFreeAreaM2": 64,
+     "driftAreaM2": 61,
+     "inletAreaM2": 32,
+     "plenumAreaM2": 19.635,
+     "fanStackAreaM2": 19.635
+    },
+    "fillMerkelNumber": 1.326430046411088,
+    "sprayZoneMerkelNumber": 0.0906629542724676,
+    "rainZoneMerkelNumber": 0.1845700323394763,
+    "availableMerkelNumber": 1.601663033023032
+   },
+   "fanOperatingPoint": {
+    "flowM3S": 124.84169957482814,
+    "fanPressurePa": 190.1494665960218,
+    "systemPressurePa": 190.14946659164616,
+    "efficiency": 0.8262366347516577,
+    "shaftPowerKW": 28.730973167547198,
+    "residualPa": 4.3756358536484186e-09
+   },
+   "waterBalance": {
+    "evaporationKgS": 3.1113332744473388,
+    "driftKgS": 0.001893170477863218,
+    "blowdownKgS": 1.0352179210045829,
+    "makeupKgS": 4.148444365929785
+   },
+   "nozzle": {
+    "nozzleId": "NZ-20",
+    "nozzleName": "Illustrative 20 mm Full-Cone Nozzle",
+    "count": 78,
+    "flowPerNozzleM3S": 0.0025828933023677903,
+    "actualTotalFlowM3S": 0.20146567758468764,
+    "excessFlowPct": 0.06400763656646873,
+    "validCount": true
+   }
+  },
+  "worked": {
+   "title": "Selection of the recommended unit",
+   "purpose": "One duty in, one ranked unit out: the numbers the recommendation rests on, in the order they were computed.",
+   "steps": [
+    {
+     "label": "Duty water flow",
+     "why": "The flow the unit has to hold at the required cold-water temperature. It is a constraint on every candidate, never a sort key.",
+     "formula": "Q_w = duty flow",
+     "substitution": "200.0000 kg/s (given)",
+     "value": 200,
+     "unit": "kg/s",
+     "reference": null,
+     "kind": "calc"
+    },
+    {
+     "label": "Range",
+     "why": "How far the water is cooled, which fixes the heat it gives up per kilogram.",
+     "formula": "range = t_hot - t_cold,target",
+     "substitution": "42.0000 - 32.0000",
+     "value": 10,
+     "unit": "K",
+     "reference": null,
+     "kind": "calc"
+    },
+    {
+     "label": "Heat the water gives up",
+     "why": "The water-side duty the air side has to match, at the water's own heat capacity at the mean temperature.",
+     "formula": "Q = Q_w * c_p,w * range",
+     "substitution": "200.0000 * 4.1834 * 10.0000",
+     "value": 8655.77168079408,
+     "unit": "kW",
+     "reference": null,
+     "kind": "calc"
+    },
+    {
+     "label": "Dry-air mass flow",
+     "why": "The air the fill actually passes at this duty; the air-side quantities below are all set by it.",
+     "formula": "G = rho_da * A_fill * v_fill",
+     "substitution": "1.1167 * 64.0000 * 1.9507",
+     "value": 139.4111808269744,
+     "unit": "kg/s",
+     "reference": null,
+     "kind": "calc"
+    },
+    {
+     "label": "Fill transfer demand",
+     "why": "The transfer number the fill alone has to deliver over the range, integrated against the air's saturation line.",
+     "formula": "KaV/L_fill = integral c_p,w dt / (h_s(t) - h_a)",
+     "substitution": "evaluated over the fill height at the solved water path",
+     "value": 1.326430046411088,
+     "unit": "-",
+     "reference": "Merkel (1925); ASHRAE Systems and Equipment, Cooling Towers",
+     "kind": "calc"
+    },
+    {
+     "label": "Spray and rain zone demand",
+     "why": "The zones above and below the fill transfer heat too, on the same correlation form with their own loadings.",
+     "formula": "KaV/L_zones = KaV/L_spray + KaV/L_rain",
+     "substitution": "0.0907 + 0.1846",
+     "value": 0.2752329866119439,
+     "unit": "-",
+     "reference": null,
+     "kind": "calc"
+    },
+    {
+     "label": "Total demand",
+     "why": "Fill plus zones: what the tower must supply to cool the water to the solved cold-water temperature.",
+     "formula": "KaV/L_req = KaV/L_fill + KaV/L_spray + KaV/L_rain",
+     "substitution": "1.3264 + 0.0907 + 0.1846",
+     "value": 1.601663033023032,
+     "unit": "-",
+     "reference": null,
+     "kind": "calc"
+    },
+    {
+     "label": "Available transfer",
+     "why": "What this fill at this depth, this water loading and this speed ratio can supply.",
+     "formula": "KaV/L_avail = C * (L/G)^m",
+     "substitution": "at L/G = 1.4346, fill depth 1.5000 m",
+     "value": 1.601663033023032,
+     "unit": "-",
+     "reference": null,
+     "kind": "calc"
+    },
+    {
+     "label": "Capability ratio",
+     "why": "Available over required at the duty, before the margin is taken: above 1 the unit has headroom, below 1 it misses the target.",
+     "formula": "capability = KaV/L_avail,duty / KaV/L_req,duty",
+     "substitution": "solved at the target cold-water temperature, not at the solved one",
+     "value": 1.11971630233056,
+     "unit": "-",
+     "reference": null,
+     "kind": "calc"
+    },
+    {
+     "label": "Cold-water temperature, solved",
+     "why": "The temperature the tower actually reaches: the available transfer is matched against the demand by root solve.",
+     "formula": "solve KaV/L_avail(t) = KaV/L_req(t)",
+     "substitution": "target 32.0000, margin 0.3454",
+     "value": 31.654595192803274,
+     "unit": "degC",
+     "reference": null,
+     "kind": "calc"
+    },
+    {
+     "label": "Air-side pressure demand",
+     "why": "Every loss the fan has to overcome, summed over the path.",
+     "formula": "dp = fill + drift + inlet + distribution + support + plenum + fan stack + fixed",
+     "substitution": "83.6540 + 32.6771 + 26.0103 + 9.5371 + 4.5518 + 8.7508 + 14.9684 + 10.0000",
+     "value": 190.14946659164616,
+     "unit": "Pa",
+     "reference": null,
+     "kind": "calc"
+    },
+    {
+     "label": "Fan operating point",
+     "why": "Where the fan curve and the system curve cross; the flow and pressure the fan actually delivers.",
+     "formula": "dp_fan(Q) = dp_system(Q)",
+     "substitution": "fan 190.1495 Pa vs system 190.1495 Pa at 124.8417 m3/s",
+     "value": 124.84169957482814,
+     "unit": "m3/s",
+     "reference": null,
+     "kind": "calc"
+    },
+    {
+     "label": "Fan shaft power",
+     "why": "The shaft power at that operating point and the fan's efficiency there.",
+     "formula": "P_shaft = Q * dp_fan / eta_fan",
+     "substitution": "124.8417 * 190.1495 / 0.8262",
+     "value": 28.730973167547198,
+     "unit": "kW",
+     "reference": "AMCA 210 fan total vs static pressure definitions",
+     "kind": "calc"
+    },
+    {
+     "label": "Evaporation",
+     "why": "Water the air carries away, from the dry-air mass balance between inlet and leaving humidity ratio.",
+     "formula": "E = G * (W_out - W_in)",
+     "substitution": "139.4112 * (0.042544 - 0.020226)",
+     "value": 3.1113332744473388,
+     "unit": "kg/s",
+     "reference": null,
+     "kind": "calc"
+    },
+    {
+     "label": "Make-up water",
+     "why": "Evaporation concentrated by the cycles of concentration, plus the drift that leaves with the air.",
+     "formula": "M = E * N/(N-1) + D",
+     "substitution": "3.1113 * 4.0000/(4.0000 - 1) + 0.001893",
+     "value": 4.148444365929785,
+     "unit": "kg/s",
+     "reference": null,
+     "kind": "calc"
+    },
+    {
+     "label": "Capacity",
+     "why": "The flow the unit holds at the required cold-water temperature, re-solving the air side at each flow: the ranking metric of the default objective.",
+     "formula": "Q_w,max = root on Q_w at t_cold(Q_w) = target",
+     "substitution": "bracketed root on the water mass flow",
+     "value": 218.01841966807842,
+     "unit": "kg/s",
+     "reference": null,
+     "kind": "calc"
+    },
+    {
+     "label": "Ranking",
+     "why": "The candidate above is rank 1 under the run's declared objective. Duty flow and the thermal margin constrain the feasible set; they are never sort keys.",
+     "formula": null,
+     "substitution": null,
+     "value": null,
+     "unit": "",
+     "reference": null,
+     "kind": "note"
+    },
+    {
+     "label": "Where these numbers come from",
+     "why": "Every value in this sheet is read from the selection result itself - the same solve that ranked the candidate - so the sheet cannot drift from the engine.",
+     "formula": null,
+     "substitution": null,
+     "value": null,
+     "unit": "",
+     "reference": null,
+     "kind": "note"
+    }
+   ],
+   "result": {
+    "rank": 1,
+    "towerId": "IDCF-064",
+    "fillId": "FILM-VF38",
+    "driftEliminatorId": "DE-3P-10",
+    "fanId": "AX-500",
+    "nozzleId": "NZ-20",
+    "fillDepthM": 1.5,
+    "speedRatio": 0.78,
+    "coldWaterC": 31.654595192803274,
+    "thermalMarginC": 0.3454048071967257,
+    "rangeC": 10.345404807196726,
+    "heatTransferKW": 8655.77168079408,
+    "electricalInputKW": 31.50326005213509,
+    "motorRequiredKW": 32.920906754481166,
+    "motorSelectedKW": 37,
+    "capacityKgS": 218.01841966807842,
+    "capabilityRatio": 1.11971630233056,
+    "totalPa": 190.14946659164616,
+    "fanFlowM3S": 124.84169957482814,
+    "fanPressurePa": 190.1494665960218,
+    "fanShaftPowerKW": 28.730973167547198,
+    "evaporationKgS": 3.1113332744473388,
+    "makeupKgS": 4.148444365929785
+   }
+  },
+  "warning": "Selection output is only as valid as the fill, drift, fan, tower-loss and material data supplied. The bundled catalog is synthetic.",
+  "air": {
+   "inlet": {
+    "dryBulbC": 33,
+    "wetBulbC": 27,
+    "relativeHumidity": 0.6312752448172374,
+    "pressurePa": 101325,
+    "humidityRatio": 0.0202263990025044,
+    "enthalpyKJkgDryAir": 85.02572027603722,
+    "dryAirDensityKgM3": 1.116703643908769,
+    "moistAirDensityKgM3": 1.1392905373780184,
+    "dewPointC": 25.0467276754044,
+    "enhancementFactor": 1.004205845,
+    "saturationVaporPressurePa": 5034.342051000531,
+    "saturationHumidityRatio": 0.032660949039399555,
+    "saturatedAirEnthalpyKJkgDryAir": 116.88776259957663
+   },
+   "outlet": {
+    "tC": 37.51715784473325,
+    "humidityRatio": 0.042544072922136585,
+    "enthalpyKJkg": 147.11379399053564,
+    "relativeHumidity": 1
+   },
+   "saturation": [
+    {
+     "tC": 10,
+     "humidityRatio": 0.007662539894579503,
+     "enthalpyKJkg": 29.366535518382513
+    },
+    {
+     "tC": 11,
+     "humidityRatio": 0.008198303086689833,
+     "enthalpyKJkg": 31.73769330096495
+    },
+    {
+     "tC": 12,
+     "humidityRatio": 0.008767354570760092,
+     "enthalpyKJkg": 34.19484113549036
+    },
+    {
+     "tC": 13,
+     "humidityRatio": 0.009371524825207414,
+     "enthalpyKJkg": 36.74278705811726
+    },
+    {
+     "tC": 14,
+     "humidityRatio": 0.010012736020260472,
+     "enthalpyKJkg": 39.386584432639026
+    },
+    {
+     "tC": 15,
+     "humidityRatio": 0.01069300676297008,
+     "enthalpyKJkg": 42.131544802875034
+    },
+    {
+     "tC": 16,
+     "humidityRatio": 0.011414457158681862,
+     "enthalpyKJkg": 44.98325159890571
+    },
+    {
+     "tC": 17,
+     "humidityRatio": 0.012179314217110505,
+     "enthalpyKJkg": 47.9475747725384
+    },
+    {
+     "tC": 18,
+     "humidityRatio": 0.012989917633990229,
+     "enthalpyKJkg": 51.03068644499555
+    },
+    {
+     "tC": 19,
+     "humidityRatio": 0.013848725982436045,
+     "enthalpyKJkg": 54.23907765829185
+    },
+    {
+     "tC": 20,
+     "humidityRatio": 0.014758323351653219,
+     "enthalpyKJkg": 57.579576331166194
+    },
+    {
+     "tC": 21,
+     "humidityRatio": 0.01572142647453011,
+     "enthalpyKJkg": 61.05936653089495
+    },
+    {
+     "tC": 22,
+     "humidityRatio": 0.016740892389991505,
+     "enthalpyKJkg": 64.68600918396722
+    },
+    {
+     "tC": 23,
+     "humidityRatio": 0.01781972669083325,
+     "enthalpyKJkg": 68.46746436160781
+    },
+    {
+     "tC": 24,
+     "humidityRatio": 0.01896109241316862,
+     "enthalpyKJkg": 72.41211529065856
+    },
+    {
+     "tC": 25,
+     "humidityRatio": 0.020168319629666122,
+     "enthalpyKJkg": 76.52879425657444
+    },
+    {
+     "tC": 26,
+     "humidityRatio": 0.021444915815541074,
+     "enthalpyKJkg": 80.8268105835078
+    },
+    {
+     "tC": 27,
+     "humidityRatio": 0.022794577063871013,
+     "enthalpyKJkg": 85.315980896889
+    },
+    {
+     "tC": 28,
+     "humidityRatio": 0.024221200235353867,
+     "enthalpyKJkg": 90.00666189687725
+    },
+    {
+     "tC": 29,
+     "humidityRatio": 0.02572889613726089,
+     "enthalpyKJkg": 94.90978589693333
+    },
+    {
+     "tC": 30,
+     "humidityRatio": 0.027322003837187806,
+     "enthalpyKJkg": 100.03689941092179
+    },
+    {
+     "tC": 31,
+     "humidityRatio": 0.0290051062294823,
+     "enthalpyKJkg": 105.40020510512718
+    },
+    {
+     "tC": 32,
+     "humidityRatio": 0.030783046986101563,
+     "enthalpyKJkg": 111.01260746885276
+    },
+    {
+     "tC": 33,
+     "humidityRatio": 0.032660949039399555,
+     "enthalpyKJkg": 116.88776259957663
+    },
+    {
+     "tC": 34,
+     "humidityRatio": 0.03464423476222553,
+     "enthalpyKJkg": 123.0401325466892
+    },
+    {
+     "tC": 35,
+     "humidityRatio": 0.0367386480310709,
+     "enthalpyKJkg": 129.48504471253105
+    },
+    {
+     "tC": 36,
+     "humidityRatio": 0.03895027838120462,
+     "enthalpyKJkg": 136.23875687179822
+    },
+    {
+     "tC": 37,
+     "humidityRatio": 0.04128558748927251,
+     "enthalpyKJkg": 143.3185284416823
+    },
+    {
+     "tC": 38,
+     "humidityRatio": 0.04375143824920295,
+     "enthalpyKJkg": 150.74269871671024
+    },
+    {
+     "tC": 39,
+     "humidityRatio": 0.046355126742118224,
+     "enthalpyKJkg": 158.53077287591094
+    },
+    {
+     "tC": 40,
+     "humidityRatio": 0.04910441744104373,
+     "enthalpyKJkg": 166.70351667766403
+    },
+    {
+     "tC": 41,
+     "humidityRatio": 0.05200758203740458,
+     "enthalpyKJkg": 175.28306088172135
+    },
+    {
+     "tC": 42,
+     "humidityRatio": 0.05507344232970509,
+     "enthalpyKJkg": 184.293016581389
+    },
+    {
+     "tC": 43,
+     "humidityRatio": 0.05831141767659913,
+     "enthalpyKJkg": 193.75860279494884
+    },
+    {
+     "tC": 44,
+     "humidityRatio": 0.06173157758836347,
+     "enthalpyKJkg": 203.70678785832874
+    },
+    {
+     "tC": 45,
+     "humidityRatio": 0.06534470011433335,
+     "enthalpyKJkg": 214.16644638551742
+    },
+    {
+     "tC": 46,
+     "humidityRatio": 0.06916233678138245,
+     "enthalpyKJkg": 225.1685338252526
+    },
+    {
+     "tC": 47,
+     "humidityRatio": 0.0731968849526461,
+     "enthalpyKJkg": 236.74628094912825
+    },
+    {
+     "tC": 48,
+     "humidityRatio": 0.07746166860959768,
+     "enthalpyKJkg": 248.93541096606867
+    },
+    {
+     "tC": 49,
+     "humidityRatio": 0.08197102871821098,
+     "enthalpyKJkg": 261.7743823816234
+    },
+    {
+     "tC": 50,
+     "humidityRatio": 0.08674042452598962,
+     "enthalpyKJkg": 275.3046612204171
+    }
+   ]
+  },
+  "fanCurveAtSpeed": {
+   "speedRatio": 0.78,
+   "airDensityKgM3": 1.1392905373780184,
+   "points": [
+    {
+     "flowM3S": 43.34062709617615,
+     "pressurePa": 300.00000007126215,
+     "efficiency": 0.6313808826375891
+    },
+    {
+     "flowM3S": 55.49393952465057,
+     "pressurePa": 290.00000007024687,
+     "efficiency": 0.6694681865444889
+    },
+    {
+     "flowM3S": 67.647251953125,
+     "pressurePa": 280.00000006923165,
+     "efficiency": 0.7075554904513889
+    },
+    {
+     "flowM3S": 79.00031362247468,
+     "pressurePa": 269.9999999539636,
+     "efficiency": 0.742564906724294
+    },
+    {
+     "flowM3S": 85.75215388393401,
+     "pressurePa": 259.99999991826445,
+     "efficiency": 0.7598773176511129
+    },
+    {
+     "flowM3S": 92.50399404001237,
+     "pressurePa": 250.00000003864278,
+     "efficiency": 0.777189728307724
+    },
+    {
+     "flowM3S": 99.25583430147171,
+     "pressurePa": 240.00000000294366,
+     "efficiency": 0.7945021392345428
+    },
+    {
+     "flowM3S": 106.00767456293107,
+     "pressurePa": 229.99999996724452,
+     "efficiency": 0.8118145501613616
+    },
+    {
+     "flowM3S": 112.75951471900939,
+     "pressurePa": 220.0000000876229,
+     "efficiency": 0.8291269608179728
+    },
+    {
+     "flowM3S": 116.89932146692277,
+     "pressurePa": 210.0000000593833,
+     "efficiency": 0.8287822687606017
+    },
+    {
+     "flowM3S": 120.90041202735901,
+     "pressurePa": 199.99999993589057,
+     "efficiency": 0.827499867939949
+    },
+    {
+     "flowM3S": 124.90150248241424,
+     "pressurePa": 190.00000007577862,
+     "efficiency": 0.8262174671530723
+    },
+    {
+     "flowM3S": 128.90259304285047,
+     "pressurePa": 179.99999995228598,
+     "efficiency": 0.8249350663324196
+    },
+    {
+     "flowM3S": 132.90368349790572,
+     "pressurePa": 170.00000009217393,
+     "efficiency": 0.823652665545543
+    },
+    {
+     "flowM3S": 136.90477405834196,
+     "pressurePa": 159.99999996868127,
+     "efficiency": 0.8223702647248904
+    },
+    {
+     "flowM3S": 140.9058645660877,
+     "pressurePa": 149.9999999768789,
+     "efficiency": 0.8210878639211256
+    },
+    {
+     "flowM3S": 144.768222499609,
+     "pressurePa": 139.9999999394583,
+     "efficiency": 0.8177489302903413
+    },
+    {
+     "flowM3S": 147.8547780160904,
+     "pressurePa": 130.00000000618502,
+     "efficiency": 0.8029097210764885
+    },
+    {
+     "flowM3S": 150.9413335852623,
+     "pressurePa": 119.99999990220198,
+     "efficiency": 0.7880705116093158
+    },
+    {
+     "flowM3S": 154.0278891017437,
+     "pressurePa": 109.99999996892862,
+     "efficiency": 0.7732313023954629
+    },
+    {
+     "flowM3S": 157.1144446182251,
+     "pressurePa": 100.00000003565543,
+     "efficiency": 0.7583920931816102
+    },
+    {
+     "flowM3S": 160.20100018739703,
+     "pressurePa": 89.9999999316723,
+     "efficiency": 0.7435528837144374
+    },
+    {
+     "flowM3S": 163.2875557038784,
+     "pressurePa": 79.99999999839903,
+     "efficiency": 0.7287136745005846
+    },
+    {
+     "flowM3S": 166.3741112203598,
+     "pressurePa": 70.00000006512585,
+     "efficiency": 0.7138744652867318
+    },
+    {
+     "flowM3S": 169.4606667895317,
+     "pressurePa": 59.9999999611428,
+     "efficiency": 0.6990352558195592
+    },
+    {
+     "flowM3S": 172.5472223060131,
+     "pressurePa": 50.00000002786946,
+     "efficiency": 0.6841960466057062
+    }
+   ]
+  },
+  "systemCurve": [
+   {
+    "flowM3S": 60,
+    "totalPa": 59.08691152304422,
+    "fillPa": 24.608146375032916,
+    "driftPa": 9.737704918032787
+   },
+   {
+    "flowM3S": 65,
+    "totalPa": 66.47698384785171,
+    "fillPa": 28.127531444521967,
+    "driftPa": 11.049180327868854
+   },
+   {
+    "flowM3S": 70,
+    "totalPa": 74.25805771517045,
+    "fillPa": 31.83318110888368,
+    "driftPa": 12.360655737704917
+   },
+   {
+    "flowM3S": 75,
+    "totalPa": 82.42562772263904,
+    "fillPa": 35.72058996575663,
+    "driftPa": 13.672131147540984
+   },
+   {
+    "flowM3S": 80,
+    "totalPa": 90.97559811142267,
+    "fillPa": 39.78566225630607,
+    "driftPa": 14.983606557377048
+   },
+   {
+    "flowM3S": 85,
+    "totalPa": 99.9042216353814,
+    "fillPa": 44.02465073439196,
+    "driftPa": 16.295081967213115
+   },
+   {
+    "flowM3S": 90,
+    "totalPa": 109.20805069311194,
+    "fillPa": 48.43410779861113,
+    "driftPa": 17.60655737704918
+   },
+   {
+    "flowM3S": 95,
+    "totalPa": 119.45766819558389,
+    "fillPa": 53.010845868129806,
+    "driftPa": 19.491803278688522
+   },
+   {
+    "flowM3S": 100,
+    "totalPa": 130.32224519689507,
+    "fillPa": 57.75190484950486,
+    "driftPa": 21.622950819672134
+   },
+   {
+    "flowM3S": 105,
+    "totalPa": 141.55312044265534,
+    "fillPa": 62.65452512769042,
+    "driftPa": 23.754098360655735
+   },
+   {
+    "flowM3S": 110,
+    "totalPa": 153.1477121502755,
+    "fillPa": 67.71612492009731,
+    "driftPa": 25.885245901639344
+   },
+   {
+    "flowM3S": 115,
+    "totalPa": 165.10359721225518,
+    "fillPa": 72.93428111922509,
+    "driftPa": 28.016393442622952
+   },
+   {
+    "flowM3S": 120,
+    "totalPa": 177.41849485920073,
+    "fillPa": 78.30671295568013,
+    "driftPa": 30.147540983606557
+   },
+   {
+    "flowM3S": 125,
+    "totalPa": 190.58205590465664,
+    "fillPa": 83.83126796431843,
+    "driftPa": 32.77049180327868
+   },
+   {
+    "flowM3S": 130,
+    "totalPa": 204.42830962557707,
+    "fillPa": 89.50590984832364,
+    "driftPa": 35.72131147540984
+   },
+   {
+    "flowM3S": 135,
+    "totalPa": 218.62745648218777,
+    "fillPa": 95.32870792038055,
+    "driftPa": 38.67213114754098
+   },
+   {
+    "flowM3S": 140,
+    "totalPa": 233.17766215837884,
+    "fillPa": 101.29782786437929,
+    "driftPa": 41.62295081967213
+   },
+   {
+    "flowM3S": 145,
+    "totalPa": 248.07718058444826,
+    "fillPa": 107.4115236106177,
+    "driftPa": 44.57377049180329
+   },
+   {
+    "flowM3S": 150,
+    "totalPa": 263.32434675733714,
+    "fillPa": 113.66813015603704,
+    "driftPa": 47.52459016393443
+   },
+   {
+    "flowM3S": 155,
+    "totalPa": 279.32740643333216,
+    "fillPa": 120.0660571913501,
+    "driftPa": 50.885245901639344
+   },
+   {
+    "flowM3S": 160,
+    "totalPa": 296.0848383168464,
+    "fillPa": 126.60378342097006,
+    "driftPa": 54.655737704918025
+   },
+   {
+    "flowM3S": 165,
+    "totalPa": 313.185348978292,
+    "fillPa": 133.2798514808828,
+    "driftPa": 58.42622950819673
+   },
+   {
+    "flowM3S": 170,
+    "totalPa": 330.62754042168706,
+    "fillPa": 140.0928633751063,
+    "driftPa": 62.19672131147541
+   },
+   {
+    "flowM3S": 175,
+    "totalPa": 348.41006990735156,
+    "fillPa": 147.0414763639608,
+    "driftPa": 65.96721311475409
+   },
+   {
+    "flowM3S": 180,
+    "totalPa": 366.53164623549446,
+    "fillPa": 154.12439924765513,
+    "driftPa": 69.73770491803279
+   }
+  ],
+  "sweeps": {
+   "wetBulbC": {
+    "label": "Wet bulb",
+    "unit": "°C",
+    "values": [
+     21,
+     22,
+     23,
+     24,
+     25,
+     26,
+     27,
+     28,
+     29,
+     30,
+     31
+    ],
+    "series": {
+     "FILM-VF38": [
+      {
+       "x": 21,
+       "coldWaterC": 28.794637173970543,
+       "thermalMarginC": 3.2053628260294573,
+       "electricalInputKW": 31.718933171995886,
+       "makeupKgS": 5.480649357501196,
+       "totalPa": 191.88152015829726,
+       "capabilityRatio": 2.0864288466573897
+      },
+      {
+       "x": 22,
+       "coldWaterC": 29.22911067199707,
+       "thermalMarginC": 2.77088932800293,
+       "electricalInputKW": 31.686343115410352,
+       "makeupKgS": 5.27831318103527,
+       "totalPa": 191.6193489709903,
+       "capabilityRatio": 1.941918409930515
+      },
+      {
+       "x": 23,
+       "coldWaterC": 29.679631415473096,
+       "thermalMarginC": 2.3203685845269035,
+       "electricalInputKW": 31.65248777871986,
+       "makeupKgS": 5.068489987737833,
+       "totalPa": 191.3471661140862,
+       "capabilityRatio": 1.7912657284479205
+      },
+      {
+       "x": 24,
+       "coldWaterC": 30.146815013037788,
+       "thermalMarginC": 1.8531849869622121,
+       "electricalInputKW": 31.61731096165082,
+       "makeupKgS": 4.850888555817514,
+       "totalPa": 191.06453945726182,
+       "capabilityRatio": 1.634127099073597
+      },
+      {
+       "x": 25,
+       "coldWaterC": 30.63128484344482,
+       "thermalMarginC": 1.3687151565551794,
+       "electricalInputKW": 31.580754514714588,
+       "makeupKgS": 4.625213249808575,
+       "totalPa": 190.77102292837006,
+       "capabilityRatio": 1.4701234032792097
+      },
+      {
+       "x": 26,
+       "coldWaterC": 31.133668575286865,
+       "thermalMarginC": 0.8663314247131346,
+       "electricalInputKW": 31.542758277462042,
+       "makeupKgS": 4.391165384665992,
+       "totalPa": 190.46615667561903,
+       "capabilityRatio": 1.2988241950226513
+      },
+      {
+       "x": 27,
+       "coldWaterC": 31.654595192803274,
+       "thermalMarginC": 0.3454048071967257,
+       "electricalInputKW": 31.50326005213509,
+       "makeupKgS": 4.148444365929785,
+       "totalPa": 190.14946659164616,
+       "capabilityRatio": 1.11971630233056
+      },
+      {
+       "x": 28,
+       "infeasible": true,
+       "rejection": {
+        "thermal duty": 1
+       }
+      },
+      {
+       "x": 29,
+       "infeasible": true,
+       "rejection": {
+        "thermal duty": 1
+       }
+      },
+      {
+       "x": 30,
+       "infeasible": true,
+       "rejection": {
+        "thermal duty": 1
+       }
+      },
+      {
+       "x": 31,
+       "infeasible": true,
+       "rejection": {
+        "thermal duty": 1
+       }
+      }
+     ],
+     "FILM-OF25": [
+      {
+       "x": 21,
+       "coldWaterC": 28.550309529198532,
+       "thermalMarginC": 3.4496904708014675,
+       "electricalInputKW": 32.53768345096596,
+       "makeupKgS": 5.5388924941476105,
+       "totalPa": 208.12795905213483,
+       "capabilityRatio": 2.300916726299278
+      },
+      {
+       "x": 22,
+       "coldWaterC": 28.992226634979254,
+       "thermalMarginC": 3.0077733650207463,
+       "electricalInputKW": 32.50464806777146,
+       "makeupKgS": 5.336443702214474,
+       "totalPa": 207.8158541165232,
+       "capabilityRatio": 2.137304399728973
+      },
+      {
+       "x": 23,
+       "coldWaterC": 29.450549273173017,
+       "thermalMarginC": 2.549450726826983,
+       "electricalInputKW": 32.4703172466593,
+       "makeupKgS": 5.126433844038488,
+       "totalPa": 207.4917858990724,
+       "capabilityRatio": 1.9667811415673822
+      },
+      {
+       "x": 24,
+       "coldWaterC": 29.9259112900628,
+       "thermalMarginC": 2.0740887099372003,
+       "electricalInputKW": 32.43463248267596,
+       "makeupKgS": 4.908564620183608,
+       "totalPa": 207.1552345537952,
+       "capabilityRatio": 1.7889733931384302
+      },
+      {
+       "x": 25,
+       "coldWaterC": 30.418954236348473,
+       "thermalMarginC": 1.5810457636515274,
+       "electricalInputKW": 32.39753312939699,
+       "makeupKgS": 4.6825331012676,
+       "totalPa": 206.8056633425913,
+       "capabilityRatio": 1.6034748054049803
+      },
+      {
+       "x": 26,
+       "coldWaterC": 30.93032301839193,
+       "thermalMarginC": 1.069676981608069,
+       "electricalInputKW": 32.35895633651059,
+       "makeupKgS": 4.448033285623043,
+       "totalPa": 206.44251851364484,
+       "capabilityRatio": 1.4098330633815308
+      },
+      {
+       "x": 27,
+       "coldWaterC": 31.4606653573778,
+       "thermalMarginC": 0.539334642622201,
+       "electricalInputKW": 32.31883700062893,
+       "makeupKgS": 4.204756424353845,
+       "totalPa": 206.06522879056686,
+       "capabilityRatio": 1.2075236592799719
+      },
+      {
+       "x": 28,
+       "infeasible": true,
+       "rejection": {
+        "thermal duty": 1
+       }
+      },
+      {
+       "x": 29,
+       "infeasible": true,
+       "rejection": {
+        "thermal duty": 1
+       }
+      },
+      {
+       "x": 30,
+       "infeasible": true,
+       "rejection": {
+        "thermal duty": 1
+       }
+      },
+      {
+       "x": 31,
+       "infeasible": true,
+       "rejection": {
+        "thermal duty": 1
+       }
+      }
+     ],
+     "TRICKLE-50": [
+      {
+       "x": 21,
+       "coldWaterC": 29.217440957811142,
+       "thermalMarginC": 2.7825590421888577,
+       "electricalInputKW": 30.89945330460002,
+       "makeupKgS": 5.351198403320196,
+       "totalPa": 179.4277339645598,
+       "capabilityRatio": 1.8491131943114536
+      },
+      {
+       "x": 22,
+       "coldWaterC": 29.636842502594,
+       "thermalMarginC": 2.363157497406,
+       "electricalInputKW": 30.868495977018735,
+       "makeupKgS": 5.152137018084153,
+       "totalPa": 179.2077384311925,
+       "capabilityRatio": 1.7232891771127985
+      },
+      {
+       "x": 23,
+       "coldWaterC": 30.07176018354628,
+       "thermalMarginC": 1.9282398164537184,
+       "electricalInputKW": 30.836342932422514,
+       "makeupKgS": 4.945749483816217,
+       "totalPa": 178.97934141688458,
+       "capabilityRatio": 1.5920854270919966
+      },
+      {
+       "x": 24,
+       "coldWaterC": 30.52279564158122,
+       "thermalMarginC": 1.4772043584187813,
+       "electricalInputKW": 30.802941509503608,
+       "makeupKgS": 4.731751216160943,
+       "totalPa": 178.74218012083477,
+       "capabilityRatio": 1.4551925189261703
+      },
+      {
+       "x": 25,
+       "coldWaterC": 30.99055966822307,
+       "thermalMarginC": 1.0094403317769292,
+       "electricalInputKW": 30.76823725845235,
+       "makeupKgS": 4.509852989339973,
+       "totalPa": 178.49588013284438,
+       "capabilityRatio": 1.3122657242677895
+      },
+      {
+       "x": 26,
+       "coldWaterC": 31.475667773776586,
+       "thermalMarginC": 0.5243322262234145,
+       "electricalInputKW": 30.732173916365525,
+       "makeupKgS": 4.279762673683375,
+       "totalPa": 178.24005513536957,
+       "capabilityRatio": 1.1629082701088271
+      },
+      {
+       "x": 27,
+       "coldWaterC": 31.97874038950603,
+       "thermalMarginC": 0.021259610493970627,
+       "electricalInputKW": 30.694693334927,
+       "makeupKgS": 4.0411851865678505,
+       "totalPa": 177.974307258522,
+       "capabilityRatio": 1.0066384618030428
+      },
+      {
+       "x": 28,
+       "infeasible": true,
+       "rejection": {
+        "thermal duty": 1
+       }
+      },
+      {
+       "x": 29,
+       "infeasible": true,
+       "rejection": {
+        "thermal duty": 1
+       }
+      },
+      {
+       "x": 30,
+       "infeasible": true,
+       "rejection": {
+        "thermal duty": 1
+       }
+      },
+      {
+       "x": 31,
+       "infeasible": true,
+       "rejection": {
+        "thermal duty": 1
+       }
+      }
+     ]
+    }
+   },
+   "waterMassFlowKgS": {
+    "label": "Water flow",
+    "unit": "kg/s",
+    "values": [
+     140,
+     150,
+     160,
+     170,
+     180,
+     190,
+     200,
+     210,
+     220,
+     230,
+     240,
+     250,
+     260
+    ],
+    "series": {
+     "FILM-VF38": [
+      {
+       "x": 140,
+       "coldWaterC": 30.408756202273903,
+       "thermalMarginC": 1.5912437977260971,
+       "electricalInputKW": 31.417838057121195,
+       "makeupKgS": 3.328296409136171,
+       "totalPa": 188.73946357665253,
+       "capabilityRatio": 1.5600446423420846
+      },
+      {
+       "x": 150,
+       "coldWaterC": 30.62673674689399,
+       "thermalMarginC": 1.3732632531060105,
+       "electricalInputKW": 31.434380652551937,
+       "makeupKgS": 3.480325927923264,
+       "totalPa": 189.0097726086273,
+       "capabilityRatio": 1.4797195613935694
+      },
+      {
+       "x": 160,
+       "coldWaterC": 30.84054100545248,
+       "thermalMarginC": 1.1594589945475207,
+       "electricalInputKW": 31.449847825936974,
+       "makeupKgS": 3.6260070776336684,
+       "totalPa": 189.26368470683389,
+       "capabilityRatio": 1.402869070682254
+      },
+      {
+       "x": 170,
+       "coldWaterC": 31.050209613800046,
+       "thermalMarginC": 0.9497903861999539,
+       "electricalInputKW": 31.46436979599163,
+       "makeupKgS": 3.7654922163689077,
+       "totalPa": 189.50312841925833,
+       "capabilityRatio": 1.328909009967867
+      },
+      {
+       "x": 180,
+       "coldWaterC": 31.25576447719998,
+       "thermalMarginC": 0.7442355228000217,
+       "electricalInputKW": 31.47805450467938,
+       "makeupKgS": 3.8989450094886022,
+       "totalPa": 189.72970778642124,
+       "capabilityRatio": 1.2573435504226878
+      },
+      {
+       "x": 190,
+       "coldWaterC": 31.457220834096276,
+       "thermalMarginC": 0.542779165903724,
+       "electricalInputKW": 31.49099240071899,
+       "makeupKgS": 4.0265369925173475,
+       "totalPa": 189.94477203279524,
+       "capabilityRatio": 1.1877412498210937
+      },
+      {
+       "x": 200,
+       "coldWaterC": 31.654595192803274,
+       "thermalMarginC": 0.3454048071967257,
+       "electricalInputKW": 31.50326005213509,
+       "makeupKgS": 4.148444365929785,
+       "totalPa": 190.14946659164616,
+       "capabilityRatio": 1.11971630233056
+      },
+      {
+       "x": 210,
+       "coldWaterC": 31.84790850618151,
+       "thermalMarginC": 0.15209149381848874,
+       "electricalInputKW": 31.514922831511548,
+       "makeupKgS": 4.264845971933388,
+       "totalPa": 190.34477266464557,
+       "capabilityRatio": 1.0529128950541773
+      },
+      {
+       "x": 220,
+       "infeasible": true,
+       "rejection": {
+        "thermal duty": 1
+       }
+      },
+      {
+       "x": 230,
+       "infeasible": true,
+       "rejection": {
+        "thermal duty": 1
+       }
+      },
+      {
+       "x": 240,
+       "infeasible": true,
+       "rejection": {
+        "thermal duty": 1
+       }
+      },
+      {
+       "x": 250,
+       "infeasible": true,
+       "rejection": {
+        "thermal duty": 1
+       }
+      },
+      {
+       "x": 260,
+       "infeasible": true,
+       "rejection": {
+        "thermal duty": 1
+       }
+      }
+     ],
+     "FILM-OF25": [
+      {
+       "x": 140,
+       "coldWaterC": 30.07762163925171,
+       "thermalMarginC": 1.92237836074829,
+       "electricalInputKW": 32.21083303809645,
+       "makeupKgS": 3.3962736533556854,
+       "totalPa": 203.61079947621874,
+       "capabilityRatio": 1.753467180688539
+      },
+      {
+       "x": 150,
+       "coldWaterC": 30.317199186113147,
+       "thermalMarginC": 1.6828008138868533,
+       "electricalInputKW": 32.2320168816975,
+       "makeupKgS": 3.5488575443964017,
+       "totalPa": 204.08083469744847,
+       "capabilityRatio": 1.6534098398466348
+      },
+      {
+       "x": 160,
+       "coldWaterC": 30.553480149586996,
+       "thermalMarginC": 1.4465198504130043,
+       "electricalInputKW": 32.25170961533386,
+       "makeupKgS": 3.6940322573603575,
+       "totalPa": 204.52258184766686,
+       "capabilityRatio": 1.5579359636197305
+      },
+      {
+       "x": 170,
+       "coldWaterC": 30.786194047292074,
+       "thermalMarginC": 1.2138059527079257,
+       "electricalInputKW": 32.27009676571618,
+       "makeupKgS": 3.831989451976793,
+       "totalPa": 204.9393496446725,
+       "capabilityRatio": 1.466250154611479
+      },
+      {
+       "x": 180,
+       "coldWaterC": 31.015095476786293,
+       "thermalMarginC": 0.9849045232137073,
+       "electricalInputKW": 32.28733164293131,
+       "makeupKgS": 3.962942624906276,
+       "totalPa": 205.33389253688236,
+       "capabilityRatio": 1.3776739510786438
+      },
+      {
+       "x": 190,
+       "coldWaterC": 31.23997490946452,
+       "thermalMarginC": 0.7600250905354784,
+       "electricalInputKW": 32.30354234610377,
+       "makeupKgS": 4.087119765588175,
+       "totalPa": 205.70852898897357,
+       "capabilityRatio": 1.2916118209622902
+      },
+      {
+       "x": 200,
+       "coldWaterC": 31.4606653573778,
+       "thermalMarginC": 0.539334642622201,
+       "electricalInputKW": 32.31883700062893,
+       "makeupKgS": 4.204756424353845,
+       "totalPa": 206.06522879056686,
+       "capabilityRatio": 1.2075236592799719
+      },
+      {
+       "x": 210,
+       "coldWaterC": 31.677040785895453,
+       "thermalMarginC": 0.32295921410454653,
+       "electricalInputKW": 32.333307678198466,
+       "makeupKgS": 4.316091396076984,
+       "totalPa": 206.40568022202189,
+       "capabilityRatio": 1.1249004780927536
+      },
+      {
+       "x": 220,
+       "coldWaterC": 31.88901452636719,
+       "thermalMarginC": 0.11098547363280886,
+       "electricalInputKW": 32.34703339958171,
+       "makeupKgS": 4.421362694503549,
+       "totalPa": 206.7313418297586,
+       "capabilityRatio": 1.0432401834987233
+      },
+      {
+       "x": 230,
+       "infeasible": true,
+       "rejection": {
+        "thermal duty": 1
+       }
+      },
+      {
+       "x": 240,
+       "infeasible": true,
+       "rejection": {
+        "thermal duty": 1
+       }
+      },
+      {
+       "x": 250,
+       "infeasible": true,
+       "rejection": {
+        "thermal duty": 1
+       }
+      },
+      {
+       "x": 260,
+       "infeasible": true,
+       "rejection": {
+        "thermal duty": 1
+       }
+      }
+     ],
+     "TRICKLE-50": [
+      {
+       "x": 140,
+       "coldWaterC": 30.859192225986057,
+       "thermalMarginC": 1.1408077740139433,
+       "electricalInputKW": 30.627770129342164,
+       "makeupKgS": 3.2270238480658326,
+       "totalPa": 177.06389479277752,
+       "capabilityRatio": 1.358914472079561
+      },
+      {
+       "x": 150,
+       "coldWaterC": 31.056777700636125,
+       "thermalMarginC": 0.9432222993638746,
+       "electricalInputKW": 30.64067809555041,
+       "makeupKgS": 3.3759123452304562,
+       "totalPa": 177.23854259047528,
+       "capabilityRatio": 1.2952410734314195
+      },
+      {
+       "x": 160,
+       "coldWaterC": 31.249685607910155,
+       "thermalMarginC": 0.7503143920898445,
+       "electricalInputKW": 30.65276912818837,
+       "makeupKgS": 3.5193522048258195,
+       "totalPa": 177.40254555239915,
+       "capabilityRatio": 1.2340524189262552
+      },
+      {
+       "x": 170,
+       "coldWaterC": 31.43815658823649,
+       "thermalMarginC": 0.5618434117635083,
+       "electricalInputKW": 30.664141169099942,
+       "makeupKgS": 3.6574686682985305,
+       "totalPa": 177.55715930408041,
+       "capabilityRatio": 1.1749308170909216
+      },
+      {
+       "x": 180,
+       "coldWaterC": 31.622385566711426,
+       "thermalMarginC": 0.37761443328857425,
+       "electricalInputKW": 30.67487549621058,
+       "makeupKgS": 3.7903910474533813,
+       "totalPa": 177.7034278129015,
+       "capabilityRatio": 1.1175214501188475
+      },
+      {
+       "x": 190,
+       "coldWaterC": 31.80253381686741,
+       "thermalMarginC": 0.19746618313259034,
+       "electricalInputKW": 30.68504029335323,
+       "makeupKgS": 3.91825188737028,
+       "totalPa": 177.8422287998845,
+       "capabilityRatio": 1.0615157406858842
+      },
+      {
+       "x": 200,
+       "coldWaterC": 31.97874038950603,
+       "thermalMarginC": 0.021259610493970627,
+       "electricalInputKW": 30.694693334927,
+       "makeupKgS": 4.0411851865678505,
+       "totalPa": 177.974307258522,
+       "capabilityRatio": 1.0066384618030428
+      },
+      {
+       "x": 210,
+       "infeasible": true,
+       "rejection": {
+        "thermal duty": 1
+       }
+      },
+      {
+       "x": 220,
+       "infeasible": true,
+       "rejection": {
+        "thermal duty": 1
+       }
+      },
+      {
+       "x": 230,
+       "infeasible": true,
+       "rejection": {
+        "thermal duty": 1
+       }
+      },
+      {
+       "x": 240,
+       "infeasible": true,
+       "rejection": {
+        "thermal duty": 1
+       }
+      },
+      {
+       "x": 250,
+       "infeasible": true,
+       "rejection": {
+        "thermal duty": 1
+       }
+      },
+      {
+       "x": 260,
+       "infeasible": true,
+       "rejection": {
+        "thermal duty": 1
+       }
+      }
+     ]
+    }
+   },
+   "fillDepthM": {
+    "label": "Fill depth",
+    "unit": "m",
+    "values": [
+     0.9,
+     1.2,
+     1.5,
+     1.8,
+     2.1,
+     2.4
+    ],
+    "series": {
+     "FILM-VF38": [
+      {
+       "x": 0.9,
+       "infeasible": true,
+       "rejection": {
+        "thermal duty": 1
+       }
+      },
+      {
+       "x": 1.2,
+       "infeasible": true,
+       "rejection": {
+        "thermal duty": 1
+       }
+      },
+      {
+       "x": 1.5,
+       "coldWaterC": 31.654595192803274,
+       "thermalMarginC": 0.3454048071967257,
+       "electricalInputKW": 31.50326005213509,
+       "makeupKgS": 4.148444365929785,
+       "totalPa": 190.14946659164616,
+       "capabilityRatio": 1.11971630233056
+      },
+      {
+       "x": 1.8,
+       "coldWaterC": 31.321562173631452,
+       "thermalMarginC": 0.6784378263685475,
+       "electricalInputKW": 31.93282173945773,
+       "makeupKgS": 4.264361983266777,
+       "totalPa": 197.86761711346233,
+       "capabilityRatio": 1.262189727762413
+      },
+      {
+       "x": 2.1,
+       "coldWaterC": 31.078244858635802,
+       "thermalMarginC": 0.9217551413641978,
+       "electricalInputKW": 32.28330236860349,
+       "makeupKgS": 4.3478803405398425,
+       "totalPa": 205.24131065431953,
+       "capabilityRatio": 1.3931274133076892
+      },
+      {
+       "x": 2.4,
+       "coldWaterC": 30.898811862945564,
+       "thermalMarginC": 1.1011881370544359,
+       "electricalInputKW": 32.55722087640099,
+       "makeupKgS": 4.408506362740778,
+       "totalPa": 212.1080162800355,
+       "capabilityRatio": 1.5140839720434491
+      }
+     ],
+     "FILM-OF25": [
+      {
+       "x": 0.9,
+       "infeasible": true,
+       "rejection": {
+        "thermal duty": 1
+       }
+      },
+      {
+       "x": 1.2,
+       "coldWaterC": 31.84362936062283,
+       "thermalMarginC": 0.15637063937716889,
+       "electricalInputKW": 31.814443382847294,
+       "makeupKgS": 4.072903885887598,
+       "totalPa": 195.6215905340186,
+       "capabilityRatio": 1.052762624238788
+      },
+      {
+       "x": 1.5,
+       "coldWaterC": 31.4606653573778,
+       "thermalMarginC": 0.539334642622201,
+       "electricalInputKW": 32.31883700062893,
+       "makeupKgS": 4.204756424353845,
+       "totalPa": 206.06522879056686,
+       "capabilityRatio": 1.2075236592799719
+      },
+      {
+       "x": 1.8,
+       "coldWaterC": 31.20195086457995,
+       "thermalMarginC": 0.798049135420051,
+       "electricalInputKW": 32.675032141761214,
+       "makeupKgS": 4.292254320108899,
+       "totalPa": 215.5344217913068,
+       "capabilityRatio": 1.3451469469923958
+      },
+      {
+       "x": 2.1,
+       "coldWaterC": 31.04677175733778,
+       "thermalMarginC": 0.9532282426622203,
+       "electricalInputKW": 32.859369725404115,
+       "makeupKgS": 4.341672830096424,
+       "totalPa": 222.8149893600036,
+       "capabilityRatio": 1.4584635917381368
+      },
+      {
+       "x": 2.4,
+       "coldWaterC": 30.96770470958286,
+       "thermalMarginC": 1.0322952904171387,
+       "electricalInputKW": 32.92330893541604,
+       "makeupKgS": 4.3632519291226615,
+       "totalPa": 228.37338127211927,
+       "capabilityRatio": 1.5479046387629134
+      }
+     ],
+     "TRICKLE-50": [
+      {
+       "x": 0.9,
+       "infeasible": true,
+       "rejection": {
+        "thermal duty": 1
+       }
+      },
+      {
+       "x": 1.2,
+       "infeasible": true,
+       "rejection": {
+        "thermal duty": 1
+       }
+      },
+      {
+       "x": 1.5,
+       "coldWaterC": 31.97874038950603,
+       "thermalMarginC": 0.021259610493970627,
+       "electricalInputKW": 30.694693334927,
+       "makeupKgS": 4.0411851865678505,
+       "totalPa": 177.974307258522,
+       "capabilityRatio": 1.0066384618030428
+      },
+      {
+       "x": 1.8,
+       "coldWaterC": 31.59421508068509,
+       "thermalMarginC": 0.405784919314911,
+       "electricalInputKW": 31.13112566374789,
+       "makeupKgS": 4.176786214230718,
+       "totalPa": 184.24392104658608,
+       "capabilityRatio": 1.1401352181101263
+      },
+      {
+       "x": 2.1,
+       "coldWaterC": 31.294257421705453,
+       "thermalMarginC": 0.7057425782945472,
+       "electricalInputKW": 31.50509138278458,
+       "makeupKgS": 4.282010674009162,
+       "totalPa": 190.1800886356969,
+       "capabilityRatio": 1.26710713006293
+      },
+      {
+       "x": 2.4,
+       "coldWaterC": 31.05813646189372,
+       "thermalMarginC": 0.9418635381062792,
+       "electricalInputKW": 31.824666282993363,
+       "makeupKgS": 4.364270384738017,
+       "totalPa": 195.8115604718502,
+       "capabilityRatio": 1.3877687127071956
+      }
+     ]
+    }
+   }
+  },
+  "anchorFillId": "FILM-VF38",
+  "layers": [
+   {
+    "fill_id": "FILM-MF20",
+    "position": "upper",
+    "depth_m": 0.45,
+    "kavl": 0.5571004964432217,
+    "pressure_pa": 33.46162112329302,
+    "thermal_multiplier": 0.92,
+    "pressure_multiplier": 1.12,
+    "cooling_share_pct": 34.78262811571119
+   },
+   {
+    "fill_id": "FILM-WF25",
+    "position": "lower",
+    "depth_m": 0.9,
+    "kavl": 0.7693295968929295,
+    "pressure_pa": 50.192430310955174,
+    "thermal_multiplier": 0.92,
+    "pressure_multiplier": 1.12,
+    "cooling_share_pct": 48.03317433385918
+   }
+  ],
+  "zones": {
+   "inletPa": 26.010286599500756,
+   "supportPa": 4.551800154912632,
+   "distributionPa": 9.537105086483612,
+   "driftPa": 32.677068601537925,
+   "plenumPa": 8.750757016767906,
+   "fanStackPa": 14.968400160260893,
+   "fixedPa": 10,
+   "fillPa": 83.65404897218244,
+   "totalPa": 190.14946659164616
+  },
+  "transfer": {
+   "fillMerkelNumber": 1.326430046411088,
+   "sprayZoneMerkelNumber": 0.0906629542724676,
+   "rainZoneMerkelNumber": 0.1845700323394763,
+   "availableMerkelNumber": 1.601663033023032,
+   "waterLoadingKgM2S": 3.125,
+   "dryAirLoadingKgM2S": 2.178299700421475,
+   "vf38KavlPerMAtAnchor": 0.8842866976073921,
+   "airDensityKgM3": 1.1392905373780184,
+   "fanEfficiencyAtAnchor": 0.8262366347516577
+  },
+  "waterFlow": {
+   "kgS": 200,
+   "m3Hr": 724.8125039515579,
+   "waterDensityKgM3": 993.3603463994883
+  },
+  "headline": {
+   "capability_pct": 111.971630233056,
+   "water_flow_m3_hr": 724.8125039515579,
+   "cold_water_c": 31.654595192803274,
+   "range_c": 10.345404807196726,
+   "approach_c": 4.654595192803274,
+   "airflow_m3_s": 124.84169957482814,
+   "fan_power_kw": 28.730973167547198,
+   "total_pressure_pa": 190.14946659164616,
+   "total_pressure_mmwg": 19.38984939726065,
+   "evaporation_pct": 1.5556666372236694,
+   "makeup_m3_hr": 15.034221741866501,
+   "kavl_total": 1.601663033023032
+  }
+ },
+ "refusals": {
+  "envelope": {
+   "field": "fillAreaM2",
+   "value": 400,
+   "waterLoadingKgM2S": 0.5,
+   "run": {
+    "feasibleCandidateCount": 0,
+    "rejectionSummary": {
+     "fill operating envelope": 1
+    }
+   },
+   "envelope": {
+    "ok": false,
+    "failureCount": 1,
+    "failures": [
+     "Water loading 0.500 kg/(m²·s) is outside 1.1–6.2."
+    ],
+    "qualityClass": "moderate"
+   }
+  },
+  "schema": {
+   "ok": false,
+   "status": 2,
+   "error": {
+    "error": "usage",
+    "message": "fill record \"FILM-VF38\": field \"thermal\" column \"coefficientPerM\" must be positive, got -0.94"
+   }
+  }
+ }
+}

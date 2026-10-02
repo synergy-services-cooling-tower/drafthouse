@@ -1,0 +1,432 @@
+/* ------------------------------------------------------------------ *
+ * 3D parts panel — additions only.
+ *
+ * Every colour, radius and shadow here is an existing custom property from styles.css.
+ * No host class is redefined, no new palette is introduced: the panel's job is to look
+ * like it has always been part of the "Tower & parts selection" surface.
+ *
+ * Class prefix: pp- (parts panel). The panel is a companion, not a second hero: the head
+ * is one line plus a lede, the stage is short, and there is no drop shadow, so the ranked
+ * table above it stays the primary reading surface on a single desktop viewport.
+ *
+ * Height budget (issue #2, measured at 1440x900): every control that acts
+ * on the stage lives in the stage footer, so the only chrome above the canvas is the head.
+ * Pre-canvas chrome is 67 px (panel border + 10 px padding + head + stage border) and the
+ * canvas top lands at ~820 px — the table's header and rows and the first ~80 px of the
+ * stage share one viewport.
+ *
+ * The only host-element rules are the two that carry the panel's own state: the ranked
+ * row's rank cell becomes a real button (keyboard reachable) and shows which row the
+ * panel is explaining. They add a state, not a style.
+ * ------------------------------------------------------------------ */
+
+/* ---- panel shell ------------------------------------------------- */
+
+.pp-panel {
+  margin-top: 10px;
+  padding: 10px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.pp-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.pp-head h3 { margin: 0 0 2px; font-size: 1rem; letter-spacing: -.01em; }
+.pp-lede { max-width: 600px; margin: 0; color: var(--muted); line-height: 1.4; font-size: .78rem; }
+.pp-head-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; text-align: right; }
+.pp-source { color: #55676f; font-size: .74rem; line-height: 1.5; }
+
+/* ---- stage controls: which candidate, which view ------------------ */
+
+/* The controls act on the stage, so they live in the stage's own footer. Keeping the whole
+   strip out of the space above the canvas is what lets one 1440x900 viewport show the ranked
+   table's header and top rows together with the stage — measured at that viewport. */
+.pp-stage-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pp-control-label {
+  color: var(--muted);
+  font-size: .72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.pp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 6px 11px;
+  border: 1px solid #cdd8dd;
+  border-radius: 999px;
+  background: #fff;
+  color: #31444f;
+  font: inherit;
+  font-size: .8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: .18s ease;
+}
+.pp-chip:hover { border-color: var(--primary-line); color: var(--primary-dark); background: var(--primary-tint); }
+.pp-chip:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+.pp-chip[aria-pressed="true"] { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+/* The candidate picker: compact, host-form look, keyboard-friendly. */
+.pp-select {
+  min-height: 34px;
+  max-width: 260px;
+  padding: 5px 10px;
+  border: 1px solid #cdd8dd;
+  border-radius: 10px;
+  background: #fff;
+  color: #31444f;
+  font: inherit;
+  font-size: .8rem;
+  font-weight: 700;
+}
+.pp-select:focus-visible { outline: 3px solid var(--primary); outline-offset: 1px; }
+
+/* The ranked table's rank cell is a real button that loads this panel. It must look like
+   the host's existing pill — this normalises the button element, nothing else. */
+button.rank-pill { border: 0; padding: 0; font: inherit; font-weight: 850; line-height: 1; cursor: pointer; }
+button.rank-pill:hover { background: var(--primary-line); }
+button.rank-pill:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+button.rank-pill[aria-current="true"] { box-shadow: 0 0 0 2px var(--primary); }
+#selection-output .data-table tbody tr[data-current="true"] td { background: var(--primary-tint); }
+
+/* ---- split: stage + rail ----------------------------------------- */
+
+.pp-split { display: grid; grid-template-columns: minmax(0, 1.62fr) minmax(310px, 1fr); gap: 16px; align-items: start; }
+
+.pp-stage {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+}
+/* The stage is deliberately short on desktop: the panel must not push the ranked table's
+   header and top rows out of one viewport. */
+.pp-stage-canvas { position: relative; width: 100%; height: 350px; background: #fff; }
+.pp-stage-canvas canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.pp-stage-canvas canvas:focus-visible { outline: 3px solid var(--primary); outline-offset: -3px; }
+
+/* Labels are HTML, projected from 3D anchors: crisp text, no texture fonts. */
+.pp-labels { position: absolute; inset: 0; pointer-events: none; }
+.pp-leaders { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.pp-leaders line { stroke-width: 1.2; }
+.pp-leaders line[data-kind="part"] { stroke: #9aa7ad; }
+.pp-leaders line[data-kind="loss"] { stroke: #bcc9ce; stroke-dasharray: 3 3; }
+.pp-leaders line[data-kind="cooling"] { stroke: #bddde2; }
+.pp-leaders circle { fill: #9aa7ad; }
+.pp-leaders circle[data-kind="loss"] { fill: #bcc9ce; }
+.pp-leaders circle[data-kind="cooling"] { fill: #7dbdc7; }
+.pp-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .93);
+  box-shadow: 0 2px 8px rgba(24, 43, 54, .07);
+  font-size: .72rem;
+  font-weight: 700;
+  color: #3a4b56;
+  white-space: nowrap;
+}
+.pp-label-part { color: var(--ink); }
+.pp-label-n {
+  display: inline-grid;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+  font-size: .62rem;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+}
+.pp-label-value { color: var(--primary-dark); font-variant-numeric: tabular-nums; }
+.pp-label[data-state="tight"] { border-color: #efd3a7; background: var(--accent-soft); color: #70450d; }
+.pp-label[data-state="violation"] { border-color: #f0c9c9; background: var(--danger-soft); color: var(--danger); }
+.pp-label[data-kind="loss"] { border-color: #cdd8dd; background: rgba(255, 255, 255, .95); }
+.pp-label[data-kind="loss"] .pp-label-value { color: var(--primary-dark); }
+.pp-label[data-kind="cooling"] { border-style: dashed; border-color: var(--primary-line); background: rgba(228, 243, 245, .92); }
+.pp-label[data-kind="cooling"] .pp-label-value { color: var(--primary-dark); }
+.pp-label[data-dim="true"] { opacity: .45; }
+
+.pp-stage-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--line);
+  background: var(--panel-soft);
+}
+.pp-state {
+  color: var(--muted);
+  font-size: .78rem;
+  line-height: 1.5;
+}
+.pp-state strong { color: var(--ink); }
+.pp-state-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; vertical-align: middle; border: 1px solid rgba(23, 35, 45, .14); }
+.pp-viewhint { color: var(--muted); font-size: .72rem; }
+
+/* ---- legend ------------------------------------------------------ */
+
+.pp-legend {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-soft);
+}
+.pp-legend-block { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pp-legend-title {
+  color: var(--muted);
+  font-size: .7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+}
+.pp-scale { display: flex; align-items: center; gap: 4px; }
+.pp-scale span {
+  display: block;
+  width: 26px;
+  height: 12px;
+  border: 1px solid rgba(23, 35, 45, .12);
+  border-radius: 3px;
+}
+.pp-scale-caption { color: var(--muted); font-size: .72rem; font-variant-numeric: tabular-nums; }
+.pp-swatch { display: inline-flex; align-items: center; gap: 6px; color: #42545e; font-size: .76rem; }
+.pp-swatch i { display: inline-block; width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(23, 35, 45, .14); }
+.pp-line-key { display: inline-block; width: 22px; height: 0; border-top-width: 3px; border-top-style: solid; }
+.pp-badge-note { color: var(--muted); font-size: .72rem; }
+
+/* ---- part rail --------------------------------------------------- */
+
+.pp-rail-col { display: grid; gap: 12px; }
+.pp-rail-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.pp-rail-head h4 { margin: 0; font-size: .95rem; }
+.pp-rail-count { color: var(--muted); font-size: .74rem; font-weight: 700; }
+.pp-rail-hint { margin: 0; color: var(--muted); font-size: .76rem; line-height: 1.5; }
+
+ul.pp-rail { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.pp-row {
+  display: grid;
+  grid-template-columns: 6px 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 46px;
+  padding: 6px 11px 6px 7px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: .18s ease;
+}
+/* The focus state and the hover state are the same declarations, so a keyboard user sees
+   exactly what a mouse user sees. tests/panel.test.js reads these two selectors out of this
+   file and fails if the declaration blocks ever differ. */
+.pp-row:hover, .pp-row:focus-visible { border-color: var(--primary); background: var(--primary-tint); outline: 2px solid var(--primary); outline-offset: 1px; }
+.pp-row[aria-current="true"] {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  box-shadow: inset 3px 0 0 0 var(--primary);
+}
+.pp-row[data-state="tight"] { border-color: #efd3a7; }
+.pp-row[data-state="violation"] { border-color: #e6b3b3; background: var(--danger-soft); }
+.pp-row[data-state="violation"][aria-current="true"] { box-shadow: inset 3px 0 0 0 var(--danger); }
+.pp-row-key {
+  width: 6px;
+  height: 32px;
+  border-radius: 3px;
+  background: var(--line);
+}
+.pp-row-n {
+  color: #a8b8bf;
+  font-size: .74rem;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+}
+.pp-row-body { min-width: 0; display: grid; gap: 3px; }
+.pp-row-name { font-weight: 750; font-size: .86rem; line-height: 1.3; }
+.pp-row-record {
+  color: #55676f;
+  font-size: .72rem;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pp-row-tags { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+
+.pp-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: .68rem;
+  font-weight: 800;
+  letter-spacing: .02em;
+  white-space: nowrap;
+}
+.pp-tag.state-pass { background: #e8f6ef; color: var(--success); }
+.pp-tag.state-tight { background: var(--accent-soft); color: #88500e; }
+.pp-tag.state-violation { background: var(--danger-soft); color: var(--danger); }
+.pp-tag.material { background: var(--panel-soft); color: #42545e; border: 1px solid var(--line); }
+.pp-tag.material[data-family="PP"] { background: #e4f3f5; border-color: var(--primary-line); color: var(--primary-dark); }
+.pp-tag.material[data-family="PVC"] { background: var(--accent-soft); border-color: #efd3a7; color: #88500e; }
+.pp-tag.material[data-family="PP/FRP"] { background: #e8f6ef; border-color: #bfe3d2; color: var(--success); }
+.pp-tag.material[data-family="undeclared"] { background: repeating-linear-gradient(135deg, #f4f7f8, #f4f7f8 3px, #e6ecee 3px, #e6ecee 6px); color: #6b7c85; }
+/* The metric pill the rail uses for a part's share of the air-side pressure. */
+.pp-tag.metric { background: var(--primary-tint); border: 1px solid var(--primary-line); color: var(--primary-dark); font-variant-numeric: tabular-nums; }
+.pp-tag.none { background: transparent; color: var(--muted); border: 1px dashed var(--line); }
+
+.pp-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 14px; align-items: start; }
+.pp-block-wide { grid-column: 1 / -1; }
+.pp-block { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.pp-block-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+.pp-block-head h4 { margin: 0; font-size: .92rem; }
+.pp-block-head .pp-source { font-size: .72rem; }
+.pp-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.pp-tile {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-soft);
+}
+.pp-tile .label {
+  display: flex;
+  align-items: flex-end;
+  min-height: 2.3em;
+  color: #4f6069;
+  font-size: .7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.pp-tile .value { display: block; margin-top: 4px; font-size: 1.05rem; font-weight: 850; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.pp-tile .unit { color: var(--muted); font-size: .72rem; font-weight: 650; }
+
+.pp-empty {
+  display: grid;
+  place-items: center;
+  min-height: 200px;
+  padding: 24px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  background: var(--panel-soft);
+  color: #87949a;
+  text-align: center;
+  line-height: 1.7;
+  font-size: .86rem;
+}
+.pp-empty strong { color: #5b6c76; }
+.pp-empty .pp-empty-mark {
+  display: block;
+  margin-bottom: 8px;
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: #9aa7ad;
+}
+
+/* ---- fallback (no WebGL) ----------------------------------------- */
+
+.pp-fallback { border: 1px solid var(--line); border-radius: 12px; background: var(--panel-soft); padding: 16px; }
+.pp-fallback .pp-fallback-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.pp-fallback h4 { margin: 0; font-size: .95rem; }
+.pp-fallback p { margin: 0 0 12px; color: #4a5b67; font-size: .84rem; line-height: 1.6; }
+.pp-fallback-reason {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  font-size: .74rem;
+  color: var(--muted);
+  word-break: break-word;
+}
+.pp-anchor-cell { color: var(--muted); font-size: .76rem; white-space: normal; min-width: 150px; }
+
+/* ---- tables ------------------------------------------------------ */
+
+.pp-table-title { margin: 16px 0 8px; font-size: .95rem; }
+.pp-check-summary { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.pp-table-note { margin: 8px 0 0; color: #55676f; font-size: .76rem; line-height: 1.55; }
+
+.pp-fineprint {
+  margin: 16px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: .74rem;
+  line-height: 1.6;
+}
+.pp-fineprint strong { color: #4a5b67; }
+
+/* The spec-stress control sits with the limit table. */
+.pp-spec { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-soft); margin-bottom: 10px; }
+.pp-spec label { display: inline-flex; align-items: center; gap: 8px; color: #31444f; font-size: .84rem; font-weight: 700; }
+.pp-spec input[type="checkbox"] { width: 18px; height: 18px; min-height: 0; accent-color: var(--primary); }
+.pp-spec .pp-source { font-size: .74rem; }
+
+/* ---- responsive -------------------------------------------------- */
+
+@media (max-width: 1100px) {
+  .pp-split { grid-template-columns: minmax(0, 1fr); }
+  .pp-stage-canvas { height: 320px; }
+  .pp-rail-col { order: 2; }
+}
+
+@media (max-width: 720px) {
+  .pp-panel { padding: 14px 12px; }
+  .pp-head { gap: 12px; }
+  .pp-head-meta { align-items: flex-start; text-align: left; }
+  .pp-lede { font-size: .8rem; }
+  /* Tap targets on a phone: every control the panel adds is at least 44 px. */
+  .pp-select { max-width: 100%; width: 100%; min-height: 44px; }
+  .pp-chip { min-height: 44px; padding: 5px 12px; font-size: .78rem; }
+  .pp-stage-canvas { height: 280px; }
+  .pp-label { font-size: .66rem; padding: 2px 6px; gap: 4px; }
+  .pp-label-n { min-width: 14px; height: 14px; font-size: .58rem; }
+  .pp-stage-controls { gap: 6px; }
+  .pp-control-label { font-size: .66rem; }
+  .pp-row { min-height: 56px; }
+  .pp-row-record {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .pp-tiles { grid-template-columns: 1fr; }
+  .pp-detail-grid { grid-template-columns: minmax(0, 1fr); }
+  .pp-legend { gap: 10px; }
+  .pp-spec label { min-height: 44px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pp-row, .pp-chip { transition: none; }
+}
+
+@media print {
+  .pp-panel { break-inside: avoid; }
+  .pp-stage-canvas, .pp-stage-controls { display: none !important; }
+  .pp-labels { display: none !important; }
+}

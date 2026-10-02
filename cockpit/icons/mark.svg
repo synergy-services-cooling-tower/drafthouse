@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!--
+    The installer mark (issue #72, D23).
+
+    A neutral, non-branded engineering glyph: a hyperbolic cooling tower on a base plate,
+    drawn in three neutral greys - no hue, no lettering, no company name. Branding is
+    injected at the deployment boundary (D4b), so the published product ships the object
+    it is about, not a company's mark; a branded mark remains the owner's call.
+
+    The icon set (`32x32.png`, `128x128.png`, `128x128@2x.png`, `icon.png`, `icon.ico`)
+    is generated from THIS file by `scripts/native-icons.mjs` (`npm run native-icons`);
+    `npm run native-icons-check` re-derives the pixels and fails if they disagree.
+    Edit this file, then regenerate - never edit a PNG by hand.
+
+    Only three path commands are used (M, L, C, Z, absolute), which is what the
+    generator's parser reads; keep it that way.
+  -->
+  <!-- the plate: a neutral rounded square, so the mark reads on light and dark desktops -->
+  <path fill="#f1f2f4" d="M 232 32 L 792 32 C 902 32 992 122 992 232 L 992 792 C 992 902 902 992 792 992 L 232 992 C 122 992 32 902 32 792 L 32 232 C 32 122 122 32 232 32 Z"/>
+  <!-- the tower: a hyperboloid shell - widest at its base, waist above mid height, slight
+       flare at the rim - with the base plate it stands on -->
+  <path fill="#9ba2a9" d="M 180 806 L 844 806 L 844 866 L 180 866 Z"/>
+  <path fill="#22262b" d="M 244 806 C 300 700 340 540 340 450 C 340 370 320 310 310 286 L 714 286 C 704 310 684 370 684 450 C 684 540 724 700 780 806 Z"/>
+  <!-- the fill packs: two light bands across the shell below the waist -->
+  <path fill="#9ba2a9" d="M 340 510 L 684 510 L 684 538 L 340 538 Z"/>
+  <path fill="#9ba2a9" d="M 326 586 L 698 586 L 698 614 L 326 614 Z"/>
+</svg>

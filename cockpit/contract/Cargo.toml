@@ -1,0 +1,24 @@
+[package]
+name = "cockpit"
+version = "0.2.0"
+edition = "2021"
+description = "The cockpit's engine contract, its one recorded implementation (`FixtureEngine`) and `HostConfig`/branding. Trimmed from the approved baseline crate on import (issue #58): the baseline's own Bevy app (`app`, `bridge`, `scene`, `theme`, `ui`) is not part of this crate."
+license = "PolyForm-Noncommercial-1.0.0"
+publish = false
+# Issue #58: a member of the cockpit's own workspace at `cockpit/` (see `cockpit/Cargo.toml` for the
+# profiles), not of the engine's at `rust/`.
+
+[lib]
+crate-type = ["rlib"]
+
+[features]
+# No features: this crate is the contract. `FixtureEngine` (the recorded replay) ships with it -
+# which build *selects* it is the cockpit's `fixture-engine` feature (`../Cargo.toml`), and the
+# default cockpit build selects the real engine instead.
+default = []
+
+[dependencies]
+# The contract's own I/O types derive Serialize/Deserialize.
+serde = { version = "1", features = ["derive"] }
+# `FixtureEngine::from_json` reads the recorded fixture file.
+serde_json = "1"

@@ -14,7 +14,7 @@
 | Fan | Piecewise pressure/efficiency curves and affinity scaling | Manufacturer validation, system effects, pressure definitions, stall/noise/vibration |
 | Distribution | Orifice hydraulics/count only | Header/gravity-basin balance, spray coverage, turndown, clogging |
 | Water balance | Saturated outlet approximation | Rigorous heat/mass model and chemistry integration |
-| Crossflow | Simplified 2-D topology | Validated local transfer correlations and nonuniform distributions |
+| Crossflow | Simplified 2-D topology, solved in the cockpit with its grid, error estimate and 3-grid study shown | Validated local transfer correlations and nonuniform distributions |
 | Natural draft | Uniform effective-height buoyancy | Vertical/radial zones, shell/rain losses, wind, multiple fills/rings |
 | Selection | Synthetic lifecycle ranking | Controlled costs, constructability, structural, material, maintenance, risk constraints |
 
@@ -147,6 +147,10 @@ The selector does not check:
 
 The crossflow grid demonstrates the correct directional topology but uses a simplified local effectiveness relation and uniform total `KaV` distribution. The natural-draft module uses one effective height and uniform plume density. Neither is a production-equivalent commercial rating model.
 
+**What the cockpit's crossflow screen covers (issue #84).** The screen draws the section - side air inlets, a hot-water distribution basin over each fill pack, the plenum between them and the fan stack - and solves the engine's 2-D grid for the best crossflow candidate the selection run found at the duty. Its operating point is the selection chain's: the dry-air mass flow and the available `KaV/L` are that candidate's own airside values, with the duty's water flow and salinity. The panel prints the mesh it solved (14 × 14 cells, doubled to 28 × 28 for the Richardson pass), the engine's discretisation-error estimate and the optional three-grid (12/24/48 cells) convergence study (observed order, grid-convergence index, extrapolated cold water), so the solver's numerical quality sits next to its answer. The error estimate is the engine's conservative upper bound on the **fine grid** - not on the reported extrapolated value, which is normally closer.
+
+**What it does not cover.** The grid is one fill pack's through-flow field: it does not model the tower's three-dimensional inlet and plenum distribution, fan-induced maldistribution, the spray zone above the fill, the rain zone below it, or basin mixing. It is not a rating - the candidate's capacity and the screen's selection remain the synthetic characteristic chain, and the study's observed order is a property of the cell scheme, not of the fill data. Natural draft stays out of this surface entirely (a separate module, and a separate later issue if wanted).
+
 ## 13. Economics
 
 Costs are synthetic. The lifecycle objective excludes inflation, taxes, demand charges, carbon, discharge fees, downtime, spare parts, labor escalation, financing, exchange-rate risk, and project-specific construction risk.
@@ -170,7 +174,7 @@ Do not suppress these failures by extending curves without engineering review.
 
 ## 15. Numerical convergence and what the tests prove
 
-The crossflow solver is first order in cell count. A raw 18 × 18 grid is about 0.18 °C optimistic; Richardson extrapolation from a doubled grid brings this under 0.01 °C, and `crossflowConvergenceStudy()` confirms the observed order is 1.04. Other solvers (Merkel quadrature, cold-water bisection, fan/system intersection, natural-draft balance) have **not** received an equivalent published convergence study — see `VALIDATION.md` §7 for the outstanding work.
+The crossflow solver is first order in cell count. A raw 18 × 18 grid is about 0.18 °C optimistic; Richardson extrapolation from a doubled grid brings this under 0.01 °C, and `crossflowConvergenceStudy()` confirms the observed order is 1.04. The cockpit's crossflow panel runs that study (12/24/48 cells) beside its answer and prints the mesh and the extrapolation's error estimate (issue #84). Other solvers (Merkel quadrature, cold-water bisection, fan/system intersection, natural-draft balance) have **not** received an equivalent published convergence study — see `VALIDATION.md` §7 for the outstanding work.
 
 Two earlier tests asserted algebraic identities rather than physics:
 

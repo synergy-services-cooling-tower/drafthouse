@@ -1130,10 +1130,10 @@ fn scatter(
     }
     // the points: rank order, best last so it sits on top
     let reach = if phone { 22.0 } else { 12.0 };
-    let pointer = ui.ctx().input(|i| i.pointer.hover_pos());
-    let mut hit: Option<(f32, usize)> = None;
+    let hover = ui.ctx().input(|i| i.pointer.hover_pos());
+    let hits: Vec<Pos2> = list.iter().map(|c| plot.pt(c.cold_c, c.power_kw)).collect();
     for (i, c) in list.iter().enumerate().rev() {
-        let q = plot.pt(c.cold_c, c.power_kw);
+        let q = hits[i];
         let col = tower_color(st, &c.tower_id);
         let sel = st.cand == Some(i);
         let s = if i == 0 || sel { 5.5 } else { 3.6 };
@@ -1148,12 +1148,6 @@ fn scatter(
         }
         if sel || i == 0 {
             p.circle_stroke(q, s + 4.0, Stroke::new(1.6, if sel { t::INK } else { col }));
-        }
-        if let Some(h) = pointer {
-            let d = h.distance(q);
-            if d <= reach && hit.is_none_or(|x| d < x.0) {
-                hit = Some((d, i));
-            }
         }
     }
     if let Some(c) = list.first() {
@@ -1203,13 +1197,57 @@ fn scatter(
         egui::Id::new("size.scatter"),
         egui::Sense::click(),
     );
-    if let Some((_, i)) = hit {
+    // The tap target. A press reads at the press's own position - a finger has no hover - and
+    // `scatter_pick` resolves it: the nearest candidate within `reach`, and a press while the nearest
+    // is already picked walks to the next point under the finger, so candidates that share a pixel
+    // are all reachable. A press on clear plot space puts the card down (issue #83: a point you
+    // cannot press is a defect).
+    let pick = resp
+        .interact_pointer_pos()
+        .or(hover)
+        .and_then(|at| scatter_pick(&hits, at, reach, st.cand));
+    if let Some(i) = pick {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
         if resp.clicked() {
             st.cand = if st.cand == Some(i) { None } else { Some(i) };
             st.info = None;
         }
+    } else if resp.clicked() {
+        st.cand = None;
+        st.info = None;
     }
+}
+
+/// The candidate a press at `at` picks among the scatter's `points` (screen positions, in list
+/// order): the nearest within `reach`. A press while the nearest is already picked walks on to the
+/// next point under the finger and wraps, so overlapping points - a cluster that shares a pixel -
+/// are all reachable by repeated taps; `None` when nothing is within `reach`.
+///
+/// The overlap rule is the point of this function (its test taps a shared pixel three times):
+/// nearest-wins alone leaves every point but the nearest unpickable, which is the defect.
+fn scatter_pick(points: &[Pos2], at: Pos2, reach: f32, current: Option<usize>) -> Option<usize> {
+    let mut within: Vec<(f32, usize)> = points
+        .iter()
+        .enumerate()
+        .filter_map(|(i, q)| {
+            let d = at.distance(*q);
+            (d <= reach).then_some((d, i))
+        })
+        .collect();
+    if within.is_empty() {
+        return None;
+    }
+    // nearest first; equally placed points in list order, so repeated taps walk the list
+    within.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+    let next = match current {
+        Some(c) if within.len() > 1 => within
+            .iter()
+            .position(|x| x.1 == c)
+            .map(|k| (k + 1) % within.len())
+            .unwrap_or(0),
+        _ => 0,
+    };
+    Some(within[next].1)
 }
 
 /// A picked candidate: its full engine line (every number marked), the rejections on its tower, and the
@@ -1682,3 +1720,67 @@ fn tower_sheet(ui: &egui::Ui, st: &mut State, area: Rect, tw: &TowerRun, phone: 
 
 #[allow(dead_code)]
 fn _unused(_d: &data::SizeData) {}
+
+#[cfg(test)]
+mod tests {
+    use super::egui::pos2;
+    use super::scatter_pick;
+
+    /// The defect the mandate names: overlapping points can share a pixel, and nearest-wins alone
+    /// leaves every one but the nearest unpickable. Repeated taps at the shared pixel walk the
+    /// cluster and wrap - this is the selection path a finger takes, not the pixels.
+    #[test]
+    fn a_shared_pixels_points_are_all_reachable_by_repeated_taps() {
+        let cluster = [pos2(10.0, 10.0), pos2(10.0, 10.0), pos2(10.0, 10.0)];
+        let reach = 22.0;
+        let tap = pos2(11.0, 10.0);
+        let first = scatter_pick(&cluster, tap, reach, None);
+        assert_eq!(first, Some(0), "the first tap lands on the cluster's head");
+        let second = scatter_pick(&cluster, tap, reach, first);
+        assert_eq!(
+            second,
+            Some(1),
+            "a second tap reaches the point under the first"
+        );
+        let third = scatter_pick(&cluster, tap, reach, second);
+        assert_eq!(third, Some(2), "a third tap reaches the last point");
+        assert_eq!(
+            scatter_pick(&cluster, tap, reach, third),
+            Some(0),
+            "further taps wrap"
+        );
+    }
+
+    /// The hit area is a finger's, not a pixel's: a tap within `reach` picks the nearest point,
+    /// and a tap beyond it picks nothing.
+    #[test]
+    fn the_tap_target_is_the_nearest_point_within_reach() {
+        let points = [pos2(10.0, 10.0), pos2(30.0, 10.0)];
+        assert_eq!(scatter_pick(&points, pos2(12.0, 10.0), 22.0, None), Some(0));
+        assert_eq!(scatter_pick(&points, pos2(28.0, 10.0), 22.0, None), Some(1));
+        assert_eq!(
+            scatter_pick(&points, pos2(70.0, 10.0), 22.0, None),
+            None,
+            "clear plot space picks nothing"
+        );
+        // Equally placed points tie-break in list order, and a repeat tap at the same pixel walks
+        // to the other one - the overlap rule, at the midpoint of a pair.
+        assert_eq!(scatter_pick(&points, pos2(20.0, 10.0), 22.0, None), Some(0));
+        assert_eq!(
+            scatter_pick(&points, pos2(20.0, 10.0), 22.0, Some(0)),
+            Some(1)
+        );
+    }
+
+    /// A lone point stays picked across taps (nothing to walk to), and a press off the points is
+    /// not a pick.
+    #[test]
+    fn a_lone_point_is_stable_and_empty_space_clears() {
+        let points = [pos2(10.0, 10.0)];
+        assert_eq!(
+            scatter_pick(&points, pos2(10.0, 12.0), 22.0, Some(0)),
+            Some(0)
+        );
+        assert_eq!(scatter_pick(&points, pos2(100.0, 100.0), 22.0, None), None);
+    }
+}

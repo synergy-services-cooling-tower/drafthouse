@@ -9,6 +9,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -17,6 +18,18 @@ const ROOT = path.join(HERE, '..');
 const CHECK = path.join(ROOT, 'docs', 'design', 'small-screens-r1', 'tools', 'check.mjs');
 const ROUND = path.join(ROOT, 'docs', 'design', 'small-screens-r1');
 const BEFORE = path.join(ROOT, 'evidence', 'issue-81', 'measure', 'before');
+
+// The public snapshot carries neither input — `docs/design/**` is not in its allowlist, and the
+// pre-fix witness pair lives in the lane archive, which never travels — so both tests report a
+// named NOT VERIFIABLE diagnostic there and assert nothing, exactly as
+// `tests/deployment-serving.test.js` does for its absent inputs. A runner-level skip would move
+// the skipped count `tests/validation-results-drift.test.js` pins to the count gate itself, so
+// this file, like those, never skips. The two declarations tell the snapshot builder (issue
+// #104) why these references are deliberately not carried; wherever the inputs exist the suite
+// runs both directions unchanged:
+//
+//   public-snapshot:not-published docs/design/small-screens-r1 — the #81 round (frames + check) is excluded by the snapshot allowlist.
+//   public-snapshot:not-published evidence — the lane archive never travels; its issue-81 measure/before pair is the second test's control.
 
 function check(dir) {
   const r = spawnSync(process.execPath, [CHECK, '--dir', dir, '--json'], {
@@ -34,7 +47,11 @@ function check(dir) {
   return { status: r.status, json, out: r.stdout + r.stderr };
 }
 
-test('#81: the round\'s frames pass the geometry check at all four sizes', () => {
+test('#81: the round\'s frames pass the geometry check at all four sizes', (t) => {
+  if (!existsSync(CHECK) || !existsSync(ROUND)) {
+    t.diagnostic('NOT VERIFIABLE: not published: docs/design/small-screens-r1 is excluded by the snapshot allowlist — the private tree runs this check');
+    return;
+  }
   const res = check(ROUND);
   assert.equal(res.status, 0, `the check failed:\n${res.out}`);
   assert.ok(res.json, `the check printed no JSON:\n${res.out}`);
@@ -55,7 +72,11 @@ test('#81: the round\'s frames pass the geometry check at all four sizes', () =>
   }
 });
 
-test('#81: the check fails on the pre-fix frames, naming the small-screen defects', () => {
+test('#81: the check fails on the pre-fix frames, naming the small-screen defects', (t) => {
+  if (!existsSync(CHECK) || !existsSync(BEFORE)) {
+    t.diagnostic('NOT VERIFIABLE: not published: the pre-fix witness frames are not carried by the snapshot (the lane archive\'s issue-81 measure/before pair)');
+    return;
+  }
   const res = check(BEFORE);
   assert.equal(res.status, 1, `the check passed on the pre-fix frames:\n${res.out}`);
   assert.ok(res.json, `the check printed no JSON:\n${res.out}`);

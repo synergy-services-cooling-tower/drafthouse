@@ -488,6 +488,23 @@ fn chart(p: &egui::Painter, r: Rect, pts: &[Result<RatePoint, String>], sel: usi
     let xs = nice((x1 - x0) / if phone { 4.0 } else { 6.0 });
     let ys = nice((plot.y.1 - plot.y.0) / 5.0);
     plot.axes(p, xs, ys, "L/G (zoomed to the test points)", "KaV/L", 2, 2);
+    // The fitted characteristic's own constants (issue #83): KaV/L = C · (L/G)^m through the test
+    // point, read straight from `evaluate_characteristic_capability`. Its test anchor is the STUB
+    // reading set, so the mark is illustrative; the demand side is the draft duty.
+    let fit = text(
+        p,
+        pos2(r.left() + 40.0, r.top() + 13.0),
+        Align2::LEFT_CENTER,
+        &format!("fitted C {:.4} · m {:.3}", rp.test_c, rp.exponent_m),
+        kit::mono(11.5),
+        t::INK_2,
+    );
+    kit::src_mark(
+        p,
+        pos2(fit.right() + 6.0, fit.center().y),
+        Src::Illus,
+        ON_STUB,
+    );
     let demand: Vec<(f64, f64)> = rp.curve.iter().map(|(x, d, _)| (*x, *d)).collect();
     let charac: Vec<(f64, f64)> = rp.curve.iter().map(|(x, _, c)| (*x, *c)).collect();
     plot.line(p, &demand, Stroke::new(2.4, t::INK_2));

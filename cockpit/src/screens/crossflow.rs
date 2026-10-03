@@ -7,12 +7,257 @@
 //! them and the fan stack above. Air dots cross the fill at a speed set by the candidate's airflow; water
 //! drops fall at a speed set by the circulating flow.
 
-use bevy_egui::egui::{self, pos2, vec2, Align2, Color32, Pos2, Rect, Shape, Stroke, StrokeKind};
+use bevy_egui::egui::{
+    self, pos2, vec2, Align2, Color32, FontId, Pos2, Rect, Shape, Stroke, StrokeKind, Vec2,
+};
 use cockpit::engine::EngineInput;
 
 use super::kit::{self, text};
-use super::{info_card, title_band, toggle_info, Env, State};
+use super::{data::XfGrid, info_card, title_band, toggle_info, Env, State};
 use crate::theme as t;
+
+// ================================================================================== the geometry
+
+/// The drawing's unit sizes (issue #84): the two crossing fill packs, the plenum between them, the
+/// deck (the hot-water distribution basin) over each pack, the casing's cold-water basin and the
+/// fan stack. Every one of them is drawn as `units * Sect::s`, so the section has ONE scale on both
+/// axes at every size - the Phase-1 proportion promise, checked by the tests below.
+pub const PACK_W_U: f32 = 250.0;
+pub const PACK_H_U: f32 = 370.0;
+pub const PLENUM_W_U: f32 = 150.0;
+pub const DECK_H_U: f32 = 22.0;
+pub const BASIN_H_U: f32 = 40.0;
+pub const STACK_H_U: f32 = 46.0;
+/// The desktop panel's width.
+const PANEL_W: f32 = 320.0;
+/// The phone's panel height: the four metrics, the numerics block (the mesh, the discretisation
+/// error and the 12/24/48 study) and the caption must fit inside it; the rest is the stage.
+const PHONE_PANEL_H: f32 = 288.0;
+
+/// The section's rectangles, computed once per frame from the rect the shell hands the screen. The
+/// painter draws exactly these and the geometry tests check exactly these, so neither can drift.
+#[derive(Clone, Copy, Debug)]
+pub struct Sect {
+    /// The drawing's area (the panel takes its own strip out of the body).
+    pub stage: Rect,
+    /// The desktop's right-hand panel, or the phone's bottom one.
+    pub panel: Rect,
+    /// The drawing's one scale: points per unit, on BOTH axes.
+    pub s: f32,
+    /// The section's centre, 30 units down so the stack above it has room.
+    pub c: Pos2,
+    pub pack_l: Rect,
+    pub pack_r: Rect,
+    pub plenum: Rect,
+    pub deck_h: f32,
+    pub casing: Rect,
+    pub basin: Rect,
+    pub stack: Rect,
+    /// True when the cold-water label fits inside the basin; else it sits under the casing and the
+    /// legend moves down with it.
+    pub cold_in: bool,
+    pub legend: Rect,
+}
+
+/// The section's geometry at this body rect: the one place `s`, the pack boxes, the casing, the
+/// basin, the stack and the legend are derived.
+pub fn layout(body: Rect, phone: bool) -> Sect {
+    let (stage, panel) = if phone {
+        let cut = pos2(body.left(), body.bottom() - PHONE_PANEL_H);
+        (
+            Rect::from_min_max(body.min, pos2(body.right(), cut.y)),
+            Rect::from_min_max(cut, body.max),
+        )
+    } else {
+        let cut = body.right() - PANEL_W;
+        (
+            Rect::from_min_max(body.min, pos2(cut, body.bottom())),
+            Rect::from_min_max(pos2(cut, body.top()), body.max),
+        )
+    };
+    let s = (stage.width() / 900.0)
+        .min(stage.height() / 700.0)
+        .clamp(0.36, 1.3);
+    let c = pos2(stage.center().x, stage.center().y + 30.0 * s);
+    let pack_w = PACK_W_U * s;
+    // phone: the stage is tall and narrow (s is set by the width), so the packs take the height -
+    // the one dimension that is not `unit * s`, clamped, and asserted as such in the tests
+    let pack_h = if phone {
+        (stage.height() - 200.0).clamp(150.0, 320.0)
+    } else {
+        PACK_H_U * s
+    };
+    let plenum_w = PLENUM_W_U * s;
+    let top = c.y - pack_h / 2.0;
+    let pack_r = Rect::from_min_size(pos2(c.x + plenum_w / 2.0, top), vec2(pack_w, pack_h));
+    let pack_l = Rect::from_min_size(
+        pos2(c.x - plenum_w / 2.0 - pack_w, top),
+        vec2(pack_w, pack_h),
+    );
+    let deck_h = DECK_H_U * s;
+    let casing = Rect::from_min_max(
+        pos2(pack_l.left() - 6.0, top - deck_h - 8.0),
+        pos2(pack_r.right() + 6.0, pack_r.bottom() + BASIN_H_U * s),
+    );
+    let plenum = Rect::from_min_max(
+        pos2(pack_l.right(), top),
+        pos2(pack_r.left(), pack_r.bottom()),
+    );
+    let stack = Rect::from_min_max(
+        pos2(c.x - plenum_w * 0.6, casing.top() - STACK_H_U * s),
+        pos2(c.x + plenum_w * 0.6, casing.top() + 1.0),
+    );
+    let basin = Rect::from_min_max(
+        pos2(casing.left() + 4.0, pack_r.bottom() + 4.0),
+        pos2(casing.right() - 4.0, casing.bottom() - 4.0),
+    );
+    let cold_in = basin.height() >= 24.0;
+    let legend = Rect::from_center_size(
+        pos2(c.x, casing.bottom() + if cold_in { 16.0 } else { 40.0 }),
+        vec2(pack_w * 1.2, 8.0),
+    );
+    Sect {
+        stage,
+        panel,
+        s,
+        c,
+        pack_l,
+        pack_r,
+        plenum,
+        deck_h,
+        casing,
+        basin,
+        stack,
+        cold_in,
+        legend,
+    }
+}
+
+/// One label the section paints: its text, where it goes, and whether it wears a plate. The painter
+/// draws `rect` and the collision test checks `rect` - the same numbers, from the same source.
+#[derive(Clone, Debug)]
+pub struct Label {
+    pub key: &'static str,
+    pub text: String,
+    pub rect: Rect,
+    pub font: FontId,
+    pub color: Color32,
+    pub plate: bool,
+}
+
+/// The section's own labels, laid out from the same [`Sect`] the painter draws and measured with the
+/// caller's font source ([`kit::measure`] when painting; a real `egui::Context`'s fonts in the
+/// tests), so a test can check the rects the user sees. Six labels: "air in" on both outer faces,
+/// "air out" above the stack, a hot-water label over each pack's deck and the cold-water label (in
+/// the basin, or under the casing when the basin is too shallow for it).
+pub fn labels(
+    sec: &Sect,
+    grid: &XfGrid,
+    phone: bool,
+    measure: &dyn Fn(&str, FontId) -> Vec2,
+) -> Vec<Label> {
+    let mut out: Vec<Label> = Vec::new();
+    let mut place = |key: &'static str,
+                     text: String,
+                     at: Pos2,
+                     align: Align2,
+                     font: FontId,
+                     color: Color32,
+                     plate: bool| {
+        let size = measure(&text, font.clone()) + if plate { vec2(8.0, 4.0) } else { Vec2::ZERO };
+        out.push(Label {
+            key,
+            text,
+            rect: align.anchor_size(at, size),
+            font,
+            color,
+            plate,
+        });
+    };
+    // the corners first, in the order the drawing has always painted them (right, then left)
+    if phone {
+        place(
+            "air in · right",
+            "air in".into(),
+            pos2(sec.stage.right() - 14.0, sec.casing.top() - 8.0),
+            Align2::RIGHT_BOTTOM,
+            kit::semi(11.5),
+            t::AIR,
+            false,
+        );
+        place(
+            "air in · left",
+            "air in".into(),
+            pos2(sec.stage.left() + 14.0, sec.casing.top() - 8.0),
+            Align2::LEFT_BOTTOM,
+            kit::semi(11.5),
+            t::AIR,
+            false,
+        );
+    } else {
+        place(
+            "air in · right",
+            "air in".into(),
+            pos2(sec.pack_r.right() + 24.0 * sec.s, sec.pack_r.top() - 6.0),
+            Align2::LEFT_BOTTOM,
+            kit::semi(11.0),
+            t::AIR,
+            false,
+        );
+        place(
+            "air in · left",
+            "air in".into(),
+            pos2(sec.pack_l.left() - 24.0 * sec.s, sec.pack_l.top() - 6.0),
+            Align2::RIGHT_BOTTOM,
+            kit::semi(11.0),
+            t::AIR,
+            false,
+        );
+    }
+    place(
+        "air out",
+        format!("air out {:.1} °C", grid.outlet_db),
+        if phone {
+            pos2(sec.c.x, sec.stack.top() - 44.0 * sec.s - 6.0)
+        } else {
+            pos2(sec.stack.right() + 14.0, sec.stack.top() - 10.0 * sec.s)
+        },
+        if phone {
+            Align2::CENTER_BOTTOM
+        } else {
+            Align2::LEFT_BOTTOM
+        },
+        kit::num(12.0),
+        t::INK_2,
+        true,
+    );
+    for (key, pk) in [("hot · left", sec.pack_l), ("hot · right", sec.pack_r)] {
+        place(
+            key,
+            format!("hot {:.1} °C", grid.hot_c),
+            pos2(pk.center().x, sec.casing.top() - 6.0),
+            Align2::CENTER_BOTTOM,
+            kit::num(12.0),
+            kit::water_temp(0.0),
+            true,
+        );
+    }
+    let cold_at = if sec.cold_in {
+        sec.basin.center()
+    } else {
+        pos2(sec.c.x, sec.casing.bottom() + 14.0)
+    };
+    place(
+        "cold",
+        format!("cold {:.2} °C", grid.cold_c),
+        cold_at,
+        Align2::CENTER_CENTER,
+        kit::num(13.0),
+        t::INK,
+        true,
+    );
+    out
+}
 
 pub fn ui(ui: &mut egui::Ui, st: &mut State, draft: &mut EngineInput, env: &Env, area: Rect) {
     let body = title_band(
@@ -52,19 +297,9 @@ pub fn ui(ui: &mut egui::Ui, st: &mut State, draft: &mut EngineInput, env: &Env,
     let _ = draft;
     let show_air = st.info.as_deref() == Some("xf:air");
 
-    let (stage, panel) = if env.phone {
-        let h = 214.0;
-        (
-            Rect::from_min_max(body.min, pos2(body.right(), body.bottom() - h)),
-            Rect::from_min_max(pos2(body.left(), body.bottom() - h), body.max),
-        )
-    } else {
-        let w = 320.0;
-        (
-            Rect::from_min_max(body.min, pos2(body.right() - w, body.bottom())),
-            Rect::from_min_max(pos2(body.right() - w, body.top()), body.max),
-        )
-    };
+    // the geometry comes from `layout` - the painter and the geometry tests read the same rects
+    let sec = layout(body, env.phone);
+    let (stage, panel) = (sec.stage, sec.panel);
     kit::ground(
         &p,
         stage,
@@ -72,31 +307,14 @@ pub fn ui(ui: &mut egui::Ui, st: &mut State, draft: &mut EngineInput, env: &Env,
         stage.width().min(stage.height()) * 0.55,
         t::with_alpha(t::PRIMARY, 16),
     );
-
-    // ---- section geometry
-    let s = (stage.width() / 900.0)
-        .min(stage.height() / 700.0)
-        .clamp(0.36, 1.3);
-    let c = pos2(stage.center().x, stage.center().y + 30.0 * s);
-    let pack_w = 250.0 * s;
-    // phone: the stage is tall and narrow (s is set by the width), so the packs take the height
-    let pack_h = if env.phone {
-        (stage.height() - 200.0).clamp(150.0, 320.0)
-    } else {
-        370.0 * s
-    };
-    let plenum_w = 150.0 * s;
-    let top = c.y - pack_h / 2.0;
-    let right_pack = Rect::from_min_size(pos2(c.x + plenum_w / 2.0, top), vec2(pack_w, pack_h));
-    let left_pack = Rect::from_min_size(
-        pos2(c.x - plenum_w / 2.0 - pack_w, top),
-        vec2(pack_w, pack_h),
-    );
-    let deck_h = 22.0 * s;
-    let casing = Rect::from_min_max(
-        pos2(left_pack.left() - 6.0, top - deck_h - 8.0),
-        pos2(right_pack.right() + 6.0, right_pack.bottom() + 40.0 * s),
-    );
+    let s = sec.s;
+    let c = sec.c;
+    let pack_h = sec.pack_r.height();
+    let top = sec.pack_r.top();
+    let right_pack = sec.pack_r;
+    let left_pack = sec.pack_l;
+    let deck_h = sec.deck_h;
+    let casing = sec.casing;
     p.rect_filled(casing, kit::r(6), t::with_alpha(t::PANEL, 140));
     p.rect_stroke(
         casing,
@@ -125,10 +343,7 @@ pub fn ui(ui: &mut egui::Ui, st: &mut State, draft: &mut EngineInput, env: &Env,
         );
     }
     // cold-water basin under everything
-    let basin = Rect::from_min_max(
-        pos2(casing.left() + 4.0, right_pack.bottom() + 4.0),
-        pos2(casing.right() - 4.0, casing.bottom() - 4.0),
-    );
+    let basin = sec.basin;
     kit::vgrad(
         &p,
         basin,
@@ -215,15 +430,9 @@ pub fn ui(ui: &mut egui::Ui, st: &mut State, draft: &mut EngineInput, env: &Env,
         }
     }
     // plenum + fan stack
-    let plenum = Rect::from_min_max(
-        pos2(left_pack.right(), top),
-        pos2(right_pack.left(), right_pack.bottom()),
-    );
+    let plenum = sec.plenum;
     p.rect_filled(plenum, kit::r(0), t::with_alpha(t::BG, 160));
-    let stack = Rect::from_min_max(
-        pos2(c.x - plenum_w * 0.6, casing.top() - 46.0 * s),
-        pos2(c.x + plenum_w * 0.6, casing.top() + 1.0),
-    );
+    let stack = sec.stack;
     let tt = env.t;
     // ---- motion: air across the fill (both sides inward), up the plenum, out of the stack
     let air_speed = (40.0 + grid.cand.airflow_m3_s as f32 * 0.35) * s;
@@ -404,42 +613,28 @@ pub fn ui(ui: &mut egui::Ui, st: &mut State, draft: &mut EngineInput, env: &Env,
         );
     }
 
-    // ---- labels on the section, short
-    if env.phone {
-        // the outer corners, on the hot labels' row: clear of the frame and of the labels
-        text(
-            &p,
-            pos2(stage.right() - 14.0, casing.top() - 8.0),
-            Align2::RIGHT_BOTTOM,
-            "air in",
-            kit::semi(11.5),
-            t::AIR,
-        );
-        text(
-            &p,
-            pos2(stage.left() + 14.0, casing.top() - 8.0),
-            Align2::LEFT_BOTTOM,
-            "air in",
-            kit::semi(11.5),
-            t::AIR,
-        );
-    } else {
-        text(
-            &p,
-            pos2(right_pack.right() + 24.0 * s, top - 6.0),
-            Align2::LEFT_BOTTOM,
-            "air in",
-            kit::semi(11.0),
-            t::AIR,
-        );
-        text(
-            &p,
-            pos2(left_pack.left() - 24.0 * s, top - 6.0),
-            Align2::RIGHT_BOTTOM,
-            "air in",
-            kit::semi(11.0),
-            t::AIR,
-        );
+    // ---- labels on the section, short: the rects `labels` measured, painted where they land
+    let labels = labels(&sec, &grid, env.phone, &|s, f| kit::measure(&p, s, f));
+    for l in &labels {
+        if l.plate {
+            kit::label_plate(
+                &p,
+                l.rect.center(),
+                Align2::CENTER_CENTER,
+                &l.text,
+                l.font.clone(),
+                l.color,
+            );
+        } else {
+            text(
+                &p,
+                l.rect.center(),
+                Align2::CENTER_CENTER,
+                &l.text,
+                l.font.clone(),
+                l.color,
+            );
+        }
     }
     // the labels state the direction with a drawn arrow, since the strings carry none: each one sits
     // between its label and the pack and points INTO the pack (dir = +1 on the left, -1 on the right)
@@ -458,23 +653,6 @@ pub fn ui(ui: &mut egui::Ui, st: &mut State, draft: &mut EngineInput, env: &Env,
             );
         }
     }
-    let ao = if env.phone {
-        pos2(c.x, stack.top() - 44.0 * s - 6.0)
-    } else {
-        pos2(stack.right() + 14.0, stack.top() - 10.0 * s)
-    };
-    kit::label_plate(
-        &p,
-        ao,
-        if env.phone {
-            Align2::CENTER_BOTTOM
-        } else {
-            Align2::LEFT_BOTTOM
-        },
-        &format!("air out {:.1} °C", grid.outlet_db),
-        kit::num(12.0),
-        t::INK_2,
-    );
     if !env.phone {
         // out of the stack, up: beside its own "air out" label, not across the stack from it
         kit::arrow_to(
@@ -485,37 +663,9 @@ pub fn ui(ui: &mut egui::Ui, st: &mut State, draft: &mut EngineInput, env: &Env,
             t::AIR,
         );
     }
-    for pk in [left_pack, right_pack] {
-        kit::label_plate(
-            &p,
-            pos2(pk.center().x, casing.top() - 6.0),
-            Align2::CENTER_BOTTOM,
-            &format!("hot {:.1} °C", grid.hot_c),
-            kit::num(12.0),
-            kit::water_temp(0.0),
-        );
-    }
-    // in the basin when it is tall enough, else just under the casing (the legend moves down)
-    let cold_in = basin.height() >= 24.0;
-    let cold_at = if cold_in {
-        basin.center()
-    } else {
-        pos2(c.x, casing.bottom() + 14.0)
-    };
-    kit::label_plate(
-        &p,
-        cold_at,
-        Align2::CENTER_CENTER,
-        &format!("cold {:.2} °C", grid.cold_c),
-        kit::num(13.0),
-        t::INK,
-    );
 
     // the legend bar under the left pack
-    let lg = Rect::from_center_size(
-        pos2(c.x, casing.bottom() + if cold_in { 16.0 } else { 40.0 }),
-        vec2(pack_w * 1.2, 8.0),
-    );
+    let lg = sec.legend;
     if show_air {
         kit::hgrad(
             &p,
@@ -608,6 +758,47 @@ pub fn ui(ui: &mut egui::Ui, st: &mut State, draft: &mut EngineInput, env: &Env,
         );
     }
     y += 48.0 * 2.0 + 6.0;
+    // ---- the solver's numerics (issue #84 AC 2): the mesh it solved, the engine's discretisation
+    // error estimate and the 12/24/48 study - on the surface with the result, not only in a test.
+    let err = match grid.error_c {
+        Some(e) => format!("±{e:.3} K error"),
+        None => "error estimate off".to_string(),
+    };
+    let mesh = match grid.fine_cells {
+        Some(f) => format!(
+            "mesh {}×{} → {}×{} · {err}",
+            grid.cells[0], grid.cells[1], f[0], f[1]
+        ),
+        None => format!("mesh {}×{} · {err}", grid.cells[0], grid.cells[1]),
+    };
+    let st_ = &grid.study;
+    let study = format!(
+        "study {}→{}→{} · order {}",
+        st_.cells[0],
+        st_.cells[1],
+        st_.cells[2],
+        match st_.order {
+            Some(o) => format!("{o:.2}"),
+            None => "-".into(),
+        }
+    );
+    let gci = format!(
+        "GCI {:.2} % · extrapolated {:.2} °C",
+        st_.gci_pct, st_.extrapolated
+    );
+    for line in [&mesh, &study, &gci] {
+        kit::text_fit(
+            &p,
+            pos2(inner.left(), y),
+            Align2::LEFT_TOP,
+            line,
+            kit::mono(10.5),
+            t::INK_2,
+            inner.width(),
+        );
+        y += 15.0;
+    }
+    y += 5.0;
     if !env.phone {
         p.line_segment(
             [pos2(inner.left(), y), pos2(inner.right(), y)],
@@ -723,7 +914,9 @@ pub fn ui(ui: &mut egui::Ui, st: &mut State, draft: &mut EngineInput, env: &Env,
             pos2(inner.left(), inner.bottom()),
             Align2::LEFT_BOTTOM,
             &format!(
-                "engine · crossflow.rs · {nx}×{ny} · {}",
+                "engine · crossflow.rs · {}×{} · {}",
+                grid.cells[0],
+                grid.cells[1],
                 if grid.ms < 1.0 {
                     "<1 ms".to_string()
                 } else {
@@ -758,6 +951,11 @@ pub fn ui(ui: &mut egui::Ui, st: &mut State, draft: &mut EngineInput, env: &Env,
             "Each cell is one engine grid cell: hot",
             "along the top, coldest where the air enters.",
             "Tap a cell for its values.",
+            "Numerics: the mesh is doubled and the",
+            "cold water is Richardson-extrapolated;",
+            "the error line bounds that fine mesh, not",
+            "the reported value. The 12/24/48 study",
+            "confirms the scheme's first order.",
         ],
         area,
     );
@@ -813,4 +1011,201 @@ fn bars(p: &egui::Painter, r: Rect, vals: &[f64], col: impl Fn(f64) -> Color32, 
         kit::mono(10.5),
         t::INK_2,
     );
+}
+
+// --------------------------------------------------------------------------------------------- tests
+
+#[cfg(test)]
+mod tests {
+    //! Issue #84, AC 3: the section drawing's own Phase-1 promises, asserted on the same rects the
+    //! painter draws (`layout`/`labels`, one source for both). At the four sizes issue #81 names:
+    //! the drawing has **one scale on both axes** (every drawn dimension is its unit count times
+    //! `Sect::s`; the phone's pack height is the design's one documented adaptation, asserted as
+    //! such), **no label overlaps another** (the same >0.5 px rule as the Phase-1 frames check,
+    //! `docs/design/small-screens-r1/tools/check.mjs`), **every label sits inside the stage**, and
+    //! the **stage keeps the section minimum**.
+    use super::*;
+
+    /// The rect the shell hands `ui` at the four sizes: its rail layout, less the answer strip and
+    /// (desktop) the title band - 1280x720 -> 1204x604, 1440x900 -> 1364x784, 1024x768 -> 948x652,
+    /// 390x844 phone -> 390x742. Only the size reaches `layout`.
+    const TARGETS: [(&str, f32, f32, bool); 4] = [
+        ("1280x720", 1204.0, 604.0, false),
+        ("1440x900", 1364.0, 784.0, false),
+        ("1024x768", 948.0, 652.0, false),
+        ("390x844", 390.0, 742.0, true),
+    ];
+
+    /// Issue #81's agreed section minimum, the frames' `data-min-section-h`.
+    const MIN_SECTION_H: f32 = 230.0;
+
+    fn area(w: f32, h: f32) -> Rect {
+        Rect::from_min_size(pos2(0.0, 0.0), vec2(w, h))
+    }
+
+    /// The section's labels carry the fixture's own duty (hot 42 / wb 27) and a cold water between
+    /// them: representative of the longest strings the screen prints at these fonts.
+    fn fixture_grid() -> XfGrid {
+        XfGrid {
+            hot_c: 42.0,
+            wb_c: 27.0,
+            cold_c: 31.29,
+            outlet_db: 36.5,
+            ..XfGrid::default()
+        }
+    }
+
+    /// A painter over a real font context carrying the app's own fonts (`ui.rs` installs the same
+    /// [`t::fonts`]; a pass activates them). Measuring through it is measuring what the user sees.
+    fn font_painter() -> egui::Painter {
+        let ctx = egui::Context::default();
+        ctx.set_fonts(t::fonts());
+        let mut out = ctx.run_ui(egui::RawInput::default(), |_| {});
+        // the pass's texture deltas belong to a renderer; there is none here
+        out.textures_delta.clear();
+        egui::Painter::new(ctx, egui::LayerId::background(), Rect::EVERYTHING)
+    }
+
+    fn rel(a: f32, b: f32) -> f32 {
+        (a - b).abs() / b.abs().max(1e-6)
+    }
+
+    /// Issue #81, criterion 1, applied to the crossflow drawing: **one scale, both axes**. Every
+    /// drawn dimension is its unit count times the drawing's one `s` within 5 %; on the desktop the
+    /// pack's own px-per-unit in x and y agree (the criterion verbatim); the phone's pack height is
+    /// the design round's documented adaptation, taking the stage's spare height inside its clamp.
+    #[test]
+    fn one_scale_for_both_axes_at_the_four_target_sizes() {
+        for (label, w, h, phone) in TARGETS {
+            let sec = layout(area(w, h), phone);
+            let s = sec.s;
+            for (what, points, units) in [
+                ("the pack width", sec.pack_r.width(), PACK_W_U),
+                ("the plenum width", sec.plenum.width(), PLENUM_W_U),
+                ("the deck height", sec.deck_h, DECK_H_U),
+                // the basin band is the casing's own lower extension (the drawn basin is inset 4 px)
+                (
+                    "the casing's basin band",
+                    sec.casing.bottom() - sec.pack_r.bottom(),
+                    BASIN_H_U,
+                ),
+                ("the stack height", sec.stack.height() - 1.0, STACK_H_U),
+            ] {
+                assert!(
+                    rel(points, units * s) <= 0.05,
+                    "{label}: {what} is {points:.1} px, not {:.1} (unit * s)",
+                    units * s
+                );
+            }
+            assert!(
+                rel(sec.pack_l.width(), sec.pack_r.width()) <= 1e-6,
+                "{label}: the two packs are the same width"
+            );
+            if phone {
+                let want = (sec.stage.height() - 200.0).clamp(150.0, 320.0);
+                assert_eq!(
+                    sec.pack_r.height(),
+                    want,
+                    "{label}: the phone pack height is the documented rule"
+                );
+                assert!(
+                    (150.0..=320.0).contains(&sec.pack_r.height()),
+                    "{label}: the phone pack stays inside its clamp"
+                );
+            } else {
+                assert!(
+                    rel(sec.pack_r.height(), PACK_H_U * s) <= 0.05,
+                    "{label}: the drawn pack's height is its unit count * s"
+                );
+                assert!(
+                    rel(
+                        sec.pack_r.width() / PACK_W_U,
+                        sec.pack_r.height() / PACK_H_U
+                    ) <= 0.05,
+                    "{label}: the drawn pack's px per unit agree on both axes"
+                );
+            }
+        }
+    }
+
+    /// The drawing's proportions are its own, not the window's: across the three desktop sizes the
+    /// casing's width:height ratio agrees within 5 % - a layout that let one axis follow the stage's
+    /// aspect would fail here.
+    #[test]
+    fn the_drawn_section_keeps_its_aspect_across_desktop_sizes() {
+        let mut first: Option<(&str, f32)> = None;
+        for (label, w, h, phone) in TARGETS {
+            if phone {
+                continue;
+            }
+            let sec = layout(area(w, h), phone);
+            let ratio = sec.casing.width() / sec.casing.height();
+            match first {
+                None => first = Some((label, ratio)),
+                Some((on, r)) => assert!(
+                    rel(ratio, r) <= 0.05,
+                    "{label}: the casing is {ratio:.3} wide per tall; {on} is {r:.3}"
+                ),
+            }
+        }
+    }
+
+    /// Issue #81, criterion 2, applied to the crossflow screen: the stage (the section's own rect)
+    /// is never shorter than the declared minimum at the four sizes; the panel keeps its own area.
+    #[test]
+    fn the_stage_keeps_the_section_minimum_at_the_four_sizes() {
+        for (label, w, h, phone) in TARGETS {
+            let sec = layout(area(w, h), phone);
+            assert!(
+                sec.stage.height() >= MIN_SECTION_H,
+                "{label}: the stage is {:.0} px, under the minimum {MIN_SECTION_H}",
+                sec.stage.height()
+            );
+            assert!(
+                sec.panel.width() >= 300.0 || phone,
+                "{label}: the desktop panel keeps its width"
+            );
+            assert!(
+                sec.panel.height() >= 200.0 || !phone,
+                "{label}: the phone panel keeps the metrics and the numerics"
+            );
+        }
+    }
+
+    /// Issue #81, criterion 3: **no label overlaps another, and every label sits inside the
+    /// section's own rect** - the Phase-1 frames check's own two predicates, applied to the
+    /// drawing's real measured label rects (`labels` is the painter's own source, see `ui`).
+    #[test]
+    fn no_label_overlaps_another_at_the_four_target_sizes() {
+        let p = font_painter();
+        let measure = |s: &str, f: FontId| kit::measure(&p, s, f);
+        let grid = fixture_grid();
+        for (label, w, h, phone) in TARGETS {
+            let sec = layout(area(w, h), phone);
+            let labels = labels(&sec, &grid, phone, &measure);
+            assert_eq!(labels.len(), 6, "{label}: the section's six labels");
+            let stage = sec.stage;
+            for (i, a) in labels.iter().enumerate() {
+                assert!(
+                    a.rect.left() >= stage.left() - 1.0
+                        && a.rect.top() >= stage.top() - 1.0
+                        && a.rect.right() <= stage.right() + 1.0
+                        && a.rect.bottom() <= stage.bottom() + 1.0,
+                    "{label}: {} at {:?} leaves the stage {stage:?}",
+                    a.key,
+                    a.rect
+                );
+                for b in labels.iter().skip(i + 1) {
+                    let dx = a.rect.right().min(b.rect.right()) - a.rect.left().max(b.rect.left());
+                    let dy = a.rect.bottom().min(b.rect.bottom()) - a.rect.top().max(b.rect.top());
+                    assert!(
+                        !(dx > 0.5 && dy > 0.5),
+                        "{label}: {} and {} share {dx:.1}x{dy:.1} px",
+                        a.key,
+                        b.key
+                    );
+                }
+            }
+        }
+    }
 }

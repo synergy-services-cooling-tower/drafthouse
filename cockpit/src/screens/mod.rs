@@ -25,6 +25,18 @@ pub mod report;
 pub mod size;
 pub mod water;
 
+/// The fixture-equals-native-CLI tests (issue #83's load-bearing test): the four workspaces, the
+/// settings both paths take, and the numbers both must print. Test-only, and real-engine-only
+/// (there is no CLI without the engine).
+#[cfg(all(test, feature = "real-engine"))]
+mod fixture_equals_cli;
+
+/// The crossflow fixture against the same native CLI (issue #84's load-bearing test): the UI's
+/// crossflow run and `crossflow`/`convergence` on the same grid inputs, at exact f64 bits. Reuses
+/// [`fixture_equals_cli`]'s walker over the CLI's printed bytes. Test-only, real-engine-only.
+#[cfg(all(test, feature = "real-engine"))]
+mod crossflow_equals_cli;
+
 use std::cell::RefCell;
 use std::sync::Mutex;
 

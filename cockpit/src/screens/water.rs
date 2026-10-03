@@ -58,6 +58,8 @@ pub fn ui(ui: &mut egui::Ui, st: &mut State, draft: &mut EngineInput, env: &Env,
         }
     };
     let to_m3h = |kg_s: f64| kg_s / w.density * 3600.0;
+    // The same flows per day (issue #83: the balance is read in m³/hr and m³/day).
+    let to_m3d = |m3h: f64| m3h * 24.0;
     // the parts as shown, rounded so they add up to the shown make-up (picture and panel agree)
     let parts = round_parts(
         &[
@@ -634,6 +636,15 @@ pub fn ui(ui: &mut egui::Ui, st: &mut State, draft: &mut EngineInput, env: &Env,
                 kit::sans(10.5),
                 t::MUTED,
             );
+            // the same flow per day, under the m³/h value (issue #83's unit pair)
+            text(
+                &p,
+                pos2(inner.right(), vr.bottom() + 1.0),
+                Align2::RIGHT_TOP,
+                &format!("{:.1} m³/day", to_m3d(v)),
+                kit::mono(10.5),
+                t::MUTED,
+            );
             kit::src_mark(&p, pos2(vr.left() - 14.0, vr.center().y), Src::Calc, BAL);
             let ps = if pct > 0.0 && pct < 0.5 {
                 "<1%".to_string()
@@ -657,7 +668,7 @@ pub fn ui(ui: &mut egui::Ui, st: &mut State, draft: &mut EngineInput, env: &Env,
             t::AIR,
             false,
         );
-        y += 28.0;
+        y += 44.0;
         row(
             y,
             "drift",
@@ -666,7 +677,7 @@ pub fn ui(ui: &mut egui::Ui, st: &mut State, draft: &mut EngineInput, env: &Env,
             DRIFT,
             false,
         );
-        y += 28.0;
+        y += 44.0;
         row(
             y,
             "blowdown",
@@ -675,7 +686,7 @@ pub fn ui(ui: &mut egui::Ui, st: &mut State, draft: &mut EngineInput, env: &Env,
             BLOWDOWN,
             false,
         );
-        y += 30.0;
+        y += 46.0;
         p.line_segment(
             [pos2(inner.left(), y - 6.0), pos2(inner.right(), y - 6.0)],
             Stroke::new(1.0, t::LINE),
@@ -716,7 +727,7 @@ pub fn ui(ui: &mut egui::Ui, st: &mut State, draft: &mut EngineInput, env: &Env,
             t::MUTED,
         );
     } else {
-        // phone: the four numbers as a 2x2 grid under the slider
+        // phone: the four numbers as a 2x2 grid under the slider, each with its m³/day line
         let cw = inner.width() / 2.0;
         for (i, (name, v, col)) in [
             ("make-up", to_m3h(w.makeup_kg_s), t::WATER),
@@ -729,7 +740,7 @@ pub fn ui(ui: &mut egui::Ui, st: &mut State, draft: &mut EngineInput, env: &Env,
         {
             let at = pos2(
                 inner.left() + cw * (i % 2) as f32,
-                y + 6.0 + 48.0 * (i / 2) as f32,
+                y + 6.0 + 60.0 * (i / 2) as f32,
             );
             kit::metric_src(
                 &p,
@@ -741,6 +752,14 @@ pub fn ui(ui: &mut egui::Ui, st: &mut State, draft: &mut EngineInput, env: &Env,
                 col,
                 Src::Calc,
                 BAL,
+            );
+            text(
+                &p,
+                pos2(at.x, at.y + 40.0),
+                Align2::LEFT_TOP,
+                &format!("{:.1} m³/day", to_m3d(v)),
+                kit::mono(10.5),
+                t::MUTED,
             );
         }
     }

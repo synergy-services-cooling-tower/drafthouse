@@ -1,6 +1,6 @@
 [package]
 name = "drafthouse-cockpit"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "Synergy Drafthouse cockpit - the owner-approved visual pass (issue #55), imported as the product UI (issue #58): an illustrative engineering instrument over the engine contract, on the real engine by default."
 license = "PolyForm-Noncommercial-1.0.0"

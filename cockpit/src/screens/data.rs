@@ -59,6 +59,10 @@ pub const CURVE_FLOW_PCT: [f64; 3] = [80.0, 100.0, 120.0];
 /// The order the ranges are computed in (indices into `CURVE_RANGE`): the one the screen opens on first.
 const CURVE_RANGE_ORDER: [usize; 3] = [1, 0, 2];
 
+/// The crossflow screen's own grid (issue #84): the cells the screen solves and the drawing paints.
+/// The fixture-equals-CLI test spells it as `--cells {XF_CELLS}`, so both paths solve the same grid.
+pub const XF_CELLS: usize = 14;
+
 // ======================================================================================== types
 
 #[derive(Clone, Debug, Default)]
@@ -129,6 +133,11 @@ pub struct RatePoint {
     pub design_lg: f64,
     pub test_lg: f64,
     pub cap_lg: f64,
+    /// The fitted whole-tower characteristic's coefficient and exponent (`C` and `m`,
+    /// `testCharacteristicCoefficient` / `characteristicExponent` from
+    /// `capability::evaluate_characteristic_capability`): KaV/L = C · (L/G)^m through the test point.
+    pub test_c: f64,
+    pub exponent_m: f64,
     pub curve: Vec<(f64, f64, f64)>,
     pub band: Option<(f64, f64)>,
     pub mc_mean: Option<f64>,
@@ -175,15 +184,50 @@ pub struct WaterData {
     pub check_m3_h: f64,
 }
 
+/// The engine's three-grid study ([`eng::crossflow_convergence_study`]): the same grid inputs solved
+/// on an `n`/`2n`/`4n` ladder, its observed order and the extrapolated answer. Issue #84's second
+/// acceptance criterion wants the solver's numerical quality on the surface, so the panel shows
+/// this and the fixture-equals-CLI test pins every number against the CLI's `convergence` command.
+#[derive(Clone, Debug, Default)]
+pub struct XfStudy {
+    pub cells: [usize; 3],
+    pub cold: [f64; 3],
+    pub order: Option<f64>,
+    pub extrapolated: f64,
+    pub fine_error: f64,
+    pub gci_pct: f64,
+    pub note: &'static str,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct XfGrid {
     pub cand: Cand,
-    pub cold_c: f64,
     pub hot_c: f64,
     pub wb_c: f64,
+    /// The engine's own answer, carried whole ([`eng::solve_crossflow_grid`]'s scalars): the panel
+    /// paints a few of them, the fixture-equals-CLI test (issue #84) reads all of them.
+    pub cold_c: f64,
+    pub range_c: f64,
+    pub approach_c: f64,
+    pub heat_kw: f64,
+    pub water_kw: f64,
+    pub cp_kj_kg_k: f64,
+    pub outlet_db: f64,
+    pub outlet_hr: f64,
+    pub outlet_h: f64,
     pub water: Vec<Vec<f64>>,
     pub air_h: Vec<Vec<f64>>,
-    pub outlet_db: f64,
+    /// The convergence block: the grid actually solved, the doubled grid Richardson extrapolated
+    /// from, the extrapolated answer, and the engine's own discretisation-error estimate with its
+    /// stated meaning (AC 2's error estimate, shown with the result).
+    pub cells: [usize; 2],
+    pub fine_cells: Option<[usize; 2]>,
+    pub coarse_cold_c: f64,
+    pub fine_cold_c: Option<f64>,
+    pub richardson_cold_c: f64,
+    pub error_c: Option<f64>,
+    pub error_meaning: &'static str,
+    pub study: XfStudy,
     pub ms: f64,
 }
 
@@ -387,7 +431,12 @@ fn cand_of(c: &eng::SelectionCandidate, crossflow: bool, footprint: f64) -> Cand
         cold_c: c.thermal.cold_water_c,
         capacity_kg_s: c.capacity_kg_s,
         cap_ratio: c.capability_ratio,
-        power_kw: c.electrical_input_kw,
+        // Fan power is the engine's own `fan_power_kw` for this candidate: the fan operating point's
+        // shaft power - exactly the field the answer bar paints (`EngineOutput.fan_power_kw`, which
+        // `RealEngine::run` fills from this same value). It used to be the electrical input, which
+        // made the winner card's "fan power" disagree with the answer bar's for the same candidate
+        // (issue #83's design-round defect).
+        power_kw: c.fan_operating_point.shaft_power_kw,
         footprint_m2: footprint,
         makeup_kg_s: c.water_balance.makeup_kg_s,
         drift_ppm: c.airside.drift_ppm,
@@ -726,17 +775,45 @@ impl Cache {
                 best.available_merkel,
             )
             .with_pressure(draft.duty.pressure_pa)
-            .with_cells(14, 14)
-            .with_richardson(false);
+            .with_salinity(draft.duty.salinity_g_kg)
+            .with_cells(XF_CELLS, XF_CELLS);
             let r = eng::solve_crossflow_grid(&input).map_err(|e| e.to_string())?;
+            // Issue #84 AC 2: the optional three-grid study runs with the result, so the panel can
+            // show the solver's numerical quality next to its answer (and the CLI test can pin it).
+            let study = eng::crossflow_convergence_study(&eng::CrossflowStudyInput::new(input))
+                .map_err(|e| e.to_string())?;
+            let conv = r.grid_convergence;
             Ok(XfGrid {
                 cand: best,
-                cold_c: r.cold_water_c,
                 hot_c: draft.duty.hot_water_c,
                 wb_c: draft.duty.wet_bulb_c,
+                cold_c: r.cold_water_c,
+                range_c: r.range_c,
+                approach_c: r.approach_c,
+                heat_kw: r.heat_transfer_kw,
+                water_kw: r.water_energy_kw,
+                cp_kj_kg_k: r.cp_water_kj_kg_k,
+                outlet_db: r.outlet_air_state.dry_bulb_c,
+                outlet_hr: r.outlet_air_state.humidity_ratio,
+                outlet_h: r.outlet_air_state.enthalpy_kj_kg_dry_air,
                 water: r.water_temperature_grid_c,
                 air_h: r.air_enthalpy_grid_kj_kg_dry_air,
-                outlet_db: r.outlet_air_state.dry_bulb_c,
+                cells: conv.coarse_cells,
+                fine_cells: conv.fine_cells,
+                coarse_cold_c: conv.coarse_cold_water_c,
+                fine_cold_c: conv.fine_cold_water_c,
+                richardson_cold_c: conv.richardson_cold_water_c,
+                error_c: conv.estimated_discretization_error_c,
+                error_meaning: conv.error_estimate_meaning,
+                study: XfStudy {
+                    cells: study.cells,
+                    cold: study.cold_water_c,
+                    order: study.observed_order,
+                    extrapolated: study.extrapolated_cold_water_c,
+                    fine_error: study.fine_grid_error_estimate_c,
+                    gci_pct: study.grid_convergence_index_pct,
+                    note: study.interpretation,
+                },
                 ms: now_ms() - s,
             })
         }
@@ -791,6 +868,8 @@ fn rate(d: &EngineInput, o: &EngineOutput) -> RateData {
                         design_lg: r.design_water_to_dry_air_ratio,
                         test_lg: r.test_water_to_dry_air_ratio,
                         cap_lg: r.capability_water_to_dry_air_ratio,
+                        test_c: r.test_characteristic_coefficient,
+                        exponent_m: r.characteristic_exponent,
                         curve: r
                             .curves
                             .iter()

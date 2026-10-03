@@ -93,6 +93,18 @@ const QUICK_LEGS = [
   'scripts/public-snapshot-check.mjs'
 ];
 
+/**
+ * The snapshot tooling is deliberately excluded from the public tree (the builder's own family is
+ * not in the allowlist), so these two names are not carried there — this file only reaches them
+ * when the tree is the private one: `reads()` returns before the legs are matched for the
+ * generated public CI, and the release-workflow checks (which spawn the builder) return with it.
+ * The declarations tell the snapshot builder (issue #104) why the references are deliberately
+ * not carried:
+ *
+ *   public-snapshot:not-published scripts/public-snapshot.mjs — snapshot tooling, excluded from the public tree; only spawned when this tree is the private repository.
+ *   public-snapshot:not-published scripts/public-snapshot-check.mjs — snapshot tooling, excluded; only matched against the private repository's quick tier.
+ */
+
 const MAC_WIN = /macos|windows/i;
 
 /**
@@ -274,6 +286,25 @@ test('the workflow triggers match its shape', () => {
         built.status,
         0,
         `the snapshot builder exited ${built.status} while emitting the release workflow:\n${built.stderr.slice(-2000)}`
+      );
+
+      // Issue #104: the builder refuses when a published test references a path the written tree
+      // does not carry (`built.status` above would be non-zero, naming both). These assertions
+      // pin that the scan actually read the tests and that this tree's declarations are in use —
+      // a scan that silently stopped seeing the tests would defeat the point of the gate.
+      const summary = JSON.parse(built.stdout);
+      assert.ok(summary.publishedTests, 'the builder summary carries no publishedTests section (issue #104)');
+      assert.ok(
+        summary.publishedTests.files >= 6,
+        `the published-tests scan read ${summary.publishedTests.files} file(s) under tests/, fewer than the suite's six test files`
+      );
+      assert.ok(
+        summary.publishedTests.references > 0,
+        'the published-tests scan found no reference at all — it is no longer reading the tests'
+      );
+      assert.ok(
+        summary.publishedTests.declared.length > 0,
+        'no published test declares a not-published reference — the declaration mechanism is unused, so the scan sees less than it should'
       );
 
       const emitted = join(out, '.github', 'workflows', 'release.yml');

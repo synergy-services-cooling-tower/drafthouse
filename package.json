@@ -1,6 +1,6 @@
 {
   "name": "synergy-drafthouse",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Synergy Drafthouse — cooling-tower engineering, every step shown. Open cooling-tower engineering calculations: Merkel thermal rating, air-side and fan balance, water balance, and component selection, with step-by-step worked derivations.",

@@ -27,6 +27,9 @@ pub const DANGER_SOFT: Color32 = Color32::from_rgb(0x3d, 0x1b, 0x1b);
 pub const OK: Color32 = Color32::from_rgb(0x4f, 0xb8, 0x87);
 pub const OK_SOFT: Color32 = Color32::from_rgb(0x14, 0x30, 0x27);
 pub const WATER: Color32 = Color32::from_rgb(0x4a, 0x9d, 0xe0);
+/// Issue #91: the hot end of the water circuit - the water enters at the spray, leaves at the basin, and the
+/// falling water is drawn as that cooling (a warm terracotta, distinct from the synthetic-data amber).
+pub const WATER_HOT: Color32 = Color32::from_rgb(0xd9, 0x7c, 0x5a);
 pub const AIR: Color32 = Color32::from_rgb(0xa8, 0xc8, 0xd8);
 
 // ---- additions for the instrument layer ----
@@ -47,6 +50,26 @@ pub const GHOST: Color32 = Color32::from_rgb(0x2f, 0xb3, 0xc9);
 pub const RAIL_BG: Color32 = Color32::from_rgb(0x11, 0x1b, 0x22);
 
 /// Fill-layer palette: same hues as the baseline, so a fill id means the same thing in both crates.
+/// The warm middle of the water's thermal walk: a sand tone, so the hue reads as cooling water rather than
+/// as blue mixed into orange (a two-stop blue -> terracotta blend passes through grey-violet, which reads as
+/// neither). Three stops: basin blue, warm sand, spray terracotta.
+pub const WATER_SAND: Color32 = Color32::from_rgb(0xc0, 0x93, 0x66);
+
+/// The falling water's colour at `t01` along its fall: 0.0 = the cold end (the basin), 1.0 = the hot end
+/// (the spray header). The two *ends* are the run's own water temperatures; the walk between them - three
+/// stops, cool to sand to warm - is this pass's look, and how far down the hot end reaches is scaled by
+/// `drafthouse_cockpit_seams::mapping::water_ramp`.
+pub fn water_tint(t01: f32) -> Color32 {
+    let t01 = t01.clamp(0.0, 1.0);
+    let (a, b, u) = if t01 <= 0.5 {
+        (WATER, WATER_SAND, t01 * 2.0)
+    } else {
+        (WATER_SAND, WATER_HOT, (t01 - 0.5) * 2.0)
+    };
+    let mix = |x: u8, y: u8| -> u8 { (x as f32 + (y as f32 - x as f32) * u) as u8 };
+    Color32::from_rgb(mix(a.r(), b.r()), mix(a.g(), b.g()), mix(a.b(), b.b()))
+}
+
 pub fn fill_color(fill_id: &str) -> Color32 {
     match fill_id {
         "FILM-MF20" => Color32::from_rgb(0x5c, 0xa8, 0xb8),

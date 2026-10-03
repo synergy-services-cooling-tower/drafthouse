@@ -15,6 +15,16 @@
 # the gate is stated for the release build, which is the one the CI job `cockpit` builds and the
 # release workflow publishes. `fast` and `dev` builds print their size without gating (they are not
 # the shipped bytes).
+#
+# Issue #82, the size budget: the same release gate also enforces the committed budget
+# (`cockpit/wasm-budget.json`: raw and gzipped, the size the payload had when the budget was set),
+# through `cockpit/tools/wasm-budget.mjs` - the one place the comparison lives. `COCKPIT_WASM_BUDGET`
+# points the check at another budget file (the RED/GREEN knob); the CI jobs build the release payload
+# with this script, so an over-budget payload fails them here.
+#
+# `COCKPIT_WASM_SKIP_BUILD=1` gates the `pkg/` that is already there instead of rebuilding - the
+# RED/GREEN pair reruns the gate in a second, and a job that just built the payload can re-check it.
+# CI never sets it, so CI always gates the bytes it just built.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -24,6 +34,7 @@ CRATE="$ROOT"
 # build is its own cache (gitignored), so the engine's recorded artifact builds stay untouched.
 TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/target}"
 LIMIT="${COCKPIT_GZIP_LIMIT_BYTES:-8388608}"
+SKIP_BUILD="${COCKPIT_WASM_SKIP_BUILD:-0}"
 
 MODE="${1:-release}"
 if [ "$#" -gt 0 ]; then shift; fi
@@ -41,9 +52,13 @@ rustup target list --installed 2>/dev/null | grep -qx wasm32-unknown-unknown \
   || { echo "wasm32-unknown-unknown missing: rustup target add wasm32-unknown-unknown" >&2; exit 1; }
 
 cd "$CRATE"
-echo "== wasm-pack build ($MODE, CARGO_TARGET_DIR=$TARGET_DIR) =="
-CARGO_TARGET_DIR="$TARGET_DIR" wasm-pack build --target web --out-dir pkg --no-typescript \
-  "${PROFILE_FLAG[@]}" ${CARGO_ARGS[@]+"${CARGO_ARGS[@]}"}
+if [ "$SKIP_BUILD" = "1" ]; then
+  echo "== wasm-pack build skipped (COCKPIT_WASM_SKIP_BUILD=1): gating the existing pkg =="
+else
+  echo "== wasm-pack build ($MODE, CARGO_TARGET_DIR=$TARGET_DIR) =="
+  CARGO_TARGET_DIR="$TARGET_DIR" wasm-pack build --target web --out-dir pkg --no-typescript \
+    "${PROFILE_FLAG[@]}" ${CARGO_ARGS[@]+"${CARGO_ARGS[@]}"}
+fi
 
 WASM="$CRATE/pkg/drafthouse_cockpit_bg.wasm"
 [ -f "$WASM" ] || { echo "no wasm at $WASM" >&2; exit 1; }
@@ -63,4 +78,7 @@ if [ "$GATE" = "1" ]; then
     exit 1
   fi
   echo "GZIP SIZE GATE: OK - ${GZ} bytes gzipped, limit ${LIMIT}"
+
+  # Issue #82: the committed budget, raw and gzipped, measured from the bytes above.
+  node "$HERE/wasm-budget.mjs" --raw "$RAW" --gzip "$GZ" --label "$MODE"
 fi

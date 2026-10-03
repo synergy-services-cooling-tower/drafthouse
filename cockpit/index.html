@@ -56,14 +56,22 @@
   #viz-nav button#nav-freeze { background: var(--amber); color: var(--ink); border-color: var(--amber); font-weight: 600; }
   #viz-nav button#nav-freeze[aria-pressed="false"] { background: var(--raised); color: var(--fg); border-color: var(--line); font-weight: 400; }
   #viz-nav :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+  /* Issue #91: picker row controls only while a picker is open; one less row of buttons the rest of the time. */
+  #viz-nav .picker-only { display: contents; }
+  #viz-root:not([data-picker]) #viz-nav .picker-only, #viz-root[data-picker=""] #viz-nav .picker-only { display: none; }
+  #viz-nav button[aria-pressed="true"]#nav-motion, #viz-nav button[aria-pressed="true"]#nav-notes { background: #143a45; border-color: var(--primary); color: #fff; }
   #viz-nav .spacer { flex: 1 1 auto; }
   #viz-nav .hint { color: var(--muted); font-size: 11px; white-space: nowrap; }
   #viz-nav .sep { width: 1px; height: 22px; background: var(--line); }
   @media (max-width: 760px) {
     #viz-nav { gap: 6px; padding: 4px 6px; min-height: 52px; }
-    #viz-nav button, #viz-nav select { min-height: 40px; padding: 8px 10px; }
+    #viz-nav button, #viz-nav select { min-height: 44px; padding: 10px 12px; }
     #viz-nav .hint { display: none; }
     #viz-nav .nav-label { display: none; }
+    /* #91 round 2: one row on a phone. The bays are tapped on the tower itself and a part is swapped
+       from the bay's own detail, so the picker group and the streamline emphasis fold away here; the
+       picker's own row controls still appear while one is open. */
+    #viz-nav .pick-open, #viz-nav .focus-only, #viz-nav .sep { display: none; }
   }
 
   /* Accessibility mirror: real live text for screen readers and keyboard users, visually out of the way. */
@@ -89,32 +97,33 @@
 
   <!-- Round 4, item 5: ONE view bar. The VIEW group that used to live here is gone - the header's tabs are
        the only view switcher, on a phone too. Round 4, item 1 removed the CELLS group, the cutaway and the
-       camera reset with the 3D view. What is left is what lives nowhere else. -->
+       camera reset with the 3D view. #91 round 2 removed the RPM and NOZZLES groups: fan speed is the fan
+       bay's own control and the nozzle bank's pitch/pattern are the nozzle bay's, both inside their bay's
+       detail card (one implementation, one home per surface - the Curves view carries the same fan row
+       under its chart). What is left is what lives nowhere else. -->
   <nav id="viz-nav" aria-label="Instrument controls">
-    <span class="nav-label">RPM</span>
-    <button id="nav-rpm-down" type="button" title="Slower ([)">−</button>
-    <button id="nav-rpm-up" type="button" title="Faster (]">+</button>
-    <button id="nav-reset" type="button" title="Back to the fixture's own ratio (R)">fixture 0.78</button>
-    <span class="sep"></span>
-    <span class="nav-label">Nozzles</span>
-    <button id="nav-space-down" type="button" title="Tighter nozzle pitch">pitch −</button>
-    <button id="nav-space-up" type="button" title="Wider nozzle pitch">pitch +</button>
-    <span class="sep"></span>
     <span class="nav-label">Bay picker</span>
+    <span class="pick-open">
     <button id="nav-pick-fan" type="button" title="Open the fan bay's picker">fan</button>
     <button id="nav-pick-drift" type="button" title="Open the drift bay's picker">drift</button>
     <button id="nav-pick-fill" type="button" title="Open the fill bay's picker">fill</button>
     <button id="nav-pick-nozzle" type="button" title="Open the nozzle bay's picker">nozzle</button>
+    </span>
+    <!-- Issue #91: the picker's row controls exist only while a picker is open (data-picker on #viz-root). -->
+    <span class="picker-only">
     <button id="nav-pick-prev" type="button" title="Picker row up (arrow up)">row ↑</button>
     <button id="nav-pick-next" type="button" title="Picker row down (arrow down)">row ↓</button>
     <button id="nav-pick-pick" type="button" title="Pick the highlighted row (enter)">pick</button>
     <button id="nav-pick-close" type="button" title="Close the picker (esc)">close</button>
+    </span>
     <span class="sep"></span>
     <span class="nav-label">Overlay</span>
-    <button id="nav-focus" type="button" title="Cycle the overlay emphasis (tab)">streamlines</button>
+    <button id="nav-focus" type="button" class="focus-only" title="Cycle the overlay emphasis (tab)">streamlines</button>
     <button id="nav-freeze" type="button" aria-pressed="false" title="Hold the animation clock for a reproducible frame (F)">freeze</button>
+    <button id="nav-motion" type="button" aria-pressed="false" title="Reduced motion: hold the flow, droplets and fan still (M)">motion</button>
     <span class="spacer"></span>
-    <span class="hint">1/2/3 view · [ ] rpm · R fixture · G grid · F freeze · B bay · E picker</span>
+    <!-- Issue #91: the key list moved into the notes drawer (I), with every sentence the screen used to paint. -->
+    <button id="nav-notes" type="button" aria-pressed="false" title="Notes, validation and keyboard (I)">notes</button>
   </nav>
 
   <!-- Live text mirror: the instrument's own numbers, as text. -->
@@ -142,6 +151,8 @@
        is checked against, and one entry per text unit (id, text, drawn rect, available width, natural width,
        lines, overflow). Written by the Rust app; read by tools/clip-check.mjs; never shown. -->
   <pre id="mirror-clip" hidden></pre>
+  <!-- Issue #91: every text shape the frame painted (JSON), for the on-screen word count. Never shown. -->
+  <pre id="mirror-words" hidden></pre>
 </div>
 
 <script type="module">
@@ -182,7 +193,13 @@ const options = {
   grid: params.get('grid') === null ? null : params.get('grid') !== '0',
   engine: params.get('engine') || null,
   frozen: params.get('frozen') === '1',
-  reduced_motion: params.get('reduced_motion') === '1',
+  // Issue #91: `?t=<seconds>` - freeze the animations at that clock value (a recorder walks the animation
+  // in steps with it; `?frozen=1` is the same thing at the default 2.5 s).
+  t: num('t'),
+  // Issue #91: the URL wins; without one, the OS setting decides.
+  reduced_motion: params.get('reduced_motion') === null
+    ? !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+    : params.get('reduced_motion') === '1',
   // Round 2: the bay focus / picker / 3D configuration, all staged the same way round 1 staged the rest.
   bay: params.get('bay') || null,
   picker: params.get('picker') || null,
@@ -194,6 +211,11 @@ const options = {
   // Round 3: the parts rail and the honesty legend, staged the same way as everything else.
   rail: params.get('rail') === null ? null : params.get('rail') !== '0',
   legend: params.get('legend') === null ? null : params.get('legend') !== '0',
+  // Issue #91: the notes drawer and the setup drawer, staged the same way.
+  notes: params.get('notes') === null ? null : params.get('notes') === '1',
+  panel: params.get('panel') === null ? null : params.get('panel') === '1',
+  // #91 round 2: the tap-detail card over the tower (?detail=fan|drift|fill|nozzle|op|rain|inlet|fixed).
+  detail: params.get('detail'),
   // Round 4: the custom-part form, the duty & site edits and the parameter card, staged the same way.
   form: params.get('form') || null,
   form_fields: params.get('form-fields') || null,
@@ -223,13 +245,10 @@ document.title = `Synergy Drafthouse (${internal ? 'internal' : 'public'} host)`
 
 const setPressed = (id, on) => { const el = document.getElementById(id); if (el) el.setAttribute('aria-pressed', on ? 'true' : 'false'); };
 // Round 4, item 5: no VIEW group here - the header's tabs own the view, so there is nothing to wire.
-document.getElementById('nav-rpm-down').addEventListener('click', () => window.__viz.dispatch('nudge:-1'));
-document.getElementById('nav-rpm-up').addEventListener('click', () => window.__viz.dispatch('nudge:1'));
-document.getElementById('nav-reset').addEventListener('click', () => window.__viz.dispatch('reset'));
-document.getElementById('nav-space-down').addEventListener('click', () => window.__viz.dispatch('spacing-step:-1'));
-document.getElementById('nav-space-up').addEventListener('click', () => window.__viz.dispatch('spacing-step:1'));
 document.getElementById('nav-focus').addEventListener('click', () => window.__viz.dispatch('focus-next'));
 document.getElementById('nav-freeze').addEventListener('click', () => window.__viz.dispatch('freeze-toggle'));
+document.getElementById('nav-motion').addEventListener('click', () => window.__viz.dispatch('motion'));
+document.getElementById('nav-notes').addEventListener('click', () => window.__viz.dispatch('notes'));
 for (const bay of ['fan', 'drift', 'fill', 'nozzle']) {
   document.getElementById('nav-pick-' + bay).addEventListener('click', () => window.__viz.dispatch('picker:open:' + bay));
 }
@@ -251,7 +270,7 @@ document.addEventListener('keydown', (e) => {
   else if (key === 'g' || key === 'G') { window.__viz.dispatch('grid-toggle'); e.preventDefault(); }
   else if (key === 'f' || key === 'F') { window.__viz.dispatch('freeze-toggle'); e.preventDefault(); }
   else if (key === 'Tab') { window.__viz.dispatch('focus-next'); e.preventDefault(); }
-  else if (key === '1' || key === '2' || key === '3') { window.__viz.dispatch('view:' + ['cockpit', 'curves', 'seams'][Number(key) - 1]); e.preventDefault(); }
+  else if (key === '1' || key === '2') { window.__viz.dispatch('view:' + ['cockpit', 'curves'][Number(key) - 1]); e.preventDefault(); }
   // One path per key: the picker's Esc / arrows / Enter are the canvas app's own keyboard (below), so the
   // page only drives the keys the app does not read itself. Round 4 removed `4` (the 3D view) and `C` (the
   // cutaway) along with the view itself.
@@ -264,6 +283,8 @@ let lastFrozen = null, lastFocus = null;
 setInterval(() => {
   const frozen = root.dataset.frozen === '1';
   if (frozen !== lastFrozen) { lastFrozen = frozen; setPressed('nav-freeze', frozen); }
+  setPressed('nav-motion', root.dataset.motion === 'reduced');
+  setPressed('nav-notes', root.dataset.notes === 'open');
   const focus = root.dataset.focus;
   if (focus && focus !== lastFocus) {
     lastFocus = focus;
@@ -299,5 +320,80 @@ if (internal) {
   requestAnimationFrame(() => requestAnimationFrame(boot));
 }
 </script>
+
+  <script>
+    // #91 round 2: the real-GPU frame-rate probe. Armed only by `?perf=<tag>`; it counts animation frames
+    // for six seconds and reports the result, with the WebGL renderer string, to the page's own origin -
+    // so a phone on the tailnet can be measured by opening one URL, with no device-side harness, and the
+    // number lands in the serving log. Nothing runs without the parameter, and nothing is painted.
+    (() => {
+      const params = new URLSearchParams(location.search);
+      const tag = params.get('perf');
+      if (!tag) return;
+      // the probe publishes its own progress, so a measurement that never reports can be diagnosed from
+      // the page itself (`window.__perfProbe`) instead of guessed at.
+      const log = (state, extra = {}) => {
+        window.__perfProbe = { tag, state, at: new Date().toISOString(), ...extra };
+      };
+      log('armed');
+      // `&warm=<seconds>` waits before counting, so the number is a *steady state* and not an
+      // average that includes the wasm download, instantiation and first uploads. Default: wait
+      // for the app's own ready marker (`#viz-root[data-load=ready]`), because an 18.8 MB module
+      // takes seconds to compile on a phone and a fixed delay can land inside that block - the
+      // first phone run counted 3.1 fps while the main thread was still compiling.
+      const warmMs = 1000 * Number(params.get('warm') ?? 0);
+      const waitReady = () => new Promise((resolve) => {
+        const started = performance.now();
+        const poll = () => {
+          const root = document.getElementById('viz-root');
+          const state = root?.getAttribute('data-load') ?? 'missing';
+          if (state === 'ready' || performance.now() - started > 60000) {
+            log('ready-wait-over', { state, waited_s: ((performance.now() - started) / 1000).toFixed(1) });
+            resolve();
+          } else setTimeout(poll, 120);
+        };
+        poll();
+      });
+      const phase = 'warm';
+      const start = () => {
+        const t0 = performance.now();
+        let frames = 0;
+        log('counting', { warm_ms: warmMs });
+        let done = false;
+        const report = () => {
+          if (done) return;
+          done = true;
+          const elapsed = (performance.now() - t0) / 1000;
+          const fps = frames / elapsed;
+          let renderer = 'unknown';
+          try {
+            const gl = document.createElement('canvas').getContext('webgl2');
+            const dbg = gl && gl.getExtension('WEBGL_debug_renderer_info');
+            renderer = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : 'no-debug-info';
+          } catch (e) {
+            renderer = 'probe-failed';
+          }
+          const q = new URLSearchParams({
+            tag, phase, fps: fps.toFixed(1), renderer, frames: String(frames),
+            elapsed_s: elapsed.toFixed(1),
+            w: innerWidth, h: innerHeight, dpr: devicePixelRatio,
+          });
+          log('reported', { fps: fps.toFixed(1), renderer, frames, elapsed_s: elapsed.toFixed(1) });
+          fetch('/__fps?' + q).catch(() => {});
+        };
+        const tick = () => {
+          frames += 1;
+          if (performance.now() - t0 < 6000) requestAnimationFrame(tick);
+          else report();
+        };
+        requestAnimationFrame(tick);
+        // a page whose animation frames stop - iOS suspends them when the screen sleeps - still reports
+        // what it counted, with `frames` and `elapsed_s`, instead of losing the sample entirely.
+        setTimeout(report, 6500);
+      };
+      if (warmMs > 0) setTimeout(start, warmMs);
+      else waitReady().then(start);
+    })();
+  </script>
 </body>
 </html>

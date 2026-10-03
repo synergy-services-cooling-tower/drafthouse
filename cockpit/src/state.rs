@@ -98,8 +98,6 @@ pub enum View {
     Cockpit,
     /// The operating point on the fan/system curve and the performance curve.
     Curves,
-    /// The data seams the pass binds to.
-    Seams,
     /// Round 2's 3D build/orientation view. Round 4, item 1 took it out of the UI and put the whole module
     /// behind the `three-d` cargo feature (off by default, so the default build links no `bevy_pbr`); with
     /// the feature on, the tab, the CELLS controls and the `4` / `C` keys come back with it.
@@ -111,8 +109,10 @@ impl View {
     pub fn name(self) -> &'static str {
         match self {
             View::Cockpit => "Instrument",
-            View::Curves => "Operating point",
-            View::Seams => "Data seams",
+            // #91 round 2: the Operating point tab is handed to Curves (the sibling lane's Curves
+            // screen carries the fan vs system chart on merge); the Data seams tab is gone - its table is
+            // `docs/COCKPIT_SEAMS.md`, and every number carries its own source mark instead.
+            View::Curves => "Curves",
             #[cfg(feature = "three-d")]
             View::Three => "3D tower",
         }
@@ -121,7 +121,6 @@ impl View {
         match self {
             View::Cockpit => "cockpit",
             View::Curves => "curves",
-            View::Seams => "seams",
             #[cfg(feature = "three-d")]
             View::Three => "3d",
         }
@@ -133,7 +132,6 @@ impl View {
     pub const ALL: &'static [View] = &[
         View::Cockpit,
         View::Curves,
-        View::Seams,
         #[cfg(feature = "three-d")]
         View::Three,
     ];
@@ -359,6 +357,50 @@ impl Picker {
 
 // --------------------------------------------------------------------------------------- the state
 
+/// #91 round 2: what the detail card over the tower is showing. A tap on a bay, a call-out or a
+/// zone band opens it; Esc, its close control or a second tap closes it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Detail {
+    /// A bay: its part, its zone's numbers, and its own controls (the fan's speed, the nozzle bank).
+    Bay(Slot),
+    /// The operating point: airflow, pressure, the plenum, and the way to the Curves view.
+    Op,
+    /// A zone band with no bay of its own: rain + supports, inlet louvres, fixed losses (at the basin).
+    Zone(cockpit::engine::ZoneId),
+}
+
+impl Detail {
+    pub fn slug(self) -> &'static str {
+        use cockpit::engine::ZoneId as Z;
+        match self {
+            Detail::Bay(s) => s.slug(),
+            Detail::Op => "op",
+            Detail::Zone(Z::Rain) => "rain",
+            Detail::Zone(Z::Inlet) => "inlet",
+            Detail::Zone(Z::Fixed) => "fixed",
+            Detail::Zone(Z::Plenum) => "plenum",
+            Detail::Zone(Z::Stack) => "stack",
+            Detail::Zone(Z::Spray) => "spray",
+            Detail::Zone(Z::Drift) => "drift-zone",
+            Detail::Zone(Z::Fill) => "fill-zone",
+        }
+    }
+    pub fn from_slug(s: &str) -> Option<Detail> {
+        use cockpit::engine::ZoneId as Z;
+        Some(match s {
+            "fan" => Detail::Bay(Slot::Fan),
+            "drift" => Detail::Bay(Slot::Drift),
+            "fill" => Detail::Bay(Slot::Fill),
+            "nozzle" => Detail::Bay(Slot::Nozzle),
+            "op" | "plenum" => Detail::Op,
+            "rain" => Detail::Zone(Z::Rain),
+            "inlet" => Detail::Zone(Z::Inlet),
+            "fixed" | "basin" => Detail::Zone(Z::Fixed),
+            _ => return None,
+        })
+    }
+}
+
 /// UI state that is *not* an engine input: selection, drag, nozzle arrangement (not modelled yet), grid.
 #[derive(Resource, Clone, Debug)]
 pub struct Visual {
@@ -379,7 +421,6 @@ pub struct Visual {
     pub nozzle_spacing_m: f64,
     pub nozzle_pattern: Pattern,
     pub grid: bool,
-    pub seams_detail: bool,
     /// Round 2, change A: the open bay-tap picker (at most one).
     pub picker: Option<Picker>,
     /// The picker's last drawn rect in canvas points (`[x, y, w, h]`), so a click inside it is never read as
@@ -414,6 +455,19 @@ pub struct Visual {
     pub duty_open: bool,
     pub water_open: bool,
     pub limits_open: bool,
+    /// Issue #91: the notes drawer - every explanatory sentence the screen used to paint, behind the one
+    /// validation badge (`crate::notes`).
+    pub notes_open: bool,
+    /// Issue #91: the setup drawer - the duty & site form, the full read-out, the fill stack and the nozzle
+    /// bank. Closed by default: the scene is the hero, the drawer slides over it on demand.
+    pub panel_open: bool,
+    /// #91 round 2: the tap-to-detail card over the tower (a bay, the operating point, a zone).
+    pub detail: Option<Detail>,
+    /// #91 round 2: which answer-card row has its source line open (`cold`, `drift`, ...).
+    pub source_open: Option<&'static str>,
+    /// Issue #91: reduced motion - the flow, the droplets and the fan hold still; every value still updates.
+    /// Seeded from `?reduced_motion=1` and from the OS `prefers-reduced-motion` setting.
+    pub reduced_motion: bool,
 }
 
 /// The default three-quarter camera. The number lives in the seam mapping, where every invented value the
@@ -435,7 +489,6 @@ impl Default for Visual {
             nozzle_spacing_m: 1.0,
             nozzle_pattern: Pattern::SingleRow,
             grid: true,
-            seams_detail: false,
             picker: None,
             picker_rect: [0.0; 4],
             picker_sheet: false,
@@ -447,12 +500,17 @@ impl Default for Visual {
             cam_pitch: CAM_DEFAULT.1,
             cam_dist: CAM_DEFAULT.2,
             three_click: None,
-            rail_open: true,
+            rail_open: false,
             legend_open: true,
             // Round 5, item 1: the owner's default - DUTY open, WATER QUALITY and LIMITS collapsed.
-            duty_open: true,
+            duty_open: false,
             water_open: false,
             limits_open: false,
+            notes_open: false,
+            panel_open: false,
+            detail: None,
+            source_open: None,
+            reduced_motion: false,
         }
     }
 }
@@ -953,6 +1011,9 @@ pub struct StartOptions {
     pub engine: Option<String>,
     /// `1` freezes the animations so two frames are byte-comparable.
     pub frozen: Option<bool>,
+    /// `?t=<seconds>` - freeze the animations at that clock value (`?frozen=1` means `?t=2.5`). A recorder
+    /// walks the animation in steps with it, and every step is still a byte-reproducible frame.
+    pub t: Option<f32>,
     pub reduced_motion: bool,
     // ---- round 2 ---------------------------------------------------------------------------------
     /// `?bay=<slot>` - the bay the keyboard is focused on (the affordance proof).
@@ -974,6 +1035,13 @@ pub struct StartOptions {
     pub rail: Option<bool>,
     /// `?legend=0|1` - the section's honesty legend dismissed / shown.
     pub legend: Option<bool>,
+    /// Issue #91: `?notes=1` - open the notes drawer; `?panel=1` - open the setup drawer.
+    pub notes: Option<bool>,
+    pub panel: Option<bool>,
+    /// #91 round 2: open the detail card over the tower (`fan`, `drift`, `fill`, `nozzle`, `op`,
+    /// `rain`, `inlet`, `fixed`), so an evidence frame of a tap-detail is a URL.
+    #[serde(default)]
+    pub detail: Option<String>,
     // ---- round 4 ---------------------------------------------------------------------------------
     /// `?form=<class>` - open the custom-part form for that class (fan / drift / fill / nozzle).
     pub form: Option<String>,

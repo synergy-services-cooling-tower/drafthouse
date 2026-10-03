@@ -90,7 +90,7 @@ pub struct Seam {
 /// Every visual effect of the pass and its binding. Order = the order the panel lists them: the tower
 /// from the air path out (fan, then the stack, then the fill, then the water), then round 4's authoring
 /// seams (a custom record, the parameter card, the duty & site panel and the recorded limits).
-pub const SEAMS: [Seam; 37] = [
+pub const SEAMS: [Seam; 38] = [
     Seam {
         id: "fan.speed_ratio",
         drives: "fan rpm read-out, blade rotation rate, tachometer needle",
@@ -188,6 +188,15 @@ pub const SEAMS: [Seam; 37] = [
         rule: "drop count = clamp(round(flow / 90), 3, 9); the droplet *look* is illustrative",
         engine_field: "same field + a droplet/liquid-loading model (not implemented)",
         code: "drafthouse_cockpit::scene::plan (rain drops) / drafthouse_cockpit_seams::mapping::rain_drop_count",
+        status: Status::Engine,
+    },
+    Seam {
+        id: "water.temperature",
+        drives: "the falling water's colour, from the spray header down to the basin",
+        source: "EngineOutput.cold_water_c and EngineOutput.range_c (the hot end is their recorded sum)",
+        rule: "tint = a three-stop walk (basin blue, sand, spray terracotta - a two-stop blue/orange blend passes through violet) from the spray down to the water surface, with how far down the hot end reaches set by the run's own spread (`mapping::water_ramp`, reference 8 C): a 1 C run shows a short hot band under the spray, the fixture's 5 C run stays warm most of the way. The endpoints are the run's temperatures; the walk between them is the pass's look",
+        engine_field: "same fields + a spray-to-basin temperature profile (not implemented)",
+        code: "drafthouse_cockpit::ui::scene_overlay (falling water) / drafthouse_cockpit::theme::water_tint / drafthouse_cockpit_seams::mapping::water_ramp",
         status: Status::Engine,
     },
     Seam {
@@ -522,6 +531,10 @@ pub fn markdown() -> String {
     s.push_str(&format!(
         "| `SPRAY_HALF_ANGLE_PER_MM_DEG` | {:.2} deg/mm | orifice -> cone width | same - the cone model is not implemented |\n",
         mapping::SPRAY_HALF_ANGLE_PER_MM_DEG
+    ));
+    s.push_str(&format!(
+        "| `WATER_RAMP_REFERENCE_C` | {:.0} C | the run's hot-cold spread -> how much of the warm end the falling water shows | the walk between the engine's two temperatures is a look; 8 C is the spread at which it reads as a full warm-to-cool fall |\n",
+        mapping::WATER_RAMP_REFERENCE_C
     ));
     s.push_str(&format!(
         "| `MIN_BAND_PX` | {:.0} px | a 0.45 m layer -> a visible band | a 0.45 m layer is ~15 px on a 900 px screen at true scale |\n",

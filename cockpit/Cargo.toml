@@ -157,13 +157,17 @@ depends = [
 ]
 
 
-# Issue #58: the shipped wasm payload's size profile - the approved visual pass's own numbers
-# (`opt-level = "z"`, fat LTO, one codegen unit, `panic = "abort"`, stripped symbols). This is the
-# cockpit's workspace root, so the table is read by `tools/build-web.sh release`
+# Issue #58, issue #82: the shipped wasm payload's size profile. `opt-level` was `"z"` at the
+# import; issue #82 measured the profile on this app - one real engine run costs 283.5 ms at `"z"`,
+# 140.6 ms at `"s"` and 111.3 ms at `"3"` (fat LTO and one codegen unit unchanged, plus
+# `panic = "abort"` and stripped symbols) - and the app is engine-bound, so the profile *is* the
+# frame budget: `"3"` is the measured choice (the issue's profile matrix; the private decision
+# D25). This is the cockpit's workspace root, so the table is read by `tools/build-web.sh release`
 # (`wasm-pack build --release`) and by anything else that builds this crate for wasm.
-# `COCKPIT_GZIP_LIMIT_BYTES` (8 MiB default) is the gate the CI job measures it against.
+# Two gates measure the payload: `COCKPIT_GZIP_LIMIT_BYTES` (8 MiB default) and the committed
+# `cockpit/wasm-budget.json`.
 [profile.release]
-opt-level = "z"
+opt-level = 3
 lto = "fat"
 codegen-units = 1
 panic = "abort"

@@ -149,7 +149,16 @@ test('the documented prototype version and catalog revision are current', () => 
 test('the documented smoke figures are what `node scripts/smoke.mjs` prints', () => {
   const quoted = JSON.parse(/```json\n([\s\S]*?)\n```/.exec(document)[1]);
   const result = run(process.execPath, [join('scripts', 'smoke.mjs')]);
-  assert.equal(result.status, 0, `smoke run exited ${result.status}; tail:\n${result.stdout.slice(-2000)}`);
+  // smoke.mjs writes its own errors — and the recorded build's cargo output — to stderr, while the
+  // run captures stdout for the JSON; a failure message that quotes only stdout can come back
+  // empty (PR #93's run 37019674200 lost a diagnostic round to exactly that), so surface both.
+  assert.equal(
+    result.status,
+    0,
+    `smoke run exited ${result.status};`
+      + `\n--- stdout (tail) ---\n${result.stdout.slice(-2000)}`
+      + `\n--- stderr (tail) ---\n${result.stderr.slice(-2000)}`
+  );
   const live = JSON.parse(result.stdout);
 
   const TOLERANCE = 1e-9;

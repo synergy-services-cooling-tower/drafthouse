@@ -39,7 +39,7 @@ every commit.
 | static | `npm run static` | `{"passed": true, "scannedFiles": 64, "syntaxChecked": 40, "javascriptFiles": 40, "htmlDocuments": 1, "markdownFiles": 23, "references": 55, "licenceChecks": 3}` — every surviving module parses (`node --check`), every relative reference the tree makes resolves (JS imports, the served document's subresources, markdown links) and the licence claims hold (the six modules issue #72 adds for the native installers' icons and release path are the difference from the 62/34/34/1/27/58/2 this row read before; at the issue #67 base the same figures were 75/44/44/2/29/79/2) |
 | version-check | `npm run version-check` | `{"passed": true, "verified": false, "version": "0.2.0", "newestTag": null, …}` with `version-check: NOT VERIFIABLE — no v* tag is visible in this clone` on stderr — `package.json`'s version is the source of truth: the five `Cargo.toml`s and both `Cargo.lock`s record it, and it equals the newest `v*` tag or is strictly greater (a release tag whose version was never bumped fails, naming both; a published snapshot tree carries no `v*` tags of its own, so the guard prints `NOT VERIFIABLE` instead of passing silently — its own run above). Since issue #72 the guard also reads the packager metadata: `cockpit/Cargo.toml`'s `[package.metadata.packager]` carries **no** version of its own (so `cargo-packager`, which fills that field from the crate, is fed the guarded number), and a version written into it later must equal the source of truth or the guard fails naming both. The bite proof, with raw exits, is kept with the maintainers |
 | native-icons-check | `npm run native-icons-check` | `{"passed": true, "source": "cockpit/icons/mark.svg", "pngs": ["32x32.png 32x32", "128x128.png 128x128", "128x128@2x.png 256x256", "icon.png 512x512"], "ico": [16, 32, 48, 64, 128, 256]}` — the installer icon set (issue #72) is re-derived from `cockpit/icons/mark.svg` and compared pixel for pixel: the committed PNGs and the PNG payloads inside `icon.ico` are exactly what the neutral mark draws at their sizes, and no file outside the set is present |
-| test | `npm test` | 70 tests, 70 pass, 0 fail — see below |
+| test | `npm test` | 77 tests, 77 pass, 0 fail — see below |
 | smoke | `npm run smoke` | the JSON block below: the documented duty through the pinned engine piece |
 | server-smoke | `npm run server-smoke` | `{"passed": true, "results": [ ... ]}` — six cockpit paths (`/`, the wasm glue, the wasm module, the fixture record, the duty field list, a subset font), HTTP 200, expected MIME types, non-empty bodies (issue #58 re-pointed this leg at the surface that is served; a tree without a built plane prints the NOT VERIFIABLE diagnostic instead) |
 | deploy-check | `npm run deploy-check` | `{"passed": true, "surface": "cockpit", "document": "cockpit/index.html", "fileCount": 9, "totalBytes": 240500, "assets": 8, "manifest": "deploy-manifest.txt", "manifestVerified": true}` (the deploy set is the cockpit plane: its document, the committed assets and the pins it vendors; issue #60 re-pointed this leg at the served surface; issue #73's rename moved the fixture's own bytes, 96851 -> 96797, and the sum with them) |
@@ -56,24 +56,32 @@ Reproduce with `npm test` (which runs `node --test tests/*.test.js`); raw exit s
 head. After issue #60 the suite is the four files whose subject survived the retired surface: the
 deployment-shaped serving tests (`tests/deployment-serving.test.js`), the deploy-set check
 (`tests/deploy-check.test.js`), the retirement gate's regressions (`tests/retirement-check.test.js`)
-and the drift gate itself (`tests/validation-results-drift.test.js`). The JavaScript engine's own tests were the
+and the drift gate itself (`tests/validation-results-drift.test.js`); issue #92 adds the workflow
+lint (`tests/workflow-lint.test.js`), which checks each workflow against its own shape — the private
+CI's billed-minutes tier, and the generated public CI staying untiered; issue #81 adds the
+small-screen geometry (`tests/small-screens.test.js`), which runs
+`docs/design/small-screens-r1/tools/check.mjs` over the round's own frames and — the control the check
+needs — over the frames captured before the fix, where it must fail naming the label overlap and the
+dropped answer card. The JavaScript engine's own tests were the
 reference's, and went with it. Node's runner decorates these lines (`ℹ` in its spec reporter, `#` in
 TAP, depending on where stdout goes); the decoration is dropped here, everything else is verbatim, and
 the duration line is left out because it changes with the host:
 
 ```text
-tests 70
+tests 77
 suites 0
-pass 70
+pass 77
 fail 0
 cancelled 0
 skipped 0
 todo 0
 ```
 
-The suite is hermetic: no cargo, no browser, no network. The engine halves — the native binary and the
-wasm build — are exercised by `npm run smoke` (through the pinned engine piece), the parity legs of the
-chain and `cargo test`.
+The suite is not build-free: `node --test tests/*.test.js` runs the smoke-drift gate, which executes the
+recorded wasm engine build (`bundles/engine.manifest.json`) into `rust/target` through `scripts/smoke.mjs`
+— the quick tier installs the wasm32 target and caches `rust/target` for it. No browser, no network. The
+engine halves — the native binary and the wasm build — are exercised by `npm run smoke` (through the
+pinned engine piece), the parity legs of the chain and `cargo test`.
 
 For the record, the earlier recordings this file carried: the issue #37 run counted 157 tests; the
 run that followed it counted **163 tests** and exited **1** — 162 passed and only the

@@ -319,12 +319,6 @@ pub fn panel(
                 .auto_shrink([false, true])
                 .max_height(170.0)
                 .show(ui, |ui| {
-                    ui.label(
-                        RichText::new("seeded from fixtures/engine-run.json → provenance.duty / provenance.fixed · every change re-runs the engine")
-                            .size(9.5)
-                            .color(t::MUTED),
-                    );
-                    ui.add_space(3.0);
 
                     // water flow: the brief's m3/hr at 1000 kg/m3, with the engine's own pair beside it.
                     let mut flow = duty.water_flow_m3_hr;
@@ -343,24 +337,15 @@ pub fn panel(
                         duty.water_flow_m3_hr = flow;
                     }
                     let kg_s = m::kg_s_from_m3_hr(duty.water_flow_m3_hr);
+                    // Issue #91: the engine's own pair is in the notes drawer; the form keeps the conversion.
                     ui.label(
-                        RichText::new(format!(
-                            "= {} kg/s at 1000 kg/m3 · the engine's own pair: {} kg/s = {} m3/hr at {} kg/m3",
-                            t::fmt(kg_s),
-                            t::fmt(spec.psychro.recorded_water_mass_flow_kg_s),
-                            t::fmt(spec.psychro.recorded_water_flow_m3_hr),
-                            t::fmt(spec.psychro.water_density_kg_m3)
-                        ))
-                        .size(9.0)
-                        .color(t::MUTED),
+                        RichText::new(format!("= {} kg/s", t::fmt(kg_s)))
+                            .size(10.0)
+                            .color(t::MUTED)
+                            .family(t::family_mono_med()),
                     );
                     ui.add_space(2.0);
                     derived_strip(ui, duty, hits, clip);
-                    ui.label(
-                        RichText::new("range and approach are the duty's design pair, live; the read-out reports the engine's own solved cold water and its range_c / approach_c")
-                            .size(9.0)
-                            .color(t::MUTED),
-                    );
                     ui.add_space(2.0);
                     let (hot, target) = edit_pair(
                         ui,
@@ -710,23 +695,22 @@ pub fn panel(
         ui.add_space(4.0);
         ui.horizontal_wrapped(|ui| {
             if v.in_range() {
-                chip(ui, "evidence: inside the recorded sweep", t::VALID);
+                chip(ui, "in recorded range", t::VALID);
             } else {
                 chip(ui, OUT_OF_FIXTURE_RANGE, t::AMBER);
             }
+            // Issue #91: the evidence sentence is in the notes drawer; the ranges stay as numbers.
             ui.label(
                 RichText::new(format!(
-                    "recorded evidence: water flow {:.0}-{:.0} m3/hr ({:.0}-{:.0} kg/s), wet bulb {:.1}-{:.1} C — {}",
+                    "{:.0}–{:.0} m3/hr · WB {:.1}–{:.1} C",
                     spec.evidence.water_flow_m3_hr[0],
                     spec.evidence.water_flow_m3_hr[1],
-                    spec.evidence.water_mass_flow_kg_s[0],
-                    spec.evidence.water_mass_flow_kg_s[1],
                     spec.evidence.wet_bulb_c[0],
                     spec.evidence.wet_bulb_c[1],
-                    spec.evidence.note
                 ))
-                .size(9.0)
-                .color(t::MUTED),
+                .size(10.0)
+                .color(t::MUTED)
+                .family(t::family_mono_med()),
             );
         });
         for line in v.out_of_range.iter() {
@@ -736,11 +720,6 @@ pub fn panel(
                     .color(t::AMBER),
             );
         }
-        ui.label(
-            RichText::new("outside the recorded domain the read-out prints `out of fixture range` instead of a number: the fixture engine may only interpolate what it recorded")
-                .size(9.0)
-                .color(t::MUTED),
-        );
         let _ = phone;
     });
 

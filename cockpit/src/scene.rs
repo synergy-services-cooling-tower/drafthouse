@@ -73,27 +73,53 @@ pub struct Layout {
     /// The fitted fan's stack diameter, in metres (from its stack area).
     pub stack_diameter_m: f32,
     pub phone: bool,
+    /// Issue #81 / #91: **the one scale** - pixels per metre on both axes. `px_per_m_x` and `1 / m_per_px_y`
+    /// are this same number (kept as fields because the ruler and the 3D view read them by those names).
+    pub px_per_m: f32,
+    /// The drawn height of the whole section, in metres (basin floor to stack mouth).
+    pub height_m: f32,
+    /// Issue #91: the call-out gutter right of the tower - every section label is placed here, on a leader
+    /// line to the band it describes, so no label is ever drawn on top of the drawing or of another label.
+    pub gutter: egui::Rect,
+    /// Issue #91: the read-out HUD's zone (top right of the section), `Rect::NOTHING` when the section is
+    /// too narrow to hold it beside the tower - the caller then draws the read-out elsewhere.
+    pub hud: egui::Rect,
 }
 
-/// Vertical fractions of the tower column, top -> bottom. They sum to 1.
-const F_STACK: f32 = 0.11;
-const F_DECK: f32 = 0.055;
-/// Round 5, item 2: the plenum holds the operating-point rail *and* its read-out label, and the label is a
-/// solid plate now (it used to be free text drawn under the fan bay's own labels). The band grew by 3.5 % of
-/// the section's height so the plate sits above the rail instead of across it - the plinth, which is a
-/// pedestal and carries no drawn machinery above the inlets, gave the 3.5 % up.
-const F_PLENUM: f32 = 0.085;
-/// Issue #58, the owner's layout nit 2: the drift and nozzle bays carry a label block of their own
-/// (the record, the zone's engine value, the invitation). A block fits its bay's band in two lines -
-/// the invitation on its own last line, where the bay's tag is drawn beside it - and the two bands
-/// were a line short of that. Both grew, and the plinth (a pedestal that carries no drawn machinery
-/// above the inlets) gave the height up, exactly as it did for the plenum in round 5.
-const F_DRIFT: f32 = 0.075;
-const F_SPRAY: f32 = 0.075;
-const F_FILL: f32 = 0.30;
-const F_RAIN: f32 = 0.07;
-const F_BASIN: f32 = 0.095;
-const F_PLINTH: f32 = 0.14;
+/// Issue #81: the bands are metres, not fractions of the window. These are the drawn heights of the parts the
+/// fixture does not dimension - the same constants the 3D tower uses (`seams::mapping`), so the two views
+/// agree; the spray zone, the fill and the rain zone are the tower record's own heights.
+pub fn band_heights_m(input: Option<&EngineInput>) -> [f32; 8] {
+    let plan = crate::state::cell_plan_m(input) as f32;
+    let stack_d = crate::state::stack_diameter_m(input) as f32;
+    let stack_h = m::stack_height_m(stack_d as f64) as f32;
+    let spray = input
+        .map(|i| i.tower.spray_zone_height_m as f32)
+        .unwrap_or(0.6);
+    let rain = input
+        .map(|i| i.tower.rain_zone_height_m as f32)
+        .unwrap_or(1.4);
+    // The fill band holds the deepest stack the tower record offers (so a layer added later fits the same
+    // drawing), or the authored stack if a custom one is deeper.
+    let authored: f32 = input
+        .map(|i| i.fill_layers.iter().map(|l| l.depth_m as f32).sum())
+        .unwrap_or(0.0);
+    let span = input
+        .and_then(|i| i.tower.fill_depth_options_m.last().copied())
+        .map(|d| d as f32)
+        .unwrap_or(FALLBACK_MAX_DEPTH)
+        .max(authored);
+    [
+        stack_h,
+        m::DECK_T_M as f32,
+        plan * m::PLENUM_HEIGHT_FACTOR as f32,
+        m::DRIFT_BANK_T_M as f32,
+        spray,
+        span,
+        rain,
+        m::BASIN_DEPTH_M as f32,
+    ]
+}
 
 /// The tower record's depth options set the ruler's domain; this is the fallback when there is no draft.
 const FALLBACK_MAX_DEPTH: f32 = 2.1;
@@ -102,83 +128,149 @@ const FALLBACK_MAX_DEPTH: f32 = 2.1;
 /// *area* and a recovery factor, no profile, so the flare is a look (and the README says so).
 pub const STACK_FLARE: f32 = 1.14;
 
+/// Segments per ring when an ellipse is drawn as sprite bars (the stack rim uses [`RIM`]).
+const RING: u32 = 48;
+/// Slices of the fan's disc and of its hub when an ellipse is filled (the renderer draws rectangles).
+const DISC: u32 = 44;
+const HUBSLICE: u32 = 22;
+/// The wheel's halo rings.
+const FAN_GLOW: u32 = 16;
+
+/// Issue #91: headroom above the stack mouth (m) - room for the plume the streamlines leave in.
+pub const HEADROOM_M: f32 = 0.9;
+/// Issue #91: the call-out gutter's width (points), desktop / phone.
+pub const GUTTER_W: f32 = 232.0;
+pub const GUTTER_W_PHONE: f32 = 128.0;
+/// Issue #91: the read-out HUD column (points) - only when the section is wide enough to hold it beside
+/// the tower and the gutter.
+/// #91 round 2: the HUD slot is the answer card's - wide enough for the duty's four inputs on one row.
+pub const HUD_W: f32 = 306.0;
+pub const HUD_MIN_SECTION_W: f32 = 1000.0;
+/// Issue #81: **the section's agreed minimum height** (points). The section is the drawing; the answer card
+/// is an overlay. When the window cannot hold both, the card takes what is above the minimum and scrolls
+/// inside it, so the section is never laid out shorter than this. The number is the phone's own resting
+/// section - the smallest supported viewport, whose eight label plates fit their column at the type floor
+/// (measured 234 px at 390x844; asserted for all four target sizes in
+/// `tests::the_section_keeps_its_agreed_minimum`).
+pub const MIN_SECTION_H: f32 = 230.0;
+/// Issue #81: the gap between the answer card and the section when the card sits above the tower.
+pub const CARD_GAP: f32 = 4.0;
+/// Issue #81: the most height the answer card may take when it sits **above** the tower. The section keeps
+/// [`MIN_SECTION_H`] and the card scrolls inside what is left (a card is never a reason for the drawing to
+/// be squeezed). The `120.0` floor is the least a card can be and still show its duty row.
+pub fn card_max_h(avail_h: f32) -> f32 {
+    (avail_h - MIN_SECTION_H - CARD_GAP).max(120.0).min(avail_h)
+}
+/// Issue #81: is there room for the answer card's own slot (a HUD) beside the tower and the gutter? Below
+/// this width the card goes **above** the tower instead. One rule, read by [`layout`] and by `crate::ui`.
+pub fn hud_fits(area_w: f32, phone: bool) -> bool {
+    !phone && area_w >= HUD_MIN_SECTION_W
+}
+/// The largest scale the section is drawn at (px per metre): past this the tower stops growing and the
+/// spare room is letterboxed, so a 4K window does not draw a 2 m-tall fan bay.
+pub const MAX_PX_PER_M: f32 = 92.0;
+
+/// The section's layout. **Issue #81: one metres-to-points scale for both axes.** Every band's height is a
+/// length in metres ([`band_heights_m`]) and the face width is the tower record's square reading of
+/// `fillAreaM2`; the scale is the largest one at which the whole tower, its headroom and its call-out gutter
+/// fit, and the spare room is letterboxed. Proportions never depend on the window's aspect.
 pub fn layout(area: egui::Rect, input: Option<&EngineInput>, phone: bool) -> Layout {
-    let w = area.width();
-    let h = area.height();
-
-    // Columns: ruler | tower | rail. With the parts tray gone (round 2) the tower takes the width the
-    // tray used to hold, so the machine reads as a machine at both viewports.
-    let ruler_w = if phone { 0.0 } else { 52.0 };
-    let tower_frac = if phone { 0.74 } else { 0.62 };
-    let rail_w = if phone { 16.0 } else { 28.0 };
-
-    let tower_x0 = area.left() + ruler_w;
-    let tower_x1 = (tower_x0 + w * tower_frac).min(area.right() - rail_w - 16.0);
-    let ruler = egui::Rect::from_min_max(area.min, egui::pos2(tower_x0, area.bottom()));
-    let rail_x0 = tower_x1 + (area.right() - tower_x1 - rail_w) * 0.42;
-    let rail = egui::Rect::from_min_max(
-        egui::pos2(rail_x0, area.top() + h * 0.05),
-        egui::pos2(rail_x0 + rail_w, area.bottom() - h * 0.12),
-    );
-
-    let mut y = area.top();
-    let mut band = |frac: f32| {
-        let r =
-            egui::Rect::from_min_max(egui::pos2(tower_x0, y), egui::pos2(tower_x1, y + h * frac));
-        y += h * frac;
-        r
-    };
-    let stack = band(F_STACK);
-    let deck = band(F_DECK);
-    let plenum = band(F_PLENUM);
-    let drift = band(F_DRIFT);
-    let spray = band(F_SPRAY);
-    let fill_band = band(F_FILL);
-    let rain = band(F_RAIN);
-    let basin = band(F_BASIN);
-    let plinth = band(F_PLINTH);
-
-    // The section's horizontal scale: a square-face reading of the fixture's fill area.
-    let face_width_m = input
-        .map(|i| i.tower.fill_area_m2.max(1.0).sqrt() as f32)
-        .unwrap_or(8.0);
-    let px_per_m_x = (tower_x1 - tower_x0) / face_width_m.max(1.0);
-    // The stack diameter comes from the fitted fan's stack area, so dropping AX-420 for AX-500 widens the
-    // stack in the frame (4.2 m -> 5.0 m on the fixture records).
+    let bands_m = band_heights_m(input);
+    let height_m: f32 = bands_m.iter().sum();
+    let face_width_m = crate::state::cell_plan_m(input) as f32;
     let stack_diameter_m = input
         .map(|i| m::stack_diameter_m(i.fan.stack_area_m2) as f32)
         .unwrap_or(5.0);
-    // `clamp` panics when its upper bound falls below its lower one, and on a phone in the Operating-point
-    // view the section is only a couple of hundred pixels wide and a hundred tall - narrow enough that
-    // `(tower_x1 - tower_x0) * 0.92` dropped under the 24 px floor and the whole curves view trapped. The
-    // bound is raised to the floor in that degenerate case (the drawn size is unchanged at any normal size).
-    let base_w =
-        (stack_diameter_m * px_per_m_x).clamp(24.0, ((tower_x1 - tower_x0) * 0.92).max(24.0));
-    let top_w = (base_w * STACK_FLARE).min((tower_x1 - tower_x0) * 0.96);
-    let cyl_top = egui::pos2(
-        tower_x0 + (tower_x1 - tower_x0) * 0.5,
-        stack.top() + stack.height() * 0.10,
+
+    let ruler_w = if phone { 0.0 } else { 46.0 };
+    // A desktop draws the louvres outside the casing; a phone draws them inside it (no room either side).
+    let louvre_w = if phone { 9.0 } else { 13.0 };
+    let louvre_out = if phone { 0.0 } else { louvre_w + 2.0 };
+    let rail_w = if phone { 8.0 } else { 12.0 };
+    let gap = if phone { 6.0 } else { 16.0 };
+    let gutter_w = if phone { GUTTER_W_PHONE } else { GUTTER_W };
+    let hud_w = if hud_fits(area.width(), phone) {
+        HUD_W
+    } else {
+        0.0
+    };
+    let pad_x = if phone { 4.0 } else { 14.0 };
+    let pad_y = if phone { 6.0 } else { 14.0 };
+    let fixed_w = pad_x * 2.0
+        + ruler_w
+        + louvre_out * 2.0
+        + gap
+        + rail_w
+        + gap
+        + gutter_w
+        + if hud_w > 0.0 { hud_w + gap } else { 0.0 };
+    let avail_w = (area.width() - fixed_w).max(40.0);
+    let avail_h = (area.height() - pad_y * 2.0).max(40.0);
+    // One scale for the whole section: the height that fits, the width that fits, the cap, floored at 4 px/m.
+    let upper = (avail_w / face_width_m.max(1.0)).clamp(4.0, MAX_PX_PER_M);
+    let px_per_m = (avail_h / (height_m + HEADROOM_M)).clamp(4.0, upper);
+
+    let tower_w = face_width_m * px_per_m;
+    let comp_w = ruler_w + louvre_out * 2.0 + tower_w + gap + rail_w + gap + gutter_w;
+    let comp_h = (height_m + HEADROOM_M) * px_per_m;
+    let room_w = area.width() - pad_x * 2.0 - if hud_w > 0.0 { hud_w + gap } else { 0.0 };
+    let x0 = area.left() + pad_x + ((room_w - comp_w) * 0.5).max(0.0);
+    let y0 = area.top() + pad_y + ((avail_h - comp_h) * 0.5).max(0.0);
+
+    let tower_x0 = x0 + ruler_w + louvre_out;
+    let tower_x1 = tower_x0 + tower_w;
+    let ruler = egui::Rect::from_min_max(
+        egui::pos2(x0, y0),
+        egui::pos2(tower_x0 - louvre_out, y0 + comp_h),
     );
-    let cyl_bottom = egui::pos2(tower_x0 + (tower_x1 - tower_x0) * 0.5, stack.bottom() - 2.0);
+
+    // ---- the bands, top -> bottom, each its own length in metres at the one scale
+    let mut y = y0 + HEADROOM_M * px_per_m;
+    let mut band = |metres: f32| {
+        let r = egui::Rect::from_min_max(
+            egui::pos2(tower_x0, y),
+            egui::pos2(tower_x1, y + metres * px_per_m),
+        );
+        y += metres * px_per_m;
+        r
+    };
+    let stack = band(bands_m[0]);
+    let deck = band(bands_m[1]);
+    let plenum = band(bands_m[2]);
+    let drift = band(bands_m[3]);
+    let spray = band(bands_m[4]);
+    let fill_band = band(bands_m[5]);
+    let rain = band(bands_m[6]);
+    let basin = band(bands_m[7]);
+    // The plinth is the slab the basin stands on: a few points, not a band of the drawing.
+    let plinth = egui::Rect::from_min_max(
+        egui::pos2(tower_x0, basin.bottom()),
+        egui::pos2(tower_x1, basin.bottom() + if phone { 3.0 } else { 5.0 }),
+    );
+
+    // ---- the stack: a tapered cylinder the full height of its band, at the section's scale
+    let base_w = (stack_diameter_m * px_per_m).clamp(24.0, (tower_w * 0.92).max(24.0));
+    let top_w = (base_w * STACK_FLARE).min(tower_w * 0.96);
+    let cx = tower_x0 + tower_w * 0.5;
+    let rim_h = (top_w * 0.20).clamp(8.0, 26.0);
     let stack_cyl = egui::Rect::from_min_max(
-        egui::pos2(cyl_top.x - top_w * 0.5, cyl_top.y),
-        egui::pos2(cyl_bottom.x + base_w * 0.5, cyl_bottom.y),
+        egui::pos2(cx - top_w * 0.5, stack.top()),
+        egui::pos2(cx + top_w * 0.5, stack.bottom() - 1.0),
     );
-    let rim_h = (top_w * 0.20).clamp(6.0, 22.0);
     let stack_rim = egui::Rect::from_center_size(
-        egui::pos2(cyl_top.x, cyl_top.y + rim_h * 0.5),
+        egui::pos2(cx, stack.top() + rim_h * 0.5),
         egui::vec2(top_w, rim_h),
     );
 
-    // Inlets: louvred banks on BOTH sides of the casing, from the rain zone down across the plinth, sized
-    // from the tower's recorded inlet area (inletAreaM2) against its air-free area.
-    let inlet_frac = input
-        .map(|i| (i.tower.inlet_area_m2 / i.tower.air_free_area_m2.max(1.0)) as f32)
-        .unwrap_or(0.5)
-        .clamp(0.18, 0.62);
-    let inlet_h = (plinth.height() * inlet_frac).clamp(28.0, (plinth.height() * 0.9).max(28.0));
-    let inlet_top = plinth.bottom() - inlet_h - plinth.height() * 0.06;
-    let louvre_w = if phone { 9.0 } else { 13.0 };
+    // ---- the inlets: in the rain zone, as tall as the record's inlet area over two faces of the cell
+    // (`inletAreaM2 / (2 x plan)`), never taller than the rain zone itself.
+    let inlet_m = input
+        .map(|i| (i.tower.inlet_area_m2 / (2.0 * face_width_m.max(1.0) as f64)) as f32)
+        .unwrap_or(1.2)
+        .min(bands_m[6] * 0.92)
+        .max(0.3);
+    let inlet_h = inlet_m * px_per_m;
+    let inlet_bottom = rain.bottom() - 1.0;
     let (in_l0, in_l1, in_r0, in_r1) = if phone {
         (
             tower_x0 + 2.0,
@@ -195,64 +287,58 @@ pub fn layout(area: egui::Rect, input: Option<&EngineInput>, phone: bool) -> Lay
         )
     };
     let inlet_l = egui::Rect::from_min_max(
-        egui::pos2(in_l0, inlet_top),
-        egui::pos2(in_l1, inlet_top + inlet_h),
+        egui::pos2(in_l0, inlet_bottom - inlet_h),
+        egui::pos2(in_l1, inlet_bottom),
     );
     let inlet_r = egui::Rect::from_min_max(
-        egui::pos2(in_r0, inlet_top),
-        egui::pos2(in_r1, inlet_top + inlet_h),
+        egui::pos2(in_r0, inlet_bottom - inlet_h),
+        egui::pos2(in_r1, inlet_bottom),
     );
 
-    // Fill layers: drawn to scale from the bottom of the band upward, minimum band from the mapping.
+    // ---- the fill layers: each its own depth in metres, stacked up from the bottom of the fill band (the
+    // band holds the deepest stack the record offers; what the stack does not use is spare depth above it)
     let layers_in: Vec<f64> = input
         .map(|i| i.fill_layers.iter().map(|l| l.depth_m).collect())
         .unwrap_or_default();
-    let total: f32 = layers_in.iter().map(|d| *d as f32).sum();
-    let span = input
-        .map(|i| {
-            i.tower
-                .fill_depth_options_m
-                .last()
-                .copied()
-                .unwrap_or(FALLBACK_MAX_DEPTH as f64) as f32
-        })
-        .unwrap_or(FALLBACK_MAX_DEPTH);
-    let used = if total > 0.0 {
-        (total / span).clamp(0.22, 1.0)
-    } else {
-        0.0
-    };
-    let band_h = fill_band.height() * used;
     let mut rects = vec![egui::Rect::NOTHING; layers_in.len()];
     let mut bottom = fill_band.bottom();
     for i in (0..layers_in.len()).rev() {
-        let frac = if total > 0.0 {
-            layers_in[i] as f32 / total
-        } else {
-            1.0
-        };
-        let lh = (band_h * frac).max(m::MIN_BAND_PX);
+        let lh = (layers_in[i] as f32 * px_per_m).max(m::MIN_BAND_PX.min(fill_band.height()));
         let top = (bottom - lh).max(fill_band.top() - m::MIN_BAND_PX);
         rects[i] = egui::Rect::from_min_max(
             egui::pos2(tower_x0 + 3.0, top),
-            egui::pos2(tower_x1 - 3.0, bottom - 2.0),
+            egui::pos2(tower_x1 - 3.0, bottom - 1.0),
         );
-        bottom = top - 2.0;
+        bottom = top - 1.0;
     }
+    let m_per_px_y = 1.0 / px_per_m;
 
-    let m_per_px_y = if band_h > 1.0 && total > 0.0 {
-        total / band_h
+    // ---- the pressure split rail and the call-out gutter, right of the drawing
+    let rail_x0 = tower_x1 + louvre_out + gap;
+    let rail = egui::Rect::from_min_max(
+        egui::pos2(rail_x0, stack.top()),
+        egui::pos2(rail_x0 + rail_w, basin.bottom()),
+    );
+    let gutter = egui::Rect::from_min_max(
+        egui::pos2(rail.right() + gap, stack.top()),
+        egui::pos2(
+            (rail.right() + gap + gutter_w).min(area.right() - 2.0),
+            basin.bottom(),
+        ),
+    );
+    let hud = if hud_w > 0.0 {
+        egui::Rect::from_min_max(
+            egui::pos2(area.right() - pad_x - hud_w, area.top() + pad_y),
+            egui::pos2(area.right() - pad_x, area.bottom() - pad_y),
+        )
     } else {
-        0.0
+        egui::Rect::NOTHING
     };
 
-    // The operating-point rail sits in the plenum band, under the deck: it is an airflow rail, and the
-    // plenum is where the fan's airflow is already collected.
     let op_rail = egui::Rect::from_min_max(
         egui::pos2(tower_x0 + 8.0, plenum.center().y - 3.0),
         egui::pos2(tower_x1 - 8.0, plenum.center().y + 3.0),
     );
-
     let water_surface_y = basin.top() + basin.height() * 0.34;
 
     let slots = [
@@ -312,10 +398,14 @@ pub fn layout(area: egui::Rect, input: Option<&EngineInput>, phone: bool) -> Lay
         op_rail,
         slots,
         m_per_px_y,
-        px_per_m_x,
+        px_per_m_x: px_per_m,
         face_width_m,
         stack_diameter_m,
         phone,
+        px_per_m,
+        height_m,
+        gutter,
+        hud,
     }
 }
 
@@ -341,8 +431,20 @@ pub enum Part {
     /// The stack's mouth (the aperture the air leaves through).
     StackMouth,
     FanDisc,
+    /// Vertical slices of the fan's disc (the renderer draws rectangles; a disc is tiled slices).
+    DiscSlice(u8),
+    /// Segments of the fan disc's ellipse (the wheel's rim, seen from above).
+    FanRing(u8),
+    /// One of the wheel's spokes.
+    FanSpoke(u8),
     FanBlade(u8),
+    /// A blade's own leading edge (a bright line from its bar to its tip).
+    FanBladeTip(u8),
     FanHub,
+    /// Vertical slices of the hub (the filled cap).
+    FanHubCap(u8),
+    /// Rings of the wheel's halo - the moving column of air at the mouth.
+    FanGlow(u8),
     OpRailBar,
     OpTick(u8),
     OpCaretCurrent,
@@ -406,10 +508,14 @@ impl Part {
             Part::WaterSurface => 2.35,
             Part::DeckRib(_) => 2.45,
             Part::FanDisc => 2.5,
+            Part::DiscSlice(_) => 2.5,
+            Part::FanRing(_) => 2.52,
             Part::Louvre(_, _) => 2.55,
             Part::StackRimBase(_) => 2.6,
             Part::RailBg => 2.62,
             Part::FanBlade(_) => 2.65,
+            Part::FanBladeTip(_) => 2.67,
+            Part::FanSpoke(_) => 2.62,
             Part::FillDetail(_, _) => 2.8,
             Part::Layer(_) => 3.0,
             Part::LayerTick(_) => 3.45,
@@ -424,7 +530,9 @@ impl Part {
             Part::ConeBar(_, _) | Part::ConeEdge(_, _) => 4.2,
             Part::OpCaretAnchor => 4.3,
             Part::OpCaretCurrent => 4.4,
-            Part::FanHub => 4.5,
+            Part::FanHub => 4.56,
+            Part::FanHubCap(_) => 4.52,
+            Part::FanGlow(_) => 2.51,
             Part::StackRim(_) => 4.6,
             Part::SlotWash(_) => 6.5,
             Part::SlotFocus(_) => 6.8,
@@ -435,6 +543,16 @@ impl Part {
 
 #[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct Viz(pub Part);
+
+/// Issue #91 / #82: how many frames this session has drawn. The page publishes it as `data-frames`, so a
+/// measurement can sample it twice and read the real presented-frame rate - `requestAnimationFrame` from
+/// outside is throttled in a headless browser and cannot see the app's own loop.
+static FRAMES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+/// Frames drawn since the app started.
+pub fn frames() -> u32 {
+    FRAMES.load(std::sync::atomic::Ordering::Relaxed)
+}
 
 /// Entity per part, so the plan is applied by lookup instead of a 40-arm match.
 #[derive(Resource, Default)]
@@ -518,6 +636,22 @@ fn spawn_pool(mut commands: Commands) {
         }
         for i in 0..8 {
             spawn(Part::FanBlade(i), &mut pool);
+            spawn(Part::FanBladeTip(i), &mut pool);
+        }
+        for i in 0..RING {
+            spawn(Part::FanRing(i as u8), &mut pool);
+        }
+        for i in 0..8 {
+            spawn(Part::FanSpoke(i), &mut pool);
+        }
+        for i in 0..HUBSLICE {
+            spawn(Part::FanHubCap(i as u8), &mut pool);
+        }
+        for i in 0..DISC {
+            spawn(Part::DiscSlice(i as u8), &mut pool);
+        }
+        for i in 0..FAN_GLOW {
+            spawn(Part::FanGlow(i as u8), &mut pool);
         }
         for i in 0..5 {
             spawn(Part::OpTick(i), &mut pool);
@@ -746,7 +880,7 @@ pub fn plan(
     let spray_share = zone_share(run, ZoneId::Spray, None);
     let rain_share = zone_share(run, ZoneId::Rain, None);
 
-    // ---- the fan stack: a tapered cylinder standing on the deck, with blades in its mouth
+    // ---- the fan stack: a tapered cylinder standing on the deck, with the wheel inside its mouth
     let speed_fraction = m::fraction_of(input.speed_ratio, 0.0, 1.5) as f32;
     let cyl = l.stack_cyl;
     d.insert(
@@ -800,42 +934,149 @@ pub fn plan(
             ),
         );
     }
-    // The fan: a disc that brightens with rpm, six blades at the fixture's speed ratio, a hub.
-    d.insert(
-        Part::FanDisc,
-        Draw::at(
-            l.stack_rim.center(),
-            egui::vec2(l.stack_rim.width() * 0.90, l.stack_rim.height() * 1.5),
-            t::with_alpha(t::PRIMARY, (16.0 + 36.0 * speed_fraction) as u8),
-        ),
+    // The wheel, seen slightly from above through the mouth. The renderer draws rotated rectangles, so an
+    // ellipse is built two ways: a **fill** as vertical slices of varying height (the disc, the hub), and an
+    // **outline** as short tangential segments (the rim). Rim, spokes, blades and hub all belong to the one
+    // ellipse, so the blades radiate from the hub and stay inside the barrel (issue #91; round 5's blades
+    // sat on the rim ellipse as tangential bars and read as a scatter).
+    let rim_r = l.stack_rim;
+    let flat = 0.24_f32;
+    let fan_el = egui::Rect::from_center_size(
+        egui::pos2(rim_r.center().x, rim_r.center().y + cyl.height() * 0.34),
+        egui::vec2(rim_r.width() * 0.94, rim_r.width() * 0.94 * flat),
     );
+    let hub_r = (fan_el.width() * 0.13).max(4.0);
+    for i in 0..DISC {
+        let t01 = (i as f32 + 0.5) / DISC as f32;
+        let x = fan_el.left() + fan_el.width() * t01;
+        let dx = (x - fan_el.center().x) / (fan_el.width() * 0.5);
+        let hh = fan_el.height() * 0.5 * (1.0 - dx * dx).max(0.0).sqrt();
+        d.insert(
+            Part::DiscSlice(i as u8),
+            Draw::at(
+                egui::pos2(x, fan_el.center().y),
+                egui::vec2(fan_el.width() / DISC as f32 + 0.8, hh * 2.0),
+                t::with_alpha(t::PRIMARY, (7.0 + 20.0 * speed_fraction) as u8),
+            ),
+        );
+    }
+    for i in 0..RING {
+        let aa = i as f32 / RING as f32 * std::f32::consts::TAU;
+        let aa2 = (i as f32 + 0.9) / RING as f32 * std::f32::consts::TAU;
+        let (s1, c1) = aa.sin_cos();
+        let (s2, c2) = aa2.sin_cos();
+        d.insert(
+            Part::FanRing(i as u8),
+            Draw::seg(
+                egui::pos2(
+                    fan_el.center().x + fan_el.width() * 0.5 * c1,
+                    fan_el.center().y + fan_el.height() * 0.5 * s1,
+                ),
+                egui::pos2(
+                    fan_el.center().x + fan_el.width() * 0.5 * c2,
+                    fan_el.center().y + fan_el.height() * 0.5 * s2,
+                ),
+                if phone { 1.3 } else { 1.6 },
+                t::with_alpha(t::PRIMARY, (90.0 + 120.0 * speed_fraction) as u8),
+            ),
+        );
+    }
+    for i in 0..8 {
+        let aa = i as f32 * std::f32::consts::TAU / 8.0;
+        let or = fan_el.width() * 0.47;
+        d.insert(
+            Part::FanSpoke(i),
+            Draw::seg(
+                egui::pos2(
+                    fan_el.center().x + hub_r * aa.cos(),
+                    fan_el.center().y + hub_r * flat * 2.0 * aa.sin(),
+                ),
+                egui::pos2(
+                    fan_el.center().x + or * aa.cos(),
+                    fan_el.center().y + or * flat * 2.0 * aa.sin(),
+                ),
+                1.0,
+                t::with_alpha(t::LINE, 110),
+            ),
+        );
+    }
     let spin = anim_t * std::f32::consts::TAU * m::blade_turn_hz(rpm);
     let blade_n = 6;
-    let hub_r = l.stack_rim.width() * 0.10;
     for i in 0..blade_n {
-        let a = spin + i as f32 * std::f32::consts::TAU / blade_n as f32;
-        let radial = l.stack_rim.width() * 0.26;
-        let c = egui::pos2(
-            l.stack_rim.center().x + radial * a.cos(),
-            l.stack_rim.center().y + radial * a.sin() * 0.34,
-        );
+        let aa = spin + i as f32 * std::f32::consts::TAU / blade_n as f32;
+        let (s1, c1) = aa.sin_cos();
+        let outer = fan_el.width() * 0.47;
+        let pt = |r: f32| {
+            egui::pos2(
+                fan_el.center().x + r * c1,
+                fan_el.center().y + r * flat * 2.0 * s1,
+            )
+        };
         d.insert(
             Part::FanBlade(i as u8),
-            Draw::bar(
-                c,
-                l.stack_rim.width() * 0.30,
-                if phone { 3.0 } else { 4.0 },
-                a + std::f32::consts::FRAC_PI_2,
-                t::with_alpha(t::INK_2, (150.0 + 90.0 * speed_fraction) as u8),
+            Draw::seg(
+                pt(hub_r * 0.9),
+                pt(outer),
+                if phone { 3.2 } else { 4.6 },
+                t::with_alpha(t::INK_2, (170.0 + 85.0 * speed_fraction) as u8),
+            ),
+        );
+        // the leading edge: the blade's forward side, brighter, so the wheel's spin reads even frozen
+        let la = aa + 0.22;
+        let (s2, c2) = la.sin_cos();
+        let pt2 = |r: f32| {
+            egui::pos2(
+                fan_el.center().x + r * c2,
+                fan_el.center().y + r * flat * 2.0 * s2,
+            )
+        };
+        d.insert(
+            Part::FanBladeTip(i as u8),
+            Draw::seg(
+                pt2(hub_r * 1.1),
+                pt2(outer),
+                1.0,
+                t::with_alpha(t::INK, 200),
+            ),
+        );
+    }
+    // the halo: the column of air the wheel pulls, as a soft ellipse just outside the disc (slices, like
+    // the disc itself, so it is an ellipse and not a box), brightening with rpm
+    let halo = fan_el.expand2(egui::vec2(fan_el.width() * 0.07, fan_el.height() * 0.07));
+    for i in 0..FAN_GLOW {
+        let t01 = (i as f32 + 0.5) / FAN_GLOW as f32;
+        let x = halo.left() + halo.width() * t01;
+        let dx = (x - halo.center().x) / (halo.width() * 0.5);
+        let hh = halo.height() * 0.5 * (1.0 - dx * dx).max(0.0).sqrt();
+        d.insert(
+            Part::FanGlow(i as u8),
+            Draw::at(
+                egui::pos2(x, halo.center().y),
+                egui::vec2(halo.width() / FAN_GLOW as f32 + 0.8, hh * 2.0),
+                t::with_alpha(t::PRIMARY, (4.0 + 16.0 * speed_fraction) as u8),
+            ),
+        );
+    }
+    for i in 0..HUBSLICE {
+        let t01 = (i as f32 + 0.5) / HUBSLICE as f32;
+        let x = fan_el.center().x - hub_r + 2.0 * hub_r * t01;
+        let dx = (x - fan_el.center().x) / hub_r.max(0.01);
+        let hh = hub_r * flat * (1.0 - dx * dx).max(0.0).sqrt();
+        d.insert(
+            Part::FanHubCap(i as u8),
+            Draw::at(
+                egui::pos2(x, fan_el.center().y),
+                egui::vec2(2.0 * hub_r / HUBSLICE as f32 + 0.8, hh * 2.0),
+                t::PRIMARY,
             ),
         );
     }
     d.insert(
         Part::FanHub,
         Draw::at(
-            l.stack_rim.center(),
-            egui::vec2(hub_r * 1.6, hub_r * 0.8),
-            t::PRIMARY,
+            fan_el.center(),
+            egui::vec2(hub_r * 0.7, hub_r * 0.7 * flat * 2.0),
+            t::with_alpha(t::BG, 200),
         ),
     );
 
@@ -844,16 +1085,24 @@ pub fn plan(
         Part::DeckPlate,
         Draw::rect(l.deck, t::with_alpha(t::INK_2, 30)),
     );
-    for i in 0..3 {
-        let x = l.deck.left() + l.deck.width() * (i as f32 + 1.0) / 4.0;
-        d.insert(
-            Part::DeckRib(i),
-            Draw::at(
-                egui::pos2(x, l.deck.center().y),
-                egui::vec2(4.0, l.deck.height() * 0.8),
-                t::with_alpha(t::LINE, 200),
-            ),
-        );
+    // ribs on the visible deck only - the deck inside the stack's base flare is hidden by the barrel
+    let base_w = l.stack_cyl.width() * (1.0 - (STACK_FLARE - 1.0) * 0.5);
+    let mut rib = 0;
+    for x in [
+        l.deck.left() + l.deck.width() * 0.10,
+        l.deck.right() - l.deck.width() * 0.10,
+    ] {
+        if (x - l.deck.center().x).abs() > base_w * 0.5 + 6.0 {
+            d.insert(
+                Part::DeckRib(rib),
+                Draw::at(
+                    egui::pos2(x, l.deck.center().y),
+                    egui::vec2(4.0, l.deck.height() * 0.8),
+                    t::with_alpha(t::LINE, 200),
+                ),
+            );
+            rib += 1;
+        }
     }
 
     // ---- the drift-eliminator bank: a chevron band across the casing
@@ -915,6 +1164,9 @@ pub fn plan(
         vis.nozzle_spacing_m,
         vis.nozzle_pattern == Pattern::Staggered,
     );
+    // The water enters the tower hottest, so the cones are drawn in the run's own warm end: the ramp is the
+    // same one the falling water walks (`mapping::water_ramp`, seam `water.temperature`).
+    let warm = t::water_tint(1.0);
     let half_angle = m::spray_half_angle_deg(input.nozzle.orifice_diameter_m);
     let cone_h_m = input.tower.spray_zone_height_m;
     let radius_m = m::spray_cone_radius_m(cone_h_m, half_angle);
@@ -976,6 +1228,7 @@ pub fn plan(
                     base_y,
                     radius_px * 0.62,
                     f_nozzle,
+                    warm,
                 );
                 continue;
             }
@@ -994,6 +1247,7 @@ pub fn plan(
                 base,
                 radius_px * shrink.max(0.55),
                 f_nozzle,
+                warm,
             );
         }
         d.insert(
@@ -1359,6 +1613,7 @@ fn draw_cone(
     base_y: f32,
     radius: f32,
     f: f32,
+    warm: egui::Color32,
 ) {
     let tip = egui::pos2(x, tip_y);
     let half = radius;
@@ -1375,7 +1630,9 @@ fn draw_cone(
             Draw::at(
                 egui::pos2(x, y),
                 egui::vec2(w, bar_h),
-                t::with_alpha(t::PRIMARY, a.max(14)),
+                // The spray is where the water enters the tower: the cones carry the hot end of the run's
+                // own temperature ramp (the walk itself is `water.temperature` in the seams table).
+                t::with_alpha(warm, a.max(14)),
             ),
         );
     }
@@ -1428,6 +1685,7 @@ fn sync_scene(
         return;
     };
 
+    FRAMES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let l = layout(scene.rect(), Some(&draft.0), scene.phone);
     let plan = plan(
         &l,
@@ -1457,6 +1715,140 @@ fn sync_scene(
                 *visibility = Visibility::Inherited;
             }
             None => *visibility = Visibility::Hidden,
+        }
+    }
+}
+
+// --------------------------------------------------------------------------------------------- tests
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cockpit::fixture_engine::FixtureEngine;
+
+    const FIXTURE: &str = include_str!("../assets/fixture.json");
+
+    /// The four sizes issue #81 names, as (label, the section rect's own size, phone). The sizes are the
+    /// ones the shell hands the section in the committed frames (`docs/design/small-screens-r1/`, mirrored
+    /// by `data-scene-rect`/`data-scene-frac`): the Instrument's centre rect, less the header and the
+    /// region's own margins. Only the size matters to the scale (`layout` reads `area.width()`/`height()`),
+    /// so the rects are built at the origin.
+    const TARGETS: [(&str, f32, f32, bool); 4] = [
+        ("1280x720", 1152.0, 610.0, false),
+        ("1440x900", 1312.0, 790.0, false),
+        ("1024x768", 896.0, 358.0, false),
+        ("390x844", 374.0, 234.0, true),
+    ];
+
+    fn engine() -> FixtureEngine {
+        FixtureEngine::from_json(FIXTURE).unwrap()
+    }
+
+    fn section(w: f32, h: f32) -> egui::Rect {
+        egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(w, h))
+    }
+
+    /// Issue #81, criterion 1: **the section has one metres-to-points scale on both axes.** Asserted on the
+    /// layout struct, at the four sizes: the horizontal scale (the face's own px/m), the vertical scale (the
+    /// bands' px/m) and `px_per_m` agree within 5 %, and so does the drawn tower's own width:height ratio.
+    #[test]
+    fn one_scale_for_both_axes_at_the_four_target_sizes() {
+        let e = engine();
+        let input = e.default_input();
+        for (label, w, h, phone) in TARGETS {
+            let l = layout(section(w, h), Some(&input), phone);
+            let x = l.px_per_m_x;
+            let y = 1.0 / l.m_per_px_y;
+            let drawn_y = (l.basin.bottom() - l.stack.top()) / l.height_m;
+            let drawn_x = l.tower.width() / l.face_width_m;
+            for (what, a, b) in [
+                ("px_per_m_x vs px_per_m", x, l.px_per_m),
+                ("px_per_m_x vs 1/m_per_px_y", x, y),
+                ("drawn width vs drawn height", drawn_x, drawn_y),
+            ] {
+                let rel = (a - b).abs() / b.abs().max(1e-6);
+                assert!(
+                    rel <= 0.05,
+                    "{label}: {what} disagree by {:.1}% ({a} vs {b})",
+                    rel * 100.0
+                );
+            }
+        }
+    }
+
+    /// Issue #81, criterion 2: **the section is never laid out shorter than the agreed minimum.** The card
+    /// above the tower takes at most `card_max_h`, so what is left for the section is the minimum or more -
+    /// whatever the card's own content height is (its resting rows, the duty row open, a source line open,
+    /// or a content so tall it has to scroll). Proved over a sweep of centre heights, not just the four
+    /// sizes, because the promise is about every window.
+    #[test]
+    fn the_section_keeps_its_agreed_minimum() {
+        for h in (MIN_SECTION_H + CARD_GAP + 120.0) as i32..=1400 {
+            let h = h as f32;
+            for card_h in [0.0_f32, 120.0, 296.0, 335.0, 385.0, 900.0] {
+                let used = card_h.min(card_max_h(h));
+                let below = h - used - CARD_GAP;
+                assert!(
+                    below >= MIN_SECTION_H,
+                    "a {h:.0} px centre with a {card_h} px card leaves the section {below:.0} px, \
+                     under the minimum {MIN_SECTION_H}"
+                );
+            }
+        }
+        // ... and the four sizes the issue names are all above that floor: the section rect heights the
+        // shell hands over are the frames' own `data-scene-h`.
+        for (label, _, h, _) in TARGETS {
+            assert!(h >= MIN_SECTION_H, "{label}: the section is {h:.0} px");
+        }
+    }
+
+    /// Issue #81, criterion 2: the fold rule the shell and the section share. A phone always puts the card
+    /// above the tower; a desktop does it when its centre cannot hold the card's own slot beside the tower -
+    /// which is what a 1024x768 window does, and what used to drop the card (and the duty inputs and the
+    /// verdict with it) from the screen.
+    #[test]
+    fn hud_fits_is_the_one_fold_rule() {
+        assert!(!hud_fits(374.0, true), "a phone never has the HUD slot");
+        assert!(
+            !hud_fits(1312.0, true),
+            "a phone never has the HUD slot, however wide its section"
+        );
+        assert!(!hud_fits(896.0, false), "1024x768: the card goes above");
+        assert!(hud_fits(1152.0, false), "1280x720: the card has its slot");
+        assert!(hud_fits(1312.0, false), "1440x900: the card has its slot");
+    }
+
+    /// Issue #81, criterion 2: **the panels stay reachable where the rail folds.** The parts rail folds to
+    /// its icon strip below 1100 px of screen (`RAIL_FOLD_BELOW`, in `crate::ui`) and is not drawn at all on
+    /// a phone, where the tower's own bays are the part controls - so every bay must still be drawn, and be
+    /// a rect the pick path can hit, at all four sizes. The bands are as thin as the machine is: the drift
+    /// eliminator is a slit (165x5 px at 390x844, 249x8 at 1024x768 in the round's frames), and the phone
+    /// reaches the panels themselves through the drawer (`instrument-panel-390x844`), whose controls the
+    /// round's frames carry.
+    #[test]
+    fn the_parts_stay_reachable_when_the_rail_folds() {
+        let e = engine();
+        let input = e.default_input();
+        for (label, w, h, phone) in TARGETS {
+            let l = layout(section(w, h), Some(&input), phone);
+            assert_eq!(l.slots.len(), 4, "{label}: the four bays");
+            for (slot, r) in l.slots.iter() {
+                assert!(
+                    r.width() >= 60.0 && r.height() >= 4.0,
+                    "{label}: the {slot:?} bay is {:.0}x{:.0}",
+                    r.width(),
+                    r.height()
+                );
+                assert!(
+                    l.area.contains_rect(*r),
+                    "{label}: the {slot:?} bay is outside the section"
+                );
+            }
+            // the gutter the labels live in is inside the section too
+            assert!(
+                l.area.contains_rect(l.gutter),
+                "{label}: the call-out gutter leaves the section"
+            );
         }
     }
 }

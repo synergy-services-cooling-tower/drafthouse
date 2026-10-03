@@ -83,6 +83,8 @@ pub struct FirstFrame {
 pub struct AnimClock {
     pub t: f32,
     pub frozen: bool,
+    /// The clock value a frozen frame holds (`?t=<seconds>`, default [`FROZEN_T`]).
+    pub frozen_at: f32,
 }
 
 impl Default for AnimClock {
@@ -90,6 +92,7 @@ impl Default for AnimClock {
         Self {
             t: 0.0,
             frozen: false,
+            frozen_at: FROZEN_T,
         }
     }
 }
@@ -154,7 +157,8 @@ impl Plugin for VizPlugin {
             .insert_resource(self.options.clone())
             .insert_resource(AnimClock {
                 t: 0.0,
-                frozen: self.options.frozen.unwrap_or(false),
+                frozen: self.options.frozen.unwrap_or(false) || self.options.t.is_some(),
+                frozen_at: self.options.t.unwrap_or(FROZEN_T),
             })
             .init_resource::<EngineSlot>()
             .init_resource::<Load>()
@@ -173,6 +177,7 @@ impl Plugin for VizPlugin {
             // Round 5: the layout measurement surface (the clip probe and the layout counters).
             .init_resource::<crate::clip::ClipProbe>()
             .init_resource::<crate::clip::LayoutInfo>()
+            .init_resource::<crate::clip::ScreenText>()
             // Round 4: the generated descriptors (embedded), the form, the parameter card and the duty
             // & site row set. All four are session state - none of them is an engine input of its own.
             .insert_resource(crate::state::FieldsRes::load())
@@ -651,6 +656,28 @@ pub fn apply_staging(
         vis.legend_open = l;
         log.push(format!("legend={}", if l { "shown" } else { "hidden" }));
     }
+    // ---- issue #91: the two drawers and reduced motion ------------------------------------------------
+    if let Some(n) = o.notes {
+        vis.notes_open = n;
+        log.push(format!("notes={}", if n { "open" } else { "closed" }));
+    }
+    if let Some(p) = o.panel {
+        vis.panel_open = p;
+        log.push(format!("panel={}", if p { "open" } else { "closed" }));
+    }
+    // #91 round 2: the tap-detail card, staged.
+    if let Some(d) = o
+        .detail
+        .as_deref()
+        .and_then(crate::state::Detail::from_slug)
+    {
+        vis.detail = Some(d);
+        log.push(format!("detail={}", d.slug()));
+    }
+    if o.reduced_motion {
+        vis.reduced_motion = true;
+        log.push("reduced-motion".to_string());
+    }
     // ---- round 5: the duty panel's three collapsible sections ---------------------------------------
     if let Some(v) = o.duty_open {
         vis.duty_open = v;
@@ -836,8 +863,13 @@ fn pick_part(
 }
 
 /// The animation clock. Frozen time is a constant, so `?frozen=1` frames are reproducible.
-fn anim_clock(time: Res<Time>, mut clock: ResMut<AnimClock>) {
+fn anim_clock(time: Res<Time>, mut clock: ResMut<AnimClock>, vis: Option<Res<Visual>>) {
     if clock.frozen {
+        clock.t = clock.frozen_at;
+    } else if vis.map(|v| v.reduced_motion).unwrap_or(false) {
+        // "reduced motion" holds the clock: the flow, the droplets and the wheel stand still while the
+        // engine's numbers still update (the button's own promise). Nothing snaps - the pose it holds is
+        // whichever pose it was in when the switch was flipped.
         clock.t = FROZEN_T;
     } else {
         clock.t += time.delta_secs();
@@ -982,6 +1014,38 @@ fn drain_commands(
                     _ => !vis.rail_open,
                 };
             }
+            // ---- issue #91: the drawers and reduced motion --------------------------------------------
+            "notes" => {
+                vis.notes_open = match arg {
+                    Some("1") => true,
+                    Some("0") => false,
+                    _ => !vis.notes_open,
+                };
+                if vis.notes_open {
+                    vis.panel_open = false;
+                }
+            }
+            "panel" => {
+                vis.panel_open = match arg {
+                    Some("1") => true,
+                    Some("0") => false,
+                    _ => !vis.panel_open,
+                };
+                if vis.panel_open {
+                    vis.notes_open = false;
+                }
+            }
+            "motion" => {
+                vis.reduced_motion = match arg {
+                    Some("reduced") | Some("0") => true,
+                    Some("full") | Some("1") => false,
+                    _ => !vis.reduced_motion,
+                };
+            }
+            // #91 round 2: the tap-detail card (`detail:fan`, `detail:op`, `detail:close`).
+            "detail" => {
+                vis.detail = arg.and_then(crate::state::Detail::from_slug);
+            }
             "legend" => {
                 vis.legend_open = match arg {
                     Some("1") => true,
@@ -1024,7 +1088,8 @@ fn drain_commands(
                     }
                 }
             }
-            _ => {}
+            // drafthouse#91 Part B: every head this match does not know belongs to the new screens' shell.
+            _ => crate::screens::push_command(&cmd),
         }
     }
     let _ = (&cat, &mut staged);
@@ -1048,14 +1113,13 @@ fn keyboard(
     if keys.just_pressed(KeyCode::KeyK) {
         vis.rail_open = !vis.rail_open;
     }
+    // Issue #91: I (notes), M (reduced motion) and P (setup drawer) are the page's keys only (index.html),
+    // like B and E - one path per key, so a focused canvas never toggles them twice.
     if keys.just_pressed(KeyCode::Digit1) {
         vis.view = View::Cockpit;
     }
     if keys.just_pressed(KeyCode::Digit2) {
         vis.view = View::Curves;
-    }
-    if keys.just_pressed(KeyCode::Digit3) {
-        vis.view = View::Seams;
     }
     if keys.just_pressed(KeyCode::KeyG) {
         vis.grid = !vis.grid;

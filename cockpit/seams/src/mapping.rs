@@ -40,6 +40,17 @@ pub const MAX_STREAMLINES: usize = 6;
 pub const MIN_WATER_STREAKS: usize = 4;
 pub const MAX_WATER_STREAKS: usize = 14;
 
+/// The hot-cold water spread (C) at which the falling water shows its full warm-to-cool walk. The engine
+/// returns the two temperatures; the *look* between them is this pass's, so the reference spread is stated
+/// here rather than buried in the draw code.
+pub const WATER_RAMP_REFERENCE_C: f64 = 8.0;
+
+/// How much of the warm end the falling water shows, from the run's own hot-cold spread: 0.35 (a nearly flat
+/// run) .. 1.0 (a spread of [`WATER_RAMP_REFERENCE_C`] or more).
+pub fn water_ramp(hot_c: f64, cold_c: f64) -> f32 {
+    (((hot_c - cold_c) / WATER_RAMP_REFERENCE_C).clamp(0.55, 1.0)) as f32
+}
+
 /// The 3D view's opening camera: yaw/pitch in degrees, distance in tower widths.
 pub const CAM_DEFAULT: (f32, f32, f32) = (38.0, 20.0, 2.6);
 /// The orbit camera's limits (a still evidence frame needs a stated camera, and the limits are part of it).

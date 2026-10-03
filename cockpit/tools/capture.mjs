@@ -150,19 +150,19 @@ const FRAMES = [
   },
   {
     name: 'rpm-before',
-    query: { frozen: '1' },
+    query: { frozen: '1', detail: 'fan' },
     act: [{ kind: 'clickHit', hit: 'ctl:reset' }],
-    want: 'the fixture ratio (0.78 / 182 rpm of the record\'s rated speed) before the knob is moved',
+    want: 'the fixture ratio (0.78 / 182 rpm of the record\'s rated speed) before the knob is moved - the knob is the fan bay\'s own detail in round 2',
     check: (s) => Math.abs(Number(s.dataset.ratio) - 0.78) < 1e-6,
   },
   {
     name: 'rpm-after',
-    query: { frozen: '1' },
+    query: { frozen: '1', detail: 'fan' },
     act: [
       { kind: 'clickHit', hit: 'ctl:reset' },
-      ...Array.from({ length: 8 }, () => ({ kind: 'clickDom', dom: 'nav-rpm-up' })),
+      ...Array.from({ length: 8 }, () => ({ kind: 'clickHit', hit: 'ctl:rpm-up' })),
     ],
-    want: 'the same frame after eight real clicks on the control bar: faster fan, denser/faster streamlines, moved operating point',
+    want: 'the same frame after eight real clicks on the fan detail\'s stepper: faster fan, denser/faster streamlines, moved operating point',
     check: (s) => Math.abs(Number(s.dataset.ratio) - 0.94) < 1e-6 && Number(s.dataset.rpm) > 215,
   },
   {
@@ -229,9 +229,9 @@ const FRAMES = [
   },
   {
     name: 'nozzle-coverage',
-    query: { frozen: '1', focus: 'nozzle' },
-    act: [...Array.from({ length: 7 }, () => ({ kind: 'clickDom', dom: 'nav-space-down' }))],
-    want: 'the nozzle bank tightened by real clicks on the control bar: the header heads, the cones, the pitch and the coverage follow',
+    query: { frozen: '1', focus: 'nozzle', detail: 'nozzle' },
+    act: [...Array.from({ length: 7 }, () => ({ kind: 'clickHit', hit: 'ctl:spacing-down' }))],
+    want: 'the nozzle bank tightened by real clicks on the nozzle bay\'s own detail: the header heads, the cones, the pitch and the coverage follow',
     check: (s) => s.dataset.focus === 'nozzle' && Number(s.dataset.nozzleSpacing) < 0.75,
   },
   {
@@ -245,7 +245,7 @@ const FRAMES = [
     query: { frozen: '1' },
     act: [
       { kind: 'clickHit', hit: 'ctl:view:curves' },
-      ...Array.from({ length: 3 }, () => ({ kind: 'clickDom', dom: 'nav-rpm-down' })),
+      ...Array.from({ length: 3 }, () => ({ kind: 'clickHit', hit: 'ctl:rpm-down' })),
     ],
     want: 'the operating point on the fan/system curve and the performance curve, after a real rpm change',
     check: (s) => s.dataset.view === 'curves' && Number(s.dataset.opFlow) > 0,
@@ -262,16 +262,6 @@ const FRAMES = [
     want: 'the internal host: injected branding and the save/export/compare entry points, same core',
     check: (s) => s.dataset.host === 'internal',
   },
-  {
-    name: 'data-seams',
-    query: { frozen: '1' },
-    act: [{ kind: 'clickHit', hit: 'ctl:view:seams', once: true }],
-    want: 'the data-seams table in the running app: the same 37 bindings VISUAL_DATA_SEAMS.md lists',
-    check: (s) => s.dataset.view === 'seams' && s.dataset.seams === '37',
-  },
-  // Round 4, item 1: the 3D frames are gone - the module is behind the `three-d` feature and the
-  // default build has no 3D view. The round-3 frames live in git history.
-  // ============================================================ round 3: the owner's punch list
   {
     name: 'rail-open',
     query: { frozen: '1' },
@@ -437,12 +427,14 @@ const FRAMES = [
   {
     name: 'view-bar-once',
     query: { frozen: '1' },
-    want: 'item 5: one VIEW bar - the header tabs - and a bottom bar trimmed to what is not elsewhere (rpm, nozzles, bay picker, overlay, freeze) plus the key hints',
+    want: 'item 5 + #91 round 2: one VIEW bar - the header tabs - and a nav trimmed to what is not elsewhere (the bay picker, the overlay emphasis, freeze, reduced motion, notes); rpm and nozzles left it for the bays\' own details',
     check: (s) =>
       s.dataset.view === 'cockpit' &&
-      ['ctl:view:cockpit', 'ctl:view:curves', 'ctl:view:seams'].every((k) => Object.keys(s.hits).includes(k)) &&
+      ['ctl:view:cockpit', 'ctl:view:curves'].every((k) => Object.keys(s.hits).includes(k)) &&
       !['nav-cockpit', 'nav-curves', 'nav-seams', 'nav-3d', 'nav-cells-up', 'nav-cells-down', 'nav-cutaway', 'nav-cam-reset'].some((id) => s.navIds.includes(id)) &&
-      ['nav-rpm-up', 'nav-pick-fan', 'nav-space-up', 'nav-reset'].every((id) => s.navIds.includes(id)),
+      // #91 round 2: the RPM and NOZZLES groups are gone from the nav - those controls are the bays' own.
+      ['nav-pick-fan', 'nav-pick-drift', 'nav-pick-fill', 'nav-pick-nozzle', 'nav-freeze', 'nav-motion', 'nav-notes'].every((id) => s.navIds.includes(id)) &&
+      !['nav-rpm-up', 'nav-rpm-down', 'nav-reset', 'nav-space-up', 'nav-space-down'].some((id) => s.navIds.includes(id)),
   },
   {
     name: 'view-tab-click',
@@ -821,8 +813,7 @@ const READ_STATE = `(() => {
     'nav-pick-fill': domRect('nav-pick-fill'), 'nav-pick-nozzle': domRect('nav-pick-nozzle'),
     'nav-pick-prev': domRect('nav-pick-prev'), 'nav-pick-next': domRect('nav-pick-next'),
     'nav-pick-pick': domRect('nav-pick-pick'), 'nav-pick-close': domRect('nav-pick-close'),
-    'nav-focus': domRect('nav-focus'), 'nav-rpm-up': domRect('nav-rpm-up'), 'nav-rpm-down': domRect('nav-rpm-down'),
-    'nav-space-up': domRect('nav-space-up'), 'nav-space-down': domRect('nav-space-down'), 'nav-reset': domRect('nav-reset')
+    'nav-focus': domRect('nav-focus')
   },
     firstFrameMs: root.dataset.firstFrameMs ? Number(root.dataset.firstFrameMs) : null,
     interactiveMs: root.dataset.interactiveMs ? Number(root.dataset.interactiveMs) : null
@@ -1460,7 +1451,6 @@ async function main() {
             dragOver: s.dataset.dragOver || null,
             dragVerdict: s.dataset.dragVerdict || null,
             dragStaged: s.dataset.dragStaged || null,
-            seams: s.dataset.seams,
             picker: s.dataset.picker || null,
             pickerTitle: s.dataset.pickerTitle || null,
             pickerRows: s.dataset.pickerRows || null,

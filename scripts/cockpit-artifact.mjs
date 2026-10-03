@@ -5,8 +5,9 @@
  * The cockpit is the product UI now: the release publishes it as **one servable plane** —
  * `cockpit/index.html`, `cockpit/pkg/**` (the wasm build's JavaScript and its `.wasm`) and
  * `cockpit/assets/**` (the fixture record and the fonts the app fetches at run time) — inside the
- * deterministic container `scripts/release-archive.mjs` writes, with its own manifest, its own
- * digest and the wasm's gzip size recorded next to them.
+ * deterministic container `scripts/release-archive.mjs` writes, with its own manifest (which names
+ * the source commit the plane was built from), its own digest and the wasm's gzip size recorded
+ * next to them.
  *
  * It is a **separate artifact from the pinned engine/visuals bundle** (D16): the bundle is the
  * numeric engine and the recorded baseline; this is the surface that runs them, alongside the
@@ -47,6 +48,16 @@ const version = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).ver
 function commit() {
   try {
     return execFileSync('git', ['-C', root, 'rev-parse', '--short=12', 'HEAD'], { encoding: 'utf8' }).trim();
+  } catch {
+    return 'unknown';
+  }
+}
+
+/** The full commit the plane was built from: a release is cut from a tag, and the manifest a
+ * downloader holds must name the source commit in full, not only its short form in `version`. */
+function sourceCommit() {
+  try {
+    return execFileSync('git', ['-C', root, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
   } catch {
     return 'unknown';
   }
@@ -102,6 +113,7 @@ function write(out) {
     piece: 'cockpit',
     version: `${version}+${commit()}`,
     command: 'cockpit/tools/build-web.sh release',
+    commit: sourceCommit(),
     prefix: PREFIX,
     files: files.map((file) => ({ path: file.path, bytes: file.bytes.length, sha256: sha256(file.bytes) })),
     digest: digestOf(files),

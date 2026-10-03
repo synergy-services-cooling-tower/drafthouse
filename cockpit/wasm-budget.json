@@ -1,0 +1,5 @@
+{
+  "note": "Issue #82: the payload budget the release build enforces. The numbers are the measured build of this tree plus 2% slack, rounded up to whole kB: cockpit/tools/build-web.sh release on the lane host (Apple M4, macOS 26.6.2) with [profile.release] opt-level = 3 measured raw 23275261 / gzip 7409133 (the lane's recorded build log and report). Moving these numbers is a commit that says why, with the measurement that justifies it; the 8 MiB COCKPIT_GZIP_LIMIT_BYTES stays as the outer bound.",
+  "raw_bytes": 23740000,
+  "gzip_bytes": 7557000
+}

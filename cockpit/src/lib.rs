@@ -31,6 +31,8 @@
 /// Issue #58: the adapter's real engine behind **this** crate's contract (real-engine builds).
 #[cfg(feature = "real-engine")]
 pub mod adapter_bridge;
+/// #91 round 2: the answer card, the source marks and the tap-detail.
+pub mod answer;
 pub mod app;
 /// Issue #71: the one `App` composition both entry points run.
 pub mod bootstrap;
@@ -52,8 +54,12 @@ pub mod engine_catalog;
 pub mod engine_select;
 pub mod form;
 pub mod hover;
+/// Issue #91: the notes drawer - every explanatory sentence, behind the validation badge.
+pub mod notes;
 pub mod perf;
 pub mod scene;
+/// drafthouse#91 Part B: the app shell and the new screens.
+pub mod screens;
 pub mod state;
 pub mod theme;
 #[cfg(feature = "three-d")]

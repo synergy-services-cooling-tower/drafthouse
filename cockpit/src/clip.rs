@@ -267,6 +267,84 @@ impl LayoutInfo {
     }
 }
 
+/// Issue #91: **the on-screen text inventory.** Every text shape the frame actually painted (any visible
+/// egui layer, clipped to its own clip rect and to the window), read back from egui's own paint lists at
+/// the end of the pass. The word counts in `docs/design/usability-r1/README.md` are computed from this,
+/// so "the screen shows less text" is a measurement, not a claim. Measurement only: nothing is drawn.
+#[derive(Resource, Default)]
+pub struct ScreenText {
+    /// `(text, [x, y, w, h])`, sorted top-to-bottom then left-to-right.
+    pub items: Vec<(String, [f32; 4])>,
+}
+
+impl ScreenText {
+    pub fn collect(&mut self, ctx: &egui::Context) {
+        let screen = ctx.viewport_rect();
+        let layers = ctx.memory(|m| m.areas().visible_layer_ids());
+        let mut out: Vec<(String, [f32; 4])> = Vec::new();
+        ctx.graphics(|g| {
+            for layer in layers.iter() {
+                if let Some(list) = g.get(*layer) {
+                    for cs in list.all_entries() {
+                        walk(&cs.shape, cs.clip_rect, screen, &mut out);
+                    }
+                }
+            }
+        });
+        out.sort_by(|a, b| (a.1[1] as i32, a.1[0] as i32).cmp(&(b.1[1] as i32, b.1[0] as i32)));
+        self.items = out;
+    }
+
+    pub fn json(&self) -> String {
+        let strings: Vec<&str> = self.items.iter().map(|(s, _)| s.as_str()).collect();
+        let words: usize = strings
+            .iter()
+            .map(|s| {
+                s.split_whitespace()
+                    .filter(|w| w.chars().any(|c| c.is_alphanumeric()))
+                    .count()
+            })
+            .sum();
+        serde_json::json!({
+            "words": words,
+            "strings": strings,
+            "rects": self.items.iter().map(|(_, r)| r.iter().map(|v| v.round()).collect::<Vec<_>>()).collect::<Vec<_>>(),
+        })
+        .to_string()
+    }
+}
+
+fn walk(
+    shape: &egui::Shape,
+    clip: egui::Rect,
+    screen: egui::Rect,
+    out: &mut Vec<(String, [f32; 4])>,
+) {
+    match shape {
+        egui::Shape::Text(ts) => {
+            let r = ts.visual_bounding_rect();
+            let seen = r.intersect(clip).intersect(screen);
+            if seen.width() > 1.0 && seen.height() > 1.0 && ts.opacity_factor > 0.05 {
+                let text = ts
+                    .galley
+                    .text()
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                if !text.is_empty() {
+                    out.push((text, [r.min.x, r.min.y, r.width(), r.height()]));
+                }
+            }
+        }
+        egui::Shape::Vec(v) => {
+            for s in v {
+                walk(s, clip, screen, out);
+            }
+        }
+        _ => {}
+    }
+}
+
 /// The mark a collapsible section header draws when the section is open / collapsed. The bundled Plex
 /// subset carries no geometric triangles (U+25BE / U+25B8 are absent from its cmap, and a missing glyph
 /// draws as tofu), so the pair is the same one the fill-stack rows already use for reorder: `v` and `>`.

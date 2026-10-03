@@ -85,6 +85,8 @@ pub struct Round5Mirror<'w, 's> {
     pub clip: Res<'w, crate::clip::ClipProbe>,
     pub info: Res<'w, crate::clip::LayoutInfo>,
     pub engine: Res<'w, crate::app::EngineSlot>,
+    /// Issue #91: the painted-text inventory, published to `#mirror-words`.
+    pub words: Res<'w, crate::clip::ScreenText>,
     #[doc(hidden)]
     pub _phantom: std::marker::PhantomData<&'s ()>,
 }
@@ -116,10 +118,39 @@ pub fn mirror_system(
     let _ = &fixture_text;
     // Round 3: how much of the viewport the section's own column gets, so a frame can prove the parts rail
     // does not push the scene below the brief's ~60 % floor at 1440x900.
+    // Issue #81: and the section's own height against the agreed minimum, plus which slot the answer card
+    // took - the two layout promises a frame can prove without a picture.
     {
         let w = scene_rect.window.x.max(1.0);
         let frac = (scene_rect.max.x - scene_rect.min.x).max(0.0) / w;
         set_attr(&doc, "viz-root", "data-scene-frac", &format!("{frac:.3}"));
+        let section_h = (scene_rect.max.y - scene_rect.min.y).max(0.0);
+        let section_w = (scene_rect.max.x - scene_rect.min.x).max(0.0);
+        set_attr(
+            &doc,
+            "viz-root",
+            "data-scene-rect",
+            &format!(
+                "{:.0},{:.0},{section_w:.0},{section_h:.0}",
+                scene_rect.min.x, scene_rect.min.y
+            ),
+        );
+        set_attr(
+            &doc,
+            "viz-root",
+            "data-min-section-h",
+            &format!("{:.0}", crate::scene::MIN_SECTION_H),
+        );
+        set_attr(
+            &doc,
+            "viz-root",
+            "data-card-slot",
+            if crate::scene::hud_fits(section_w, scene_rect.phone) {
+                "hud"
+            } else {
+                "above"
+            },
+        );
     }
     set_attr(
         &doc,
@@ -255,6 +286,7 @@ pub fn mirror_system(
         );
         // The probe itself, as JSON, for `tools/clip-check.mjs` to re-read per frame.
         set_text(&doc, "mirror-clip", &round5.clip.json());
+        set_text(&doc, "mirror-words", &round5.words.json());
     }
     if first.first.is_none() {
         let ms = now_ms();
@@ -437,6 +469,37 @@ pub fn mirror_system(
                     crate::theme::fmt(o.fan_system_curve.operating_point.y)
                 ),
             );
+            // #91 round 2: the correctness gate's engine side. One JSON attribute carrying the numbers
+            // the screen paints, straight out of this run - the same grouped, largest-remainder rows the
+            // answer card, the tap-detail and the tower's call-outs read (`answer::air_path`). The gate
+            // (`docs/design/usability-r2/tools/gate.mjs`) compares these against the painted strings, so a
+            // painted figure that is not the engine's is a red gate, not a review note.
+            {
+                let rows = crate::answer::air_path(o);
+                let zones: Vec<serde_json::Value> = rows
+                    .iter()
+                    .map(|r| {
+                        serde_json::json!({
+                            "n": r.name,
+                            "pa": r.pa,
+                            "s": r.share_shown,
+                        })
+                    })
+                    .collect();
+                let gate = serde_json::json!({
+                    "zones": zones,
+                    "fill_pa": rows.iter().find(|r| r.zone == cockpit::engine::ZoneId::Fill).map(|r| r.pa),
+                    "fill_kavl": crate::answer::fill_kavl(o),
+                    "kavl_total": o.kavl_total,
+                    "cold": o.cold_water_c,
+                    "approach": o.approach_c,
+                    "fan_kw": o.fan_power_kw,
+                    "makeup": o.makeup_m3_hr,
+                    "evap_pct": o.evaporation_pct,
+                    "flow": o.airflow_m3_s,
+                });
+                set_attr(&doc, "viz-root", "data-gate", &gate.to_string());
+            }
             set_text(
                 &doc,
                 "mirror-zones",
@@ -458,6 +521,7 @@ pub fn mirror_system(
             }
             set_text(&doc, "mirror-op", "no run yet");
             set_text(&doc, "mirror-zones", "no run yet");
+            set_attr(&doc, "viz-root", "data-gate", "");
         }
     }
 
@@ -602,6 +666,29 @@ pub fn mirror_system(
         &doc,
         "mirror-label",
         drafthouse_cockpit_seams::REQUIRED_COPY,
+    );
+    // ---- issue #91: the two drawers and the motion mode ----------------------------------------------
+    set_attr(
+        &doc,
+        "viz-root",
+        "data-notes",
+        if vis.notes_open { "open" } else { "closed" },
+    );
+    set_attr(
+        &doc,
+        "viz-root",
+        "data-panel",
+        if vis.panel_open { "open" } else { "closed" },
+    );
+    set_attr(
+        &doc,
+        "viz-root",
+        "data-motion",
+        if vis.reduced_motion {
+            "reduced"
+        } else {
+            "full"
+        },
     );
     // ---- round 2: the picker, the bay focus and the 3D view ---------------------------------------
     match &vis.picker {
@@ -777,6 +864,13 @@ pub fn mirror_system(
         .map(|o| o.water_flow_m3_hr)
         .unwrap_or(0.0);
     set_attr(&doc, "viz-root", "data-water-flow", &fmt2(water));
+    // Issue #91: the frame counter (`scene::frames()`), so fps and idle redraws are measurable from the page.
+    set_attr(
+        &doc,
+        "viz-root",
+        "data-frames",
+        &crate::scene::frames().to_string(),
+    );
     set_attr(
         &doc,
         "viz-root",

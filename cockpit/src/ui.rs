@@ -50,6 +50,9 @@ const RIGHT_WIDE_ABOVE: f32 = 1280.0;
 /// frame on a small laptop (the brief's floor is ~60 % of the viewport width at 1440x900).
 const RAIL_NARROW_BELOW: f32 = 1240.0;
 const RAIL_W_NARROW: f32 = 150.0;
+/// Issue #91: below this width the parts rail is folded to its icon strip (the bay-tap picker stays).
+const RAIL_FOLD_BELOW: f32 = 1100.0;
+/// Issue #91: the Instrument view's bottom control bar (desktop): the rpm row and the nozzle/part row.
 const ID_FONTS_INSTALLED: &str = "viz.fonts.installed";
 const ID_FONTS_READY: &str = "viz.fonts.ready";
 const ID_FONTS_PENDING: &str = "viz.fonts.pending";
@@ -108,6 +111,10 @@ pub struct VizAux<'w, 's> {
     /// column, published to `#mirror-clip`) and the counters the layout frames read.
     pub clip: ResMut<'w, crate::clip::ClipProbe>,
     pub info: ResMut<'w, crate::clip::LayoutInfo>,
+    /// Issue #91: the painted-text inventory (`#mirror-words`).
+    pub words: ResMut<'w, crate::clip::ScreenText>,
+    /// drafthouse#91 Part B: the fixture text, for the new screens' whole-catalog selection runs.
+    pub fixture: Res<'w, crate::app::FixtureText>,
     #[doc(hidden)]
     pub _phantom: std::marker::PhantomData<&'s ()>,
 }
@@ -126,7 +133,7 @@ pub fn viz_ui(
     mut scene_rect: ResMut<SceneRect>,
     mut wants_kb: ResMut<WantsKeyboard>,
     staged: Res<StagedLog>,
-    mut clock: ResMut<AnimClock>,
+    clock: Res<AnimClock>,
     mut hits: ResMut<HitMap>,
     mut aux: VizAux,
 ) {
@@ -151,8 +158,28 @@ pub fn viz_ui(
         run.ratio = d.0.speed_ratio;
     }
 
-    let screen = ctx.viewport_rect();
-    let phone = screen.width() < 760.0;
+    // drafthouse#91 Part B: the app shell and the new screens (`crate::screens`). On a new screen the shell
+    // draws the whole frame; on Instrument it hands this view the rect its chrome leaves.
+    let full = ctx.viewport_rect();
+    let shell = crate::screens::frame(
+        ctx,
+        crate::screens::Ctx {
+            draft: draft.as_deref_mut().map(|d| &mut d.0),
+            engine: engine.0.as_deref(),
+            out: run.output.as_ref(),
+            fixture_text: &aux.fixture.0,
+            reduced_motion: options.reduced_motion,
+            t: clock.t,
+        },
+    );
+    let screen = match shell {
+        crate::screens::Frame::Took => {
+            scene_rect.set(Rect::NOTHING, full.size(), full.width() < 760.0);
+            return;
+        }
+        crate::screens::Frame::Instrument(r) => r,
+    };
+    let phone = full.width() < 760.0;
     let style_key = egui::Id::new("viz.style.phone");
     if ctx.data(|d| d.get_temp::<bool>(style_key)) != Some(phone) {
         t::apply_style(ctx, phone);
@@ -164,15 +191,20 @@ pub fn viz_ui(
     // Round 4, item 5: the phone header carries the one view bar, so it is one row taller than round 3's -
     // and tall enough that the tab row's own rect stays inside the header's clip rect, or egui would draw
     // the tabs and refuse the tap (found by a frame that clicked the tab on a phone and changed nothing).
-    let header_h = if phone { 140.0 } else { 96.0 };
+    // Issue #91: one header row on a desktop; on a phone the name, the badge (wrapped, never cut) and the
+    // 44 px tabs.
+    let header_h = if phone { 150.0 } else { 50.0 };
     // Round 5, item 4: the desktop status strip is two rows (the notice + the staged log, then the engine
     // note + the mandated copy), so the staged string can never be drawn under another sentence.
-    let footer_h = if phone { 60.0 } else { 46.0 };
-    let dock_h = if phone { 152.0 } else { 244.0 };
-    // Round 5, item 3: the strip carries one state-dependent hint string in a second row, so the strip is
-    // taller than round 4's single row by one text line (a hint that does not fit its row is truncated, never
-    // clipped - the row measures itself and reports to the clip probe).
-    let strip_h = if phone { 0.0 } else { 70.0 };
+    // Issue #91: the status strip is gone once the instrument is loaded - its notice is the header's
+    // badge, its sentences are in the notes drawer. It stays for the loading state only.
+    let footer_h = if load.ready {
+        0.0
+    } else if phone {
+        60.0
+    } else {
+        46.0
+    };
     let header_r = Rect::from_min_size(screen.min, egui::vec2(screen.width(), header_h));
     let footer_r = Rect::from_min_max(
         egui::pos2(screen.left(), screen.bottom() - footer_h),
@@ -182,9 +214,11 @@ pub fn viz_ui(
         egui::pos2(screen.left(), header_r.bottom()),
         egui::pos2(screen.right(), footer_r.top()),
     );
+    // Issue #91: below RAIL_FOLD_BELOW the parts rail folds to its icon strip, so the section keeps the room.
+    let rail_open = vis.rail_open && screen.width() >= RAIL_FOLD_BELOW;
     let left_w = if phone {
         0.0
-    } else if vis.rail_open {
+    } else if rail_open {
         if screen.width() < RAIL_NARROW_BELOW {
             RAIL_W_NARROW
         } else {
@@ -194,25 +228,49 @@ pub fn viz_ui(
         RAIL_STRIP_W
     };
     let _ = LEFT_W; // the round-1 tray column is gone: this is a chip rail, not a wall of cards
-    let right_w = if phone || vis.view == View::Seams {
-        0.0
-    } else if screen.width() >= RIGHT_WIDE_ABOVE {
+    let column_w = if screen.width() >= RIGHT_WIDE_ABOVE {
         // Round 5, item 1(a): at 1280 px and above the column takes the width the duty form needs.
         RIGHT_W_WIDE
     } else {
         RIGHT_W
     };
+    // Issue #91: on the Instrument view the right column is a **drawer** - closed by default, opened from
+    // the read-out HUD's `duty & site` button (or `P`), sliding in over 0.22 s (instant with reduced motion).
+    // The Operating-point view keeps its column (out of this round's scope); the Data-seams view has none.
+    let drawer_f = ctx.animate_bool_with_time(
+        egui::Id::new("viz.drawer"),
+        vis.panel_open,
+        if vis.reduced_motion { 0.0 } else { 0.22 },
+    );
+    // Issue #81: on a phone the drawer has no column to slide in from. Below the fold the panel *is* the
+    // screen: `duty & site` (or `?panel=1`, or the fill detail's `edit the stack …`) puts the whole panel
+    // over the centre - its close control with it - instead of setting a flag nothing draws.
+    let drawer_full = phone && vis.view == View::Cockpit && vis.panel_open;
+    let right_w = if drawer_full {
+        body_r.width()
+    } else if phone {
+        0.0
+    } else if vis.view == View::Cockpit {
+        (column_w * drawer_f).round()
+    } else {
+        column_w
+    };
     let left_r = Rect::from_min_max(
         body_r.min,
         egui::pos2(body_r.left() + left_w, body_r.bottom()),
     );
-    let right_r = Rect::from_min_max(
-        egui::pos2(body_r.right() - right_w, body_r.top()),
-        body_r.max,
-    );
+    // The drawer is laid out at its full width and slides: its content never re-wraps mid-animation.
+    let right_r = if drawer_full {
+        body_r
+    } else {
+        Rect::from_min_max(
+            egui::pos2(body_r.right() - right_w, body_r.top()),
+            egui::pos2(body_r.right() - right_w + column_w, body_r.bottom()),
+        )
+    };
     let centre_r = Rect::from_min_max(
         egui::pos2(left_r.right(), body_r.top()),
-        egui::pos2(right_r.left(), body_r.bottom()),
+        egui::pos2(body_r.right() - right_w, body_r.bottom()),
     );
 
     // ---- round 5: the layout measurement surface. Every text unit the right column draws is recorded with
@@ -296,7 +354,7 @@ pub fn viz_ui(
                 region(ui, centre_r, egui::vec2(16.0, 12.0), |ui| {
                     loading_state(ui, &load)
                 });
-                scene_rect.set(Rect::NOTHING, screen.size(), phone);
+                scene_rect.set(Rect::NOTHING, full.size(), phone);
                 region(ui, footer_r, egui::vec2(14.0, 5.0), |ui| {
                     footer(
                         ui,
@@ -321,6 +379,32 @@ pub fn viz_ui(
                     // gives the card the room at 1440x900. `data-clip-below` counts any measured
                     // text unit that still passes the column's bottom.
                     ui.spacing_mut().item_spacing.y = 5.0;
+                    // Issue #91: on the Instrument view this column is the setup drawer - a title row
+                    // with its close control, then the form, the read-out in full, the fill stack, the
+                    // seams summary and the internal host's commands.
+                    if vis.view == View::Cockpit {
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                RichText::new("Duty & site")
+                                    .size(14.0)
+                                    .color(t::INK)
+                                    .family(t::family_semi()),
+                            );
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    let b = ui
+                                        .add_sized(egui::vec2(30.0, 26.0), egui::Button::new("×"));
+                                    if hit(&mut hits, "ctl:panel-close", b)
+                                        .on_hover_text("close (P)")
+                                        .clicked()
+                                    {
+                                        vis.panel_open = false;
+                                    }
+                                },
+                            );
+                        });
+                    }
                     egui::ScrollArea::vertical()
                         .auto_shrink([false; 2])
                         .show(ui, |ui| {
@@ -337,7 +421,11 @@ pub fn viz_ui(
                                 &mut aux.clip,
                                 &mut aux.info,
                                 phone,
-                            )
+                            );
+                            if vis.view == View::Cockpit {
+                                ui.add_space(8.0);
+                                host_actions(ui, &options);
+                            }
                         });
                 });
             }
@@ -371,13 +459,13 @@ pub fn viz_ui(
                 egui::vec2(if phone { 8.0 } else { 12.0 }, 8.0),
                 |ui| {
                     let avail = ui.max_rect();
+                    if drawer_full {
+                        // #81: the panel has the centre - the drawing is not underneath it, and no stale
+                        // scene rect is left for the sprite pass to draw into.
+                        scene_rect.set(Rect::NOTHING, full.size(), phone);
+                        return;
+                    }
                     match vis.view {
-                        View::Seams => {
-                            scene_rect.set(Rect::NOTHING, screen.size(), phone);
-                            egui::ScrollArea::vertical()
-                                .auto_shrink([false; 2])
-                                .show(ui, |ui| seams_view(ui, &mut vis, phone));
-                        }
                         View::Curves => {
                             let scene_h = if phone {
                                 (avail.height() * 0.32).clamp(150.0, 260.0)
@@ -386,7 +474,7 @@ pub fn viz_ui(
                             };
                             let scene_r =
                                 Rect::from_min_size(avail.min, egui::vec2(avail.width(), scene_h));
-                            scene_rect.set(scene_r, screen.size(), phone);
+                            scene_rect.set(scene_r, full.size(), phone);
                             let _ = ui.allocate_exact_size(scene_r.size(), Sense::hover());
                             if let Some(d) = draft_mut.as_deref_mut() {
                                 scene_overlay(
@@ -400,6 +488,8 @@ pub fn viz_ui(
                                     &mut hits,
                                     &mut aux.info,
                                     clock.t,
+                                    false,
+                                    phone,
                                 );
                             }
                             let body = Rect::from_min_max(
@@ -410,6 +500,19 @@ pub fn viz_ui(
                                 egui::ScrollArea::vertical().auto_shrink([false; 2]).show(
                                     ui,
                                     |ui| {
+                                        // #91 round 2: the fan's speed has one implementation and one home
+                                        // per surface - here, under the fan/system curve it moves, because
+                                        // the Instrument reaches it through the fan bay's tap-detail.
+                                        if let Some(d) = draft_mut.as_deref_mut() {
+                                            let card_frame = t::card_flat();
+                                            card_frame.show(ui, |ui| {
+                                                ui.label(t::eyebrow("fan speed"));
+                                                fan_speed_controls(
+                                                    ui, d, &run, &mut vis, &mut hits, phone,
+                                                );
+                                            });
+                                            ui.add_space(8.0);
+                                        }
                                         curves_view(
                                             ui,
                                             draft_mut.as_deref(),
@@ -429,7 +532,7 @@ pub fn viz_ui(
                         View::Three => {
                             // Round 2, change C: the 3D tower. The Bevy 3D camera renders behind this
                             // transparent region; here we own the controls, the honesty labels and the taps.
-                            scene_rect.set(Rect::NOTHING, screen.size(), phone);
+                            scene_rect.set(Rect::NOTHING, full.size(), phone);
                             let view_r = Rect::from_min_max(
                                 avail.min,
                                 egui::pos2(
@@ -483,15 +586,54 @@ pub fn viz_ui(
                             });
                         }
                         View::Cockpit => {
-                            let scene_h = if phone {
-                                (avail.height() * 0.42).clamp(230.0, 330.0)
-                            } else {
-                                (avail.height() - dock_h - strip_h - 12.0).max(220.0)
-                            };
-                            let scene_r =
-                                Rect::from_min_size(avail.min, egui::vec2(avail.width(), scene_h));
-                            scene_rect.set(scene_r, screen.size(), phone);
+                            // #91 round 2: **duty-first, tower full-bleed.** The section is the whole
+                            // centre - no control bar (the fan's speed lives in the fan's detail, the
+                            // freeze/motion controls are the page's one nav row), the parts rail folded to
+                            // its handle, the duty & site form a drawer. The answer card is the always-on
+                            // overlay: in the section's own HUD slot where the section is wide enough for it,
+                            // above the tower where it is not (a phone, and a window under
+                            // `HUD_MIN_SECTION_W` - at 1024x768 the card used to be dropped altogether, and
+                            // with it the duty inputs and the cold-water verdict).
+                            let card_above = !scene::hud_fits(avail.width(), phone);
+                            let mut card_bottom = avail.top();
+                            if card_above {
+                                if let Some(d) = draft_mut.as_deref_mut() {
+                                    // Issue #81: the section keeps its agreed minimum height; the card takes
+                                    // the room above it and scrolls inside what is left (the card is an
+                                    // overlay, the section is the drawing).
+                                    let max_h = scene::card_max_h(avail.height());
+                                    let cr = Rect::from_min_size(
+                                        avail.min,
+                                        egui::vec2(avail.width(), max_h),
+                                    );
+                                    let mut used = cr;
+                                    egui::ScrollArea::vertical()
+                                        .auto_shrink([false, true])
+                                        .max_height(max_h)
+                                        .show(ui, |ui| {
+                                            used = crate::answer::answer_card(
+                                                ui, cr, d, &run, &mut vis, &aux.duty, &mut hits,
+                                                phone,
+                                            );
+                                        });
+                                    card_bottom = used.bottom().min(cr.bottom()) + scene::CARD_GAP;
+                                }
+                            }
+                            let scene_r = Rect::from_min_max(
+                                egui::pos2(avail.left(), card_bottom),
+                                avail.max,
+                            );
+                            scene_rect.set(scene_r, full.size(), phone);
                             let _ = ui.allocate_exact_size(scene_r.size(), Sense::hover());
+                            let lay = draft_mut
+                                .as_deref()
+                                .map(|d| scene::layout(scene_r, Some(&d.0), phone));
+                            // #91 round 2: on a phone the tap-detail is a bottom sheet over the tower's
+                            // lower half - exactly where the plates are stacked. Nothing is painted beneath
+                            // an opaque card, so with the sheet open the plates are not drawn. (The "no text
+                            // sits on text" probe is what made this visible: the covered plates were still
+                            // in the frame's string list, at the same y as the sheet's own rows.)
+                            let gutter_plates = !(phone && vis.detail.is_some());
                             if let Some(d) = draft_mut.as_deref_mut() {
                                 scene_overlay(
                                     ui,
@@ -504,150 +646,57 @@ pub fn viz_ui(
                                     &mut hits,
                                     &mut aux.info,
                                     clock.t,
+                                    gutter_plates,
+                                    phone,
                                 );
                             }
-                            let dock_r = Rect::from_min_max(
-                                egui::pos2(avail.left(), scene_r.bottom() + 6.0),
-                                egui::pos2(
-                                    avail.right(),
-                                    (scene_r.bottom() + 6.0 + dock_h).min(avail.bottom()),
-                                ),
+                            let hud_r = lay.as_ref().map(|l| l.hud).unwrap_or(Rect::NOTHING);
+                            let mut answer_used = None;
+                            if hud_r.is_positive() {
+                                if let Some(d) = draft_mut.as_deref_mut() {
+                                    answer_used = Some(crate::answer::answer_card(
+                                        ui, hud_r, d, &run, &mut vis, &aux.duty, &mut hits, false,
+                                    ));
+                                }
+                            }
+                            // the tap-detail: a bay, the operating point or a zone, as a card under the
+                            // answer card on a desktop and as a bottom sheet on a phone.
+                            // the tap-detail hangs under the answer card's *used* rect (the card is only as
+                            // tall as its rows), not under the full-height HUD slot.
+                            let anchor = if let Some(used) = answer_used {
+                                let below = used.bottom() + 8.0;
+                                Rect::from_min_max(
+                                    egui::pos2(used.left(), below),
+                                    egui::pos2(
+                                        used.right(),
+                                        (screen.bottom() - 8.0).max(below + 140.0),
+                                    ),
+                                )
+                            } else if hud_r.is_positive() {
+                                let below = hud_r.top() + 240.0;
+                                Rect::from_min_max(
+                                    egui::pos2(hud_r.left(), below),
+                                    egui::pos2(hud_r.right(), screen.bottom() - 8.0),
+                                )
+                            } else {
+                                Rect::from_min_max(
+                                    egui::pos2(
+                                        scene_r.right() - 340.0,
+                                        (card_bottom + 8.0).max(scene_r.top() + 8.0),
+                                    ),
+                                    scene_r.max,
+                                )
+                            };
+                            crate::answer::detail_card(
+                                ctx,
+                                &mut vis,
+                                draft_mut.as_deref_mut(),
+                                &run,
+                                &mut hits,
+                                phone,
+                                anchor,
+                                screen,
                             );
-                            ui.scope_builder(egui::UiBuilder::new().max_rect(dock_r), |ui| {
-                                ui.set_clip_rect(dock_r.intersect(ui.clip_rect()));
-                                dock(
-                                    ui,
-                                    draft_mut.as_deref_mut(),
-                                    &run,
-                                    &anchor,
-                                    &mut vis,
-                                    catalog.as_deref(),
-                                    &mut clock,
-                                    &mut hits,
-                                    phone,
-                                );
-                                // Round 3, item 3: the configuration cards the right column used to carry.
-                                ui.add_space(6.0);
-                                setup_cards(
-                                    ui,
-                                    draft_mut.as_deref(),
-                                    &mut vis,
-                                    catalog.as_deref(),
-                                    &options,
-                                    &mut hits,
-                                    phone,
-                                );
-                            });
-                            if strip_h > 0.0 {
-                                let strip_r = Rect::from_min_max(
-                                    egui::pos2(avail.left(), dock_r.bottom() + 6.0),
-                                    avail.max,
-                                );
-                                ui.scope_builder(egui::UiBuilder::new().max_rect(strip_r), |ui| {
-                                    ui.set_clip_rect(strip_r.intersect(ui.clip_rect()));
-                                    strip(
-                                        ui,
-                                        catalog.as_deref(),
-                                        draft_mut.as_deref(),
-                                        &vis,
-                                        &mut aux.info,
-                                        phone,
-                                    )
-                                });
-                            }
-                            if phone {
-                                // The phone stack scrolls below the dock: strip, read-outs, tray - in that order.
-                                let rest = Rect::from_min_max(
-                                    egui::pos2(avail.left(), dock_r.bottom() + 4.0),
-                                    avail.max,
-                                );
-                                ui.scope_builder(egui::UiBuilder::new().max_rect(rest), |ui| {
-                                    // Fixed width, like the desktop column (`region_exact`), and 12 px short of
-                                    // the body's own edge: an unbounded stack let one long line (a carried part
-                                    // plus its verdict plus the flash after the drop) widen every card below it -
-                                    // the read-out and the fill stack were drawn 30 px past the screen. The 12 px
-                                    // matches the column the clip probe measures (the body region inset by 8),
-                                    // so a card that still insists on more is reported rather than drawn off it.
-                                    let stack_w = (rest.width() - 12.0).max(120.0);
-                                    ui.set_min_width(stack_w);
-                                    ui.set_max_width(stack_w);
-                                    // Issue #58, the owner's layout nit 1: the same reservation the
-                                    // desktop column makes. The stack's last rows used to pass the
-                                    // column the clip probe measures by a pixel or two, i.e. into the
-                                    // band the bottom bar owns; one point off the stack's vertical item
-                                    // spacing keeps every measured row inside it (`data-clip-below`).
-                                    ui.spacing_mut().item_spacing.y = 5.0;
-                                    egui::ScrollArea::vertical().auto_shrink([false; 2]).show(
-                                        ui,
-                                        |ui| {
-                                            // Round 4, item 4: a phone's first section is the duty & site
-                                            // panel, above the strip and the read-outs.
-                                            duty_panel::panel(
-                                                ui,
-                                                draft_mut.as_deref_mut(),
-                                                &aux.duty,
-                                                &run,
-                                                &mut vis,
-                                                &mut hits,
-                                                &mut aux.clip,
-                                                &mut aux.info,
-                                                phone,
-                                            );
-                                            ui.add_space(8.0);
-                                            // Round 2: the tray is gone (a bay tap opens the picker), so the
-                                            // phone stack leads with the selected-part strip and the read-outs.
-                                            strip(
-                                                ui,
-                                                catalog.as_deref(),
-                                                draft_mut.as_deref(),
-                                                &vis,
-                                                &mut aux.info,
-                                                phone,
-                                            );
-                                            ui.add_space(8.0);
-                                            // Round 3, item 1: the chip rail is the same rail on a phone -
-                                            // it scrolls with the stack instead of taking a column. The
-                                            // bay-tap picker's bottom sheet stays the quick path.
-                                            parts_rail(
-                                                ui,
-                                                catalog.as_deref(),
-                                                draft_mut.as_deref(),
-                                                &mut vis,
-                                                &mut hits,
-                                                &mut aux.form,
-                                                aux.fields.fields.as_ref(),
-                                            );
-                                            ui.add_space(8.0);
-                                            rail(
-                                                ui,
-                                                catalog.as_deref(),
-                                                draft_mut.as_deref_mut(),
-                                                &run,
-                                                &anchor,
-                                                &mut vis,
-                                                &options,
-                                                &mut hits,
-                                                &aux.duty,
-                                                &mut aux.clip,
-                                                &mut aux.info,
-                                                phone,
-                                            );
-                                            ui.add_space(8.0);
-                                            setup_cards(
-                                                ui,
-                                                draft_mut.as_deref(),
-                                                &mut vis,
-                                                catalog.as_deref(),
-                                                &options,
-                                                &mut hits,
-                                                phone,
-                                            );
-                                            // room for the control bar, so the last card is never under it
-                                            ui.add_space(52.0);
-                                        },
-                                    );
-                                });
-                            }
                         }
                     }
                 },
@@ -668,10 +717,7 @@ pub fn viz_ui(
 
     // ---- round 2, change A: the bay-tap picker. Drawn in its own foreground layer, one at a time,
     // dismissed by Esc, by a click outside, or by a drop.
-    let centre_for_anchor = Rect::from_min_max(
-        egui::pos2(0.0, header_r.bottom()),
-        egui::pos2(centre_r.right(), body_r.bottom()),
-    );
+    let centre_for_anchor = scene_rect.rect();
     picker_controls(
         ctx,
         &mut vis,
@@ -717,6 +763,29 @@ pub fn viz_ui(
             options.host.public,
         );
     }
+    // Issue #91: the notes drawer - every sentence the screen no longer paints.
+    {
+        let engine_name = engine
+            .0
+            .as_deref()
+            .map(|e| engine_label(e.name()))
+            .unwrap_or_else(|| "not loaded".to_string());
+        crate::notes::draw(
+            ctx,
+            &mut vis,
+            &mut hits,
+            &options,
+            &engine_name,
+            &staged,
+            &aux.duty,
+            draft_mut.as_deref(),
+            screen,
+            header_r.bottom(),
+            phone,
+        );
+    }
+    // Issue #91: read back every text shape this pass painted (measurement only).
+    aux.words.collect(ctx);
 }
 
 /// The picker's own keyboard, and its placement. Returns the bay rect it is anchored to (for the frames).
@@ -738,15 +807,9 @@ fn picker_controls(
 
     // The bay's rect, so the picker can sit beside it (the layout is the same one the sprites use).
     let bay_rect = match (vis.view, draft.as_deref()) {
-        (View::Cockpit, Some(d)) => {
-            let inner = centre.shrink2(egui::vec2(if phone { 8.0 } else { 12.0 }, 8.0));
-            let scene_h = if phone {
-                (inner.height() * 0.42).clamp(230.0, 330.0)
-            } else {
-                (inner.height() - 132.0 - 54.0 - 12.0).max(220.0)
-            };
-            let scene_r = Rect::from_min_size(inner.min, egui::vec2(inner.width(), scene_h));
-            let l = scene::layout(scene_r, Some(&d.0), phone);
+        // Issue #91: `centre` is the section's own rect this frame (the one the sprites were laid out in).
+        (View::Cockpit, Some(d)) if centre.is_positive() => {
+            let l = scene::layout(centre, Some(&d.0), phone);
             open_slot.and_then(|s| l.slots.iter().find(|(x, _)| *x == s).map(|(_, r)| *r))
         }
         _ => None,
@@ -1192,11 +1255,6 @@ fn parts_rail(
             }
         });
     });
-    ui.label(
-        RichText::new("drag a chip onto its bay · tap a bay for its picker")
-            .size(9.0)
-            .color(t::MUTED),
-    );
     ui.add_space(3.0);
     let Some(cat) = cat else {
         ui.label(RichText::new("catalog loading…").size(10.0).color(t::MUTED));
@@ -1473,17 +1531,6 @@ fn chip(ui: &mut egui::Ui, text: &str, fg: Color32, bg: Color32, line: Color32) 
         .response
 }
 
-fn status_chip(ui: &mut egui::Ui, s: seams::Status) {
-    let (fg, bg, line) = match s {
-        seams::Status::Engine => (t::PRIMARY, t::PRIMARY_SOFT, t::PRIMARY_DEEP),
-        seams::Status::Fixture => (t::INK_2, t::PANEL_RAISED, t::LINE),
-        seams::Status::Illustrative => (t::AMBER, t::AMBER_SOFT, t::with_alpha(t::AMBER, 120)),
-        // Round 4's own status: a stated definition, not an illustration and not a result.
-        seams::Status::Definition => (t::INK, t::PANEL, t::with_alpha(t::INK_2, 120)),
-    };
-    chip(ui, s.chip(), fg, bg, line);
-}
-
 /// A label + value row, right-aligned value in mono so columns line up while numbers move.
 fn kv(ui: &mut egui::Ui, label: &str, value: &str, unit: &str, hot: bool) {
     ui.horizontal(|ui| {
@@ -1570,26 +1617,6 @@ fn engine_mode_chip(ui: &mut egui::Ui, engine: Option<&dyn Engine>) -> egui::Res
     }
 }
 
-/// The header's sub-line: which instrument, over which engine, in the present tense.
-fn engine_subline(engine: Option<&dyn Engine>) -> &'static str {
-    match engine {
-        Some(e) => {
-            if engine_label(e.name()) == "RealEngine" {
-                "an engineering instrument running on the real engine"
-            } else {
-                "a visual pass — an engineering instrument over the recorded fixture engine"
-            }
-        }
-        None => {
-            if cfg!(feature = "real-engine") {
-                "an engineering instrument running on the real engine"
-            } else {
-                "a visual pass — an engineering instrument over the recorded fixture engine"
-            }
-        }
-    }
-}
-
 /// The engine's zone label, without a parenthesised suffix - the rail has one narrow column.
 /// Round 5: measure a text unit with the same font the frame will draw it with, so a layout decision ("does
 /// this row need two lines?") is made on the same shaping the painter uses instead of a character count.
@@ -1616,13 +1643,6 @@ fn overlaps(rects: &[Rect]) -> u32 {
     n
 }
 
-fn short_label(label: &str) -> &str {
-    match label.find(" (") {
-        Some(i) => &label[..i],
-        None => label,
-    }
-}
-
 fn parse_hex(s: &str) -> Option<Color32> {
     let s = s.trim_start_matches('#');
     if s.len() != 6 {
@@ -1641,6 +1661,71 @@ fn accent_of(b: &cockpit::host::Branding) -> Color32 {
 
 // ============================================================================================ header
 
+/// Issue #91: **the validation badge** - the one place the screen states what these numbers are. It carries
+/// the host's decision-12 label verbatim (`cockpit::host::PUBLIC_LABEL` / `INTERNAL_LABEL`, never shortened)
+/// behind a painted (i): a click, the `I` key or the control bar's `notes` button opens the notes drawer,
+/// where every sentence the screen used to paint now lives (`crate::notes`).
+fn validation_badge(
+    ui: &mut egui::Ui,
+    options: &StartOptions,
+    vis: &mut Visual,
+    hits: &mut HitMap,
+    wrap: bool,
+) -> egui::Response {
+    let notice = options.host.notice();
+    let (fg, bg, line) = if notice.public {
+        (t::INK_2, t::with_alpha(t::PANEL_RAISED, 235), t::LINE)
+    } else {
+        (t::PRIMARY, t::PRIMARY_SOFT, t::PRIMARY_DEEP)
+    };
+    let open = vis.notes_open;
+    let frame = egui::Frame::new()
+        .fill(if open { t::PRIMARY_SOFT } else { bg })
+        .stroke(Stroke::new(1.0, if open { t::PRIMARY } else { line }))
+        .corner_radius(egui::CornerRadius::same(13))
+        .inner_margin(egui::Margin::symmetric(9, 4));
+    let shown = frame.show(ui, |ui| {
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 6.0;
+            let (ir, _) = ui.allocate_exact_size(egui::vec2(15.0, 15.0), Sense::hover());
+            ui.painter()
+                .circle_stroke(ir.center(), 6.6, Stroke::new(1.3, t::PRIMARY));
+            ui.painter().text(
+                ir.center() + egui::vec2(0.0, 0.5),
+                Align2::CENTER_CENTER,
+                "i",
+                FontId::new(10.5, t::family_semi()),
+                t::PRIMARY,
+            );
+            ui.label(
+                RichText::new(options.host.host_name())
+                    .size(9.5)
+                    .color(t::INK)
+                    .family(t::family_semi()),
+            );
+            let label = egui::Label::new(
+                RichText::new(&notice.text)
+                    .size(10.0)
+                    .color(fg)
+                    .family(t::family_semi()),
+            );
+            ui.add(if wrap { label.wrap() } else { label });
+        });
+    });
+    let resp = shown.response.interact(Sense::click());
+    let resp = hit(hits, "ctl:notes", resp);
+    if resp.clicked() {
+        vis.notes_open = !vis.notes_open;
+        if vis.notes_open {
+            vis.panel_open = false;
+        }
+    }
+    resp.on_hover_text("notes, validation and keyboard (I)")
+}
+
+/// Issue #91: the header is one row on a desktop - mark, name, the view tabs, and the validation badge -
+/// and three short rows on a phone (name + notes button, the badge, the tabs at 44 px). The sub-line, the
+/// required-copy row and the "no CFD ..." row are gone from the screen; they are in the notes drawer.
 fn header(
     ui: &mut egui::Ui,
     options: &StartOptions,
@@ -1663,16 +1748,13 @@ fn header(
     } else {
         b.name.clone()
     };
-
-    // Row 1: the mark, the name (which truncates rather than colliding), the host chips and - on a desktop -
-    // the view switcher. Nothing here can overlap: every element is laid out in the row it belongs to.
-    ui.horizontal(|ui| {
-        let (mr, _) = ui.allocate_exact_size(egui::vec2(30.0, 30.0), Sense::hover());
+    let mark_box = |ui: &mut egui::Ui| {
+        let (mr, _) = ui.allocate_exact_size(egui::vec2(28.0, 28.0), Sense::hover());
         ui.painter()
-            .rect_filled(mr, egui::CornerRadius::same(5), t::with_alpha(accent, 46));
+            .rect_filled(mr, egui::CornerRadius::same(6), t::with_alpha(accent, 46));
         ui.painter().rect_stroke(
             mr,
-            egui::CornerRadius::same(5),
+            egui::CornerRadius::same(6),
             Stroke::new(1.0, accent),
             StrokeKind::Inside,
         );
@@ -1680,35 +1762,79 @@ fn header(
             mr.center(),
             Align2::CENTER_CENTER,
             &mark,
-            FontId::new(12.0, t::family_semi()),
+            FontId::new(11.5, t::family_semi()),
             accent,
         );
+    };
+    let tabs = |ui: &mut egui::Ui, vis: &mut Visual, hits: &mut HitMap, h: f32| {
+        for v in View::ALL.iter().copied() {
+            let sel = vis.view == v;
+            let text = RichText::new(v.name())
+                .size(12.5)
+                .color(if sel { t::INK } else { t::MUTED })
+                .family(t::family_semi());
+            let r = ui.add(
+                egui::Button::selectable(sel, text)
+                    .min_size(egui::vec2(0.0, h))
+                    .corner_radius(egui::CornerRadius::same(6)),
+            );
+            if sel {
+                // The active tab carries the accent underline - a selected state that reads in a still frame.
+                ui.painter().line_segment(
+                    [
+                        egui::pos2(r.rect.left() + 6.0, r.rect.bottom() - 1.0),
+                        egui::pos2(r.rect.right() - 6.0, r.rect.bottom() - 1.0),
+                    ],
+                    Stroke::new(2.0, t::PRIMARY),
+                );
+            }
+            if hit(hits, &format!("ctl:view:{}", v.slug()), r).clicked() {
+                vis.view = v;
+            }
+        }
+    };
 
-        if phone {
+    if phone {
+        // Row 1: the mark, the name, and a 44 px notes button (the badge below opens the same drawer).
+        ui.horizontal(|ui| {
+            mark_box(ui);
             ui.add(
                 egui::Label::new(
                     RichText::new(&name)
-                        .size(13.5)
+                        .size(14.0)
                         .color(t::INK)
                         .family(t::family_semi()),
                 )
                 .truncate(),
             );
-        } else {
-            ui.vertical(|ui| {
-                ui.label(t::strong(&name));
-                ui.label(
-                    RichText::new(engine_subline(engine))
-                        .size(10.5)
-                        .color(t::MUTED),
-                );
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if load.failure.is_some() {
+                    chip(
+                        ui,
+                        "FIXTURE FAILED",
+                        t::DANGER,
+                        t::DANGER_SOFT,
+                        t::with_alpha(t::DANGER, 140),
+                    );
+                }
             });
-            ui.add_space(6.0);
-            if host.public {
-                chip(ui, "PUBLIC", t::INK_2, t::PANEL_RAISED, t::LINE);
-            } else {
-                chip(ui, "INTERNAL", t::PRIMARY, t::PRIMARY_SOFT, t::PRIMARY_DEEP);
-            }
+        });
+        ui.add_space(2.0);
+        // Row 2: the badge, wrapped - the decision-12 label is never truncated.
+        validation_badge(ui, options, vis, hits, true);
+        ui.add_space(2.0);
+        // Row 3: the view tabs, 44 px tall.
+        ui.horizontal(|ui| tabs(ui, vis, hits, 44.0));
+        return;
+    }
+
+    ui.horizontal(|ui| {
+        mark_box(ui);
+        ui.label(t::strong(&name));
+        ui.add_space(18.0);
+        tabs(ui, vis, hits, 30.0);
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            validation_badge(ui, options, vis, hits, false);
             engine_mode_chip(ui, engine);
             if let Some(l) = &host.catalog_label {
                 chip(ui, l, t::MUTED, t::PANEL_RAISED, t::LINE_SOFT);
@@ -1722,77 +1848,8 @@ fn header(
                     t::with_alpha(t::DANGER, 140),
                 );
             }
-        }
-
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if phone {
-                // A phone keeps the host chip here and puts its view tabs on their own row below: 390 px
-                // cannot hold the name and three tabs side by side.
-                chip(
-                    ui,
-                    if host.public { "PUBLIC" } else { "INTERNAL" },
-                    t::INK_2,
-                    t::PANEL_RAISED,
-                    t::LINE,
-                );
-            } else {
-                // Round 4, item 5: ONE view bar - these header tabs - on both viewports. The bottom bar's
-                // VIEW group is gone, so nothing is offered twice.
-                for v in View::ALL.iter().copied().rev() {
-                    let sel = vis.view == v;
-                    let r = ui.selectable_label(
-                        sel,
-                        RichText::new(v.name())
-                            .size(12.0)
-                            .color(if sel { t::PRIMARY } else { t::MUTED })
-                            .family(t::family_semi()),
-                    );
-                    if hit(hits, &format!("ctl:view:{}", v.slug()), r).clicked() {
-                        vis.view = v;
-                    }
-                }
-                ui.label(t::eyebrow("view"));
-            }
         });
     });
-
-    // Row 2: the required copy, always, and the limits of the pass.
-    if phone {
-        ui.add(
-            egui::Label::new(
-                RichText::new(seams::REQUIRED_COPY)
-                    .size(11.0)
-                    .color(t::PRIMARY)
-                    .family(t::family_semi()),
-            )
-            .wrap(),
-        );
-        // Round 4, item 5: the phone's view tabs - the only view bar it has now.
-        ui.horizontal(|ui| {
-            for v in View::ALL.iter().copied() {
-                let sel = vis.view == v;
-                let r = ui.selectable_label(
-                    sel,
-                    RichText::new(v.name())
-                        .size(11.5)
-                        .color(if sel { t::PRIMARY } else { t::MUTED })
-                        .family(t::family_semi()),
-                );
-                if hit(hits, &format!("ctl:view:{}", v.slug()), r).clicked() {
-                    vis.view = v;
-                }
-            }
-        });
-    } else {
-        ui.horizontal(|ui| {
-            ui.label(RichText::new(seams::REQUIRED_COPY).size(11.5).color(t::PRIMARY).family(t::family_semi()));
-            {
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(RichText::new("no CFD · no bypass · no CTI/MRL validation or certification claim · no money field").size(10.0).color(t::MUTED));
-            });
-            }
-        });
-    }
 }
 
 fn footer(
@@ -2158,6 +2215,15 @@ fn zone_pa(run: &Run, zone: ZoneId, layer: Option<usize>) -> Option<(f64, f64)> 
         .map(|z| (z.pressure_pa, z.share_pct))
 }
 
+/// #91 round 2, correctness (c): the fill's own transfer, the layers' KaV/L summed. The
+/// engine's `kavl_total` is the tower's available transfer - fill + spray zone + rain zone.
+pub fn fill_kavl(run: &Run) -> f64 {
+    run.output
+        .as_ref()
+        .map(|o| o.kavl_per_layer.iter().map(|l| l.kavl).sum())
+        .unwrap_or(0.0)
+}
+
 /// Round 3, item 5: **the pressure at the operating point**, from the engine's own fan/system solve.
 ///
 /// Why this and not `total_pressure_pa`: the fixture engine re-expresses the edited inputs it can (the fan
@@ -2209,10 +2275,22 @@ fn layer_result(run: &Run, i: usize) -> Option<&cockpit::engine::LayerResult> {
 #[derive(Debug, Clone)]
 struct Plate {
     rect: Rect,
-    lines: Vec<(String, FontId, Color32)>,
+    /// One line per row - text, font, colour, and where that line's number comes from. The mark beside a
+    /// line is the same painted shape the answer card and the tap-detail use (calculated disc / catalog
+    /// ring / illustrative diamond), so a reader learns the key once.
+    lines: Vec<(String, FontId, Color32, crate::answer::Src)>,
     tag: Option<(String, FontId, Color32)>,
     pad: f32,
     tone: Color32,
+}
+
+/// Issue #91: a section label waiting for its slot in the gutter - the point it names, its lines.
+struct Callout {
+    target: egui::Pos2,
+    lines: Vec<(String, FontId, Color32, crate::answer::Src)>,
+    tone: Color32,
+    bay: bool,
+    key: String,
 }
 
 /// One line's height, from its own font size.
@@ -2222,18 +2300,20 @@ fn line_h(font: &FontId) -> f32 {
 
 fn plate_size(
     painter: &egui::Painter,
-    lines: &[(String, FontId, Color32)],
+    lines: &[(String, FontId, Color32, crate::answer::Src)],
     tag: Option<&(String, FontId, Color32)>,
     pad: f32,
 ) -> egui::Vec2 {
     let mut w: f32 = 0.0;
     let mut h = pad * 2.0;
-    for (text, font, color) in lines.iter() {
+    for (text, font, color, _src) in lines.iter() {
+        // the mark's own gutter, reserved on every line
         w = w.max(
             painter
                 .layout_no_wrap(text.clone(), font.clone(), *color)
                 .size()
-                .x,
+                .x
+                + MARK_GUTTER,
         );
         h += line_h(font);
     }
@@ -2249,6 +2329,9 @@ fn plate_size(
     egui::vec2(w, h)
 }
 
+/// The width a line's source mark reserves at the plate's left edge.
+const MARK_GUTTER: f32 = 9.5;
+
 fn paint_plate(p: &egui::Painter, pl: &Plate) {
     p.rect_filled(
         pl.rect,
@@ -2263,10 +2346,18 @@ fn paint_plate(p: &egui::Painter, pl: &Plate) {
     );
     let mut y = pl.rect.top() + pl.pad;
     let mut last_top = y;
-    for (text, font, color) in pl.lines.iter() {
+    for (text, font, color, src) in pl.lines.iter() {
         last_top = y;
+        // #91 round 2: the source mark, one per line - so a number on the tower carries its provenance
+        // exactly like a number on the answer card. Hover names it; the key is on the card.
+        crate::answer::paint_mark(
+            p,
+            egui::pos2(pl.rect.left() + pl.pad + 3.4, y + line_h(font) * 0.5 - 1.0),
+            3.2,
+            *src,
+        );
         p.text(
-            egui::pos2(pl.rect.left() + pl.pad, y),
+            egui::pos2(pl.rect.left() + pl.pad + MARK_GUTTER, y),
             Align2::LEFT_TOP,
             text,
             font.clone(),
@@ -2303,131 +2394,40 @@ fn truncate_to(painter: &egui::Painter, text: &str, font: &FontId, max_w: f32) -
     "…".to_string()
 }
 
-/// A bay's own label block, and the ladder that keeps it inside the bay it belongs to.
-///
-/// A block is a list of pieces (the record, the zone's own engine value, the invitation). The ladder runs in
-/// this order, and every step is reported to the frame rather than hidden:
-///
-/// 1. **step the type down** - to 8 px - while the block is taller or wider than the room it has;
-/// 2. **merge from the end** (the invitation joins the value line) while it is still too tall;
-/// 3. **drop the leading piece** (the record's id - the rail chip, the strip and the picker all name it)
-///    while a single line is still too wide: this is the phone's nozzle bay, whose band is 18 px tall;
-/// 4. **truncate with an ellipsis** as the last resort.
-///
-/// The result is always inside the bay: a label that leaves its bay, or a pair that overlaps, is a layout
-/// that failed, and the frames read both counts from the app (`data-bay-label-outside`, `-overlaps`).
-fn bay_plate(
-    painter: &egui::Painter,
-    bay: Rect,
-    mut lines: Vec<(String, FontId, Color32)>,
-    tag: Option<(String, FontId, Color32)>,
-    pad: f32,
-    tone: Color32,
-    free_h: f32,
-) -> (Plate, bool, bool, bool) {
-    let text_h =
-        |ls: &[(String, FontId, Color32)]| -> f32 { ls.iter().map(|l| line_h(&l.1)).sum::<f32>() };
-    let widest = |ls: &[(String, FontId, Color32)]| -> f32 {
-        ls.iter()
-            .map(|l| {
-                painter
-                    .layout_no_wrap(l.0.clone(), l.1.clone(), l.2)
-                    .size()
-                    .x
-            })
-            .fold(0.0f32, f32::max)
-    };
-    // The room the block has: the bay's own height, or the free strip above the bay's first content row (the
-    // fill bay's layers are drawn from the bottom of the band up, and the block must not sit on the top one).
-    let room = (free_h.min(bay.height()) - 2.0).max(6.0);
-    let mut avail_w = (bay.width() - pad * 2.0 - 6.0).max(20.0);
-    let mut truncated = false;
-    let mut dropped = false;
-    // 1. step the type down before anything is merged.
-    while (pad * 2.0 + text_h(&lines) > room || widest(&lines) > avail_w) && lines[0].1.size > 8.0 {
-        for l in lines.iter_mut() {
-            l.1 = FontId::new(l.1.size - 0.5, l.1.family.clone());
-        }
-    }
-    // 2. the pad gives way next: a plate with 1 px of padding beats a merged line, and the lines keep their
-    //    own values.
-    let pad = pad.min(((room - text_h(&lines)) / 2.0).max(1.0));
-    // 3. still too tall: merge from the **start** - the pieces before the invitation join it, so the
-    //    invitation stays the block's own last line (issue #58, the owner's layout nit 2). The block's
-    //    last line is the short one the bay's own tag is drawn beside (`bay · drift`); merging the
-    //    invitation *into* the value line instead put a long line at the end, and the tag then landed
-    //    on top of it. Round 5's ladder merged from the end; the string a block ends up with is the
-    //    same, in the same order - only which line survives alone changes.
-    while lines.len() > 1 && text_h(&lines) + 2.0 > room {
-        let head = lines.remove(1);
-        lines[0].0 = format!("{} · {}", lines[0].0, head.0);
-    }
-    // 4. one line still too wide: drop the leading piece (the record's id), piece by piece.
-    while lines.len() == 1 && widest(&lines) > avail_w && lines[0].0.contains(" · ") {
-        let Some((_, rest)) = lines[0].0.split_once(" · ") else {
-            break;
-        };
-        let rest = rest.to_string();
-        if rest.is_empty() {
-            break;
-        }
-        lines[0].0 = rest;
-        dropped = true;
-    }
-    // 5. and the text is cut only when nothing else is left.
-    avail_w = (bay.width() - pad * 2.0 - 6.0).max(20.0);
-    for l in lines.iter_mut() {
-        let w = painter
-            .layout_no_wrap(l.0.clone(), l.1.clone(), l.2)
-            .size()
-            .x;
-        if w > avail_w {
-            l.0 = truncate_to(painter, &l.0, &l.1, avail_w);
-            truncated = true;
-        }
-    }
-    let size = plate_size(painter, &lines, tag.as_ref(), pad);
-    let h = size.y.min(bay.height() - 2.0).min(room);
-    let rect = Rect::from_min_size(
-        bay.min + egui::vec2(4.0, 1.0),
-        egui::vec2(
-            (size.x + pad * 2.0).min(bay.width() - 6.0),
-            h.max(line_h(&lines[0].1) + pad).min(bay.height() - 2.0),
-        ),
-    );
-    let inside = bay.contains_rect(rect);
-    (
-        Plate {
-            rect,
-            lines,
-            tag,
-            pad,
-            tone,
-        },
-        inside,
-        truncated,
-        dropped,
-    )
+/// Issue #81: does this stack of plates fit a column that tall? `scene_overlay` steps the type down to its
+/// floor, then drops plates from the bottom of the band order, until this holds - a column that cannot hold
+/// its plates is what put two labels on the same pixels at 390x844.
+pub(crate) fn column_holds(heights: &[f32], gap: f32, budget: f32) -> bool {
+    heights.iter().sum::<f32>() + gap * (heights.len().saturating_sub(1)) as f32 <= budget
 }
 
-/// A plate positioned against a point (the zone call-outs keep the anchors round 1 gave them).
-fn plate_at(
-    painter: &egui::Painter,
-    at: egui::Pos2,
-    align: Align2,
-    lines: Vec<(String, FontId, Color32)>,
-    pad: f32,
-    tone: Color32,
-) -> Plate {
-    let size = plate_size(painter, &lines, None, pad) + egui::vec2(0.0, 0.0);
-    let rect = align.anchor_size(at, size);
-    Plate {
-        rect,
-        lines,
-        tag: None,
-        pad,
-        tone,
+/// Issue #81: stack plates down a column in band order - each as close to its target as it can be, never
+/// above the one before it, then pulled back up from the bottom when the column ran out. Pure, so the
+/// packer is testable against the sizes the frames measured: the caller has already made the stack fit
+/// ([`column_holds`]), and then no two plates can share pixels.
+pub(crate) fn pack_column(
+    targets: &[f32],
+    heights: &[f32],
+    first_floor: f32,
+    min_top: f32,
+    bottom: f32,
+    gap: f32,
+) -> Vec<f32> {
+    let mut ys = Vec::with_capacity(heights.len());
+    let mut floor = first_floor;
+    for (t, h) in targets.iter().zip(heights.iter()) {
+        let y = (t - h * 0.5).max(floor);
+        ys.push(y);
+        floor = y + h + gap;
     }
+    let mut ceil = bottom;
+    for i in (0..heights.len()).rev() {
+        if ys[i] + heights[i] > ceil {
+            ys[i] = (ceil - heights[i]).max(min_top);
+        }
+        ceil = ys[i] - gap;
+    }
+    ys
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2442,52 +2442,83 @@ fn scene_overlay(
     hits: &mut HitMap,
     info: &mut crate::clip::LayoutInfo,
     anim_t: f32,
+    // Whether the gutter call-out plates are drawn. The Instrument's tower is the drawing the numbers live
+    // on; the Curves view shows the same tower as a *reference section* beside its charts, where ten plates
+    // cannot fit one column and every figure they carry is already on the Instrument and in the view's own
+    // readout card. Round 2 passes `false` there.
+    gutter_plates: bool,
+    // Issue #81: the shell's own phone rule (screen width), so the overlay, the sprite pass and the layout
+    // all read one breakpoint. It used to re-derive it from the section's width, so a 700 px window drew a
+    // desktop rail beside a phone-styled section.
+    phone: bool,
 ) {
-    let phone = area.width() < 560.0;
     let l = scene::layout(area, Some(&draft.0), phone);
     let p = ui.painter_at(area);
     let mono = |size: f32| FontId::new(size, t::family_mono_med());
     let semi = |size: f32| FontId::new(size, t::family_semi());
 
-    // ---- the depth ruler: what the fill band is worth in metres
-    if !phone && l.m_per_px_y > 0.0 {
-        let max_m = draft
-            .0
-            .tower
-            .fill_depth_options_m
-            .last()
-            .copied()
-            .unwrap_or(2.1);
-        let mut m = 0.0;
-        while m <= max_m + 0.001 {
-            let y = l.fill_band.bottom() - (m as f32 / l.m_per_px_y);
-            if y >= l.fill_band.top() - 2.0 && y <= l.fill_band.bottom() + 2.0 {
-                let tick = Rect::from_min_max(
-                    egui::pos2(l.ruler.right() - 7.0, y - 0.5),
-                    egui::pos2(l.ruler.right(), y + 0.5),
-                );
-                p.rect_filled(
-                    tick,
-                    egui::CornerRadius::same(0),
-                    t::with_alpha(t::TICK, 220),
-                );
+    // ---- issue #81 / #91: the elevation ruler. The section has ONE scale, so one ruler measures all of it:
+    // a tick per metre from the basin floor to the stack mouth, and a bracket for the fill depth.
+    if !phone && l.px_per_m > 0.0 {
+        let floor_y = l.basin.bottom();
+        let top_y = l.stack.top();
+        let x = l.ruler.right() - 4.0;
+        p.line_segment(
+            [egui::pos2(x, floor_y), egui::pos2(x, top_y)],
+            Stroke::new(1.0, t::with_alpha(t::TICK, 200)),
+        );
+        let mut mtr = 0.0_f32;
+        while floor_y - mtr * l.px_per_m >= top_y - 0.5 {
+            let y = floor_y - mtr * l.px_per_m;
+            let major = (mtr as i32) % 2 == 0;
+            p.line_segment(
+                [
+                    egui::pos2(x - if major { 7.0 } else { 4.0 }, y),
+                    egui::pos2(x, y),
+                ],
+                Stroke::new(1.0, t::with_alpha(t::TICK, 230)),
+            );
+            if major {
                 p.text(
-                    egui::pos2(l.ruler.right() - 10.0, y),
+                    egui::pos2(x - 10.0, y),
                     Align2::RIGHT_CENTER,
-                    format!("{m:.2} m"),
-                    mono(9.5),
+                    format!("{mtr:.0}"),
+                    mono(9.0),
                     t::MUTED,
                 );
             }
-            m += 0.5;
+            mtr += 1.0;
         }
         p.text(
-            egui::pos2(l.ruler.center().x - 12.0, l.fill_band.top() - 14.0),
-            Align2::LEFT_BOTTOM,
-            "fill depth",
-            semi(9.5),
+            egui::pos2(x - 10.0, top_y - 12.0),
+            Align2::RIGHT_BOTTOM,
+            "m",
+            mono(9.0),
             t::MUTED,
         );
+        // the fill bracket: the authored stack's depth, at the same scale
+        if let (Some(first), Some(last)) = (l.layers.first(), l.layers.last()) {
+            let bx = l.tower.left() - if phone { 2.0 } else { 18.0 };
+            let c = t::with_alpha(t::PRIMARY, 150);
+            p.line_segment(
+                [egui::pos2(bx, first.top()), egui::pos2(bx, last.bottom())],
+                Stroke::new(1.0, c),
+            );
+            p.line_segment(
+                [
+                    egui::pos2(bx, first.top()),
+                    egui::pos2(bx + 4.0, first.top()),
+                ],
+                Stroke::new(1.0, c),
+            );
+            p.line_segment(
+                [
+                    egui::pos2(bx, last.bottom()),
+                    egui::pos2(bx + 4.0, last.bottom()),
+                ],
+                Stroke::new(1.0, c),
+            );
+        }
     }
 
     // ---- bays: dashed frames, their content, the drop state, tap-to-place
@@ -2500,35 +2531,17 @@ fn scene_overlay(
     // Round 5: the fan bay's own block carries the rpm (round 4 drew it as free text left of the stack,
     // where it ran off the drawing's left edge).
     let rpm_now = m::rpm_text(draft.0.speed_ratio, draft.0.fan.nominal_rpm);
-    // The plenum's operating-point read-out is a plate of its own, right below the fan bay (round 3 drew the
-    // same text there as free text over the flow). Measured here, once, so the fan bay's block can reserve
-    // the strip it takes and the two plates can never touch.
     let op_text = |a: &EngineOutput| -> String {
-        let op_pa = op_pressure(a);
-        if phone {
-            format!(
-                "OP · {} m3/s · {} Pa",
-                t::fmt(a.airflow_m3_s),
-                t::fmt(op_pa)
-            )
-        } else {
-            format!(
-                "operating point · {} m3/s at {} Pa total (engine solve)",
-                t::fmt(a.airflow_m3_s),
-                t::fmt(op_pa)
-            )
-        }
+        format!(
+            "OP · {} m3/s · {} Pa",
+            t::fmt(a.airflow_m3_s),
+            t::fmt(op_pressure(a))
+        )
     };
-    // (On a phone the section is ~260 px tall and the plenum is 22 px: the read-out stays round 4's free
-    // text there, and the fan bay's block gets the whole bay instead of reserving a plate that is not drawn.)
-    let op_reserve = if phone {
-        0.0
-    } else {
-        run.output
-            .as_ref()
-            .map(|a| plate_size(&p, &[(op_text(a), mono(9.5), t::PRIMARY)], None, 3.0).y + 2.0)
-            .unwrap_or(0.0)
-    };
+    // Issue #91: every section label is a **call-out in the gutter** right of the drawing, on a leader line
+    // to the band it names. The gutter is one column and the call-outs are stacked in it in band order, so
+    // two labels can never overlap and no label is drawn over the drawing (#81's collision list).
+    let mut callouts: Vec<Callout> = Vec::new();
     let released = ctx.input(|i| i.pointer.any_released());
     let payload = egui::DragAndDrop::payload::<PartRef>(ctx);
     let carried: Option<PartRef> = payload
@@ -2542,7 +2555,8 @@ fn scene_overlay(
     for (slot, r) in l.slots.iter() {
         let resp = ui
             .interact(*r, ui.id().with(("bay", slot.slug())), Sense::click())
-            .on_hover_cursor(egui::CursorIcon::PointingHand);
+            .on_hover_cursor(egui::CursorIcon::PointingHand)
+            .on_hover_text(format!("{} bay · tap or drop a part here", slot.name()));
         hits.0.push((
             format!("bay:{}", slot.slug()),
             [r.min.x, r.min.y, r.width(), r.height()],
@@ -2595,101 +2609,69 @@ fn scene_overlay(
         Shape::dashed_line_many(&pts, Stroke::new(width, color), 7.0, 5.0, &mut dashes);
         p.extend(dashes);
 
-        // ---- round 5, item 2: ONE label block per bay. What round 4 drew as three separate strings (the
-        // identity at the top-left, `bay · <name>` at the top-right, the invitation or the verdict pill in
-        // the middle) is one plate with its own lines: the identity, the zone's own engine value, the
-        // invitation (or, while a part is carried, the bay's verdict). It is measured against the bay it
-        // belongs to, so it cannot leave the bay, and it is painted after the streamlines.
-        let dragging_here = vis
-            .drag
-            .as_ref()
-            .map(|d| d.over == Some(*slot))
-            .unwrap_or(false);
-        let tag = if !phone || dragging_here {
-            Some((
-                if dragging_here {
-                    format!("bay · {} · drop", slot.name())
-                } else {
-                    format!("bay · {}", slot.name())
-                },
-                semi(9.0),
-                t::with_alpha(t::MUTED, 210),
-            ))
-        } else {
-            None
-        };
-        let mono_size = if phone { 9.0 } else { 10.0 };
-        let inv_size = if phone { 8.5 } else { 9.5 };
-        // A 390 px phone's bands are a third of the desktop's: the invitation is the same affordance, said
-        // shorter (round 2's rule for the phone: simplify the detail, not the component).
-        let invitation = if phone {
-            "tap or drop"
-        } else {
-            "tap or drop here"
-        };
-        let mut lines: Vec<(String, FontId, Color32)> = Vec::new();
+        // ---- the bay's call-out: the record, the zone's own engine value - or, while a part is carried, the
+        // bay's verdict on it. One block per bay (round 5), now in the gutter on a leader (issue #91).
+        let mono_size = if phone { 9.0 } else { 10.5 };
+        let mut lines: Vec<(String, FontId, Color32, crate::answer::Src)> = Vec::new();
         let tone = match verdict.as_ref() {
             Some((part, v)) => {
-                // The bay's answer while a part is carried - one line, in the verdict's own colour, in the
-                // same block the identity was in. (A bay that refuses the part dims and says why.)
                 let (txt, col) = match v {
-                    Ok(()) => (format!("drop here · accepts {}", part.id), t::VALID),
+                    Ok(()) => (format!("drop · accepts {}", part.id), t::VALID),
                     Err(_) => (
-                        format!("won't take {} ({})", part.id, part.class.name()),
+                        format!("won't take {}", part.id),
                         t::with_alpha(t::MUTED, 220),
                     ),
                 };
-                lines.push((txt, semi(if phone { 9.5 } else { 10.0 }), col));
+                lines.push((
+                    txt,
+                    semi(if phone { 9.0 } else { 10.0 }),
+                    col,
+                    crate::answer::Src::Catalog,
+                ));
                 col
             }
             None => {
+                // The bar carries the rpm (the primary action's value): the call-out names the part and the
+                // stack's own pressure only, so no number is printed twice (issue #91).
+                let _ = rpm_now;
                 let identity = match slot {
-                    Slot::Fan => {
-                        if phone {
-                            format!("fan: {} · {} rpm", draft.0.fan.id, rpm_now)
-                        } else {
-                            format!(
-                                "fan: {} · {} rpm (speed ratio {:.2})",
-                                draft.0.fan.id, rpm_now, draft.0.speed_ratio
-                            )
-                        }
-                    }
-                    Slot::Drift => format!("drift: {}", draft.0.drift.id),
-                    Slot::Nozzle => format!("nozzle bank: {}", draft.0.nozzle.id),
+                    Slot::Fan => draft.0.fan.id.clone(),
+                    Slot::Drift => draft.0.drift.id.clone(),
+                    Slot::Nozzle => draft.0.nozzle.id.clone(),
                     Slot::Fill => {
-                        let i = vis
-                            .selected_layer
-                            .min(draft.0.fill_layers.len().saturating_sub(1));
-                        match draft.0.fill_layers.get(i) {
-                            Some(l) => {
-                                format!("fill layer {}: {} {:.2} m", i + 1, l.fill_id, l.depth_m)
-                            }
-                            None => "fill stack: empty".into(),
-                        }
+                        let depth: f64 = draft.0.fill_layers.iter().map(|x| x.depth_m).sum();
+                        format!("fill · {:.2} m", depth)
                     }
                 };
-                lines.push((identity, mono(mono_size), t::with_alpha(t::INK, 220)));
-                // The zone's own engine value, in the bay it belongs to (round 4 drew the fan stack, the
-                // drift and the spray call-outs as free-floating text beside the tower; they are the bays'
-                // own values, so they live in the bays' blocks now - one label per thing).
+                lines.push((
+                    identity,
+                    mono(mono_size),
+                    t::with_alpha(t::INK, 230),
+                    crate::answer::Src::Catalog,
+                ));
+                // #91 round 2, correctness (a) and (b): every zone row reads the same grouped,
+                // largest-remainder figures the answer card and the tap-detail print
+                // (`answer::air_path`), so the fill finally carries its own Pa and share and the
+                // shares a reader adds up across the bays come to exactly 100 %.
                 let zone = match slot {
-                    Slot::Fan => zone_pa(run, ZoneId::Stack, None)
-                        .map(|(pa, share)| format!("fan stack · {pa:.1} Pa · {share:.1}%")),
-                    Slot::Drift => zone_pa(run, ZoneId::Drift, None)
-                        .map(|(pa, share)| format!("{pa:.1} Pa · {share:.1}%")),
-                    Slot::Nozzle => zone_pa(run, ZoneId::Spray, None).map(|(pa, share)| {
-                        format!("spray / distribution · {pa:.1} Pa · {share:.1}%")
-                    }),
-                    Slot::Fill => None,
+                    Slot::Fan => crate::answer::shown_share_f(run, ZoneId::Stack)
+                        .map(|(pa, share)| format!("stack {pa:.1} Pa · {share}%")),
+                    Slot::Drift => crate::answer::shown_share_f(run, ZoneId::Drift)
+                        .map(|(pa, share)| format!("{pa:.1} Pa · {share}%")),
+                    Slot::Nozzle => crate::answer::shown_share_f(run, ZoneId::Spray)
+                        .map(|(pa, share)| format!("{pa:.1} Pa · {share}%")),
+                    // (c): the fill's own KaV/L is its layers' sum; `kavl_total` is the tower's
+                    // *available* transfer (fill + spray + rain) and is labelled as such on the answer
+                    // card, never attributed to the fill.
+                    Slot::Fill => {
+                        crate::answer::shown_share_f(run, ZoneId::Fill).map(|(pa, share)| {
+                            format!("{pa:.1} Pa · {share}% · KaV/L {:.3}", fill_kavl(run))
+                        })
+                    }
                 };
                 if let Some(z) = zone {
-                    lines.push((z, mono(mono_size), t::INK_2));
+                    lines.push((z, mono(mono_size - 0.5), t::INK_2, crate::answer::Src::Calc));
                 }
-                lines.push((
-                    invitation.to_string(),
-                    semi(inv_size),
-                    t::with_alpha(t::MUTED, 150),
-                ));
                 if vis.selected_slot == *slot {
                     t::with_alpha(t::PRIMARY, 220)
                 } else {
@@ -2697,47 +2679,27 @@ fn scene_overlay(
                 }
             }
         };
-        let free_h = match slot {
-            // the fill bay: the strip above its first layer row
-            Slot::Fill => l
-                .layers
-                .first()
-                .map(|lr| lr.top() - r.top())
-                .unwrap_or(r.height()),
-            // the fan bay: everything above the plenum's operating-point plate
-            Slot::Fan => (r.height() - op_reserve).max(20.0),
-            _ => r.height(),
+        // The leader lands on the bay's right edge, at the middle of what the bay draws (the fill bay: the
+        // authored stack, not the spare depth above it).
+        let target_y = match slot {
+            Slot::Fan => l.stack_cyl.center().y,
+            Slot::Fill => match (l.layers.first(), l.layers.last()) {
+                (Some(a), Some(b)) => (a.top() + b.bottom()) * 0.5,
+                _ => r.center().y,
+            },
+            _ => r.center().y,
         };
-        let (plate, inside, truncated, dropped) = bay_plate(
-            &p,
-            *r,
+        let anchor_x = match slot {
+            Slot::Fan => l.stack_cyl.right() - 2.0,
+            _ => r.right() - 2.0,
+        };
+        callouts.push(Callout {
+            target: egui::pos2(anchor_x, target_y),
             lines,
-            tag,
-            if phone { 4.0 } else { 5.0 },
             tone,
-            free_h,
-        );
-        if !inside {
-            info.bay_label_outside += 1;
-        }
-        if truncated {
-            info.bay_label_truncated += 1;
-            let txt = plate
-                .lines
-                .iter()
-                .map(|l| l.0.clone())
-                .collect::<Vec<String>>()
-                .join(" | ");
-            info.bay_label_notes
-                .push_str(&format!("{}:cut[{}];", slot.slug(), txt));
-        }
-        if dropped {
-            info.bay_label_dropped += 1;
-            info.bay_label_notes
-                .push_str(&format!("{}:dropped;", slot.slug()));
-        }
-        bay_rects.push(plate.rect);
-        plates.push(plate);
+            bay: true,
+            key: format!("bay:{}", slot.slug()),
+        });
 
         // What the catalog says about what is being carried. The pointer path and the staged path draw the
         // same thing; only the `staged` flag differs, and the frame publishes it.
@@ -2796,154 +2758,277 @@ fn scene_overlay(
     // ---- round 2, change B: air as streamlines and water as falling streaks, over the structure
     flow_overlay(&p, &l, draft, run, vis, anim_t, phone);
 
-    // ---- the section call-outs that are not a bay's own value: every number below is engine output at the
-    // current ratio. (The fan stack, drift and spray call-outs moved into those bays' blocks in round 5;
-    // the rain zone, the inlet louvres and the basin are the tower's own bands, so their plates are anchored
-    // to the bands exactly as round 1 anchored the text.)
-    if let Some((pa, share)) = zone_pa(run, ZoneId::Rain, None) {
-        // A phone's bands are 18 px tall and its plates are anchored *inside* them (round 4's anchor put the
-        // text above the band, where it ran into the fill layer's own row).
-        let pl = plate_at(
-            &p,
-            if phone {
-                egui::pos2(l.rain.left() + 6.0, l.rain.top() + 1.0)
-            } else {
-                egui::pos2(l.rain.left() + 6.0, l.rain.bottom() - 2.0)
-            },
-            if phone {
-                Align2::LEFT_TOP
-            } else {
-                Align2::LEFT_BOTTOM
-            },
-            vec![(
-                format!("rain zone · {pa:.1} Pa · {share:.1}%"),
-                // a phone's rain band is 16 px: the call-out steps down with it, or the plate would leave
-                // the band and touch the basin's own plate below it.
-                mono(if phone { 8.5 } else { 10.0 }),
-                t::INK_2,
-            )],
-            if phone { 1.5 } else { 4.0 },
-            t::SLOT,
-        );
-        plates.push(pl);
-    }
-    if let Some((pa, share)) = zone_pa(run, ZoneId::Inlet, None) {
-        let (pos, align) = if phone {
-            (
-                egui::pos2(l.tower.left() + 5.0, l.plinth.bottom() - 3.0),
-                Align2::LEFT_BOTTOM,
-            )
-        } else {
-            (
-                egui::pos2(l.inlet_l.left() - 3.0, l.inlet_l.top() - 4.0),
-                Align2::LEFT_BOTTOM,
-            )
-        };
-        let pl = plate_at(
-            &p,
-            pos,
-            align,
-            vec![(
-                format!("inlet louvres {pa:.1} Pa · {share:.1}%"),
-                mono(9.5),
-                t::AIR,
-            )],
-            if phone { 2.0 } else { 4.0 },
-            t::SLOT,
-        );
-        plates.push(pl);
-    }
+    // ---- the zone call-outs that are not a bay's own value (engine output at the current ratio), in the
+    // same gutter, in band order: the operating point (plenum), the fill layers, the rain zone, the inlet
+    // louvres, the basin.
     if let Some(o) = run.output.as_ref() {
-        let pl = plate_at(
-            &p,
-            if phone {
-                egui::pos2(l.basin.left() + 6.0, l.basin.top() + 1.0)
-            } else {
-                egui::pos2(l.basin.left() + 6.0, l.basin.center().y)
-            },
-            if phone {
-                Align2::LEFT_TOP
-            } else {
-                Align2::LEFT_CENTER
-            },
-            vec![(
-                format!(
-                    "basin · {} m3/hr (engine output)",
-                    t::fmt(o.water_flow_m3_hr)
-                ),
-                mono(10.0),
-                t::WATER,
-            )],
-            if phone { 2.0 } else { 4.0 },
-            t::SLOT,
-        );
-        plates.push(pl);
-    }
-
-    // per-layer identity + KaV/L, straight from `EngineOutput.kavl_per_layer`
-    for (i, r) in l.layers.iter().enumerate() {
-        let Some(lr) = layer_result(run, i) else {
-            continue;
-        };
-        let txt = if phone {
-            format!("{} {:.2} m", lr.fill_id, lr.depth_m)
-        } else {
-            format!(
-                "{} · {:.2} m · KaV/L {:.3} · {:.1} Pa · {:.0}%",
-                lr.fill_id, lr.depth_m, lr.kavl, lr.pressure_pa, lr.cooling_share_pct
-            )
-        };
-        let mut line = vec![(txt, mono(10.5), t::INK)];
-        if !lr.inside_envelope {
-            line.push((
-                "outside the fill envelope".to_string(),
-                semi(9.5),
-                t::DANGER,
+        // The operating point, and the plenum's own share beside it: the plenum is the band the OP rail sits
+        // in, so its Pa belongs in this call-out rather than in a second plate in the same place.
+        let mut lines = vec![(
+            op_text(o),
+            mono(if phone { 9.0 } else { 10.0 }),
+            t::PRIMARY,
+            crate::answer::Src::Calc,
+        )];
+        if let Some((pa, share)) = crate::answer::shown_share_f(run, ZoneId::Plenum) {
+            lines.push((
+                format!("plenum {pa:.1} Pa · {share}%"),
+                mono(if phone { 9.0 } else { 9.5 }),
+                t::MUTED,
+                crate::answer::Src::Calc,
             ));
         }
-        let pl = plate_at(
-            &p,
-            egui::pos2(r.left() + 6.0, r.center().y),
-            Align2::LEFT_CENTER,
-            line,
-            if phone { 2.0 } else { 3.0 },
-            t::SLOT,
+        callouts.push(Callout {
+            target: egui::pos2(l.op_rail.right(), l.op_rail.center().y),
+            lines,
+            tone: t::with_alpha(t::PRIMARY, 200),
+            bay: false,
+            key: "callout:op".into(),
+        });
+    }
+    if !phone {
+        for (i, r) in l.layers.iter().enumerate() {
+            let Some(lr) = layer_result(run, i) else {
+                continue;
+            };
+            let share = zone_pa(run, ZoneId::Fill, Some(i))
+                .map(|(_, s)| s)
+                .unwrap_or(0.0);
+            let mut lines = vec![(
+                format!(
+                    "L{} {} {:.2} m · {:.1} Pa · {:.0}% · KaV/L {:.3}",
+                    i + 1,
+                    lr.fill_id,
+                    lr.depth_m,
+                    lr.pressure_pa,
+                    share,
+                    lr.kavl
+                ),
+                mono(10.0),
+                t::fill_color(&lr.fill_id),
+                crate::answer::Src::Calc,
+            )];
+            if !lr.inside_envelope {
+                lines.push((
+                    "outside envelope".to_string(),
+                    semi(9.5),
+                    t::DANGER,
+                    crate::answer::Src::Catalog,
+                ));
+            }
+            callouts.push(Callout {
+                target: egui::pos2(r.right() - 2.0, r.center().y),
+                lines,
+                tone: t::SLOT,
+                bay: false,
+                key: format!("callout:layer:{i}"),
+            });
+        }
+    }
+    if let Some((pa, share)) = crate::answer::shown_share_f(run, ZoneId::Rain) {
+        callouts.push(Callout {
+            target: egui::pos2(l.rain.right() - 2.0, l.rain.top() + l.rain.height() * 0.3),
+            lines: vec![(
+                format!("rain {pa:.1} Pa · {share}%"),
+                mono(if phone { 9.0 } else { 10.0 }),
+                t::INK_2,
+                crate::answer::Src::Calc,
+            )],
+            tone: t::SLOT,
+            bay: false,
+            key: "callout:rain".into(),
+        });
+    }
+    if let Some((pa, share)) = crate::answer::shown_share_f(run, ZoneId::Inlet) {
+        let mut lines = vec![(
+            format!("inlet {pa:.1} Pa · {share}%"),
+            mono(if phone { 9.0 } else { 10.0 }),
+            t::AIR,
+            crate::answer::Src::Calc,
+        )];
+        if !phone {
+            if let Some(a) = cat.and_then(|c| c.ambient) {
+                lines.push((
+                    format!(
+                        "air in {:.1} / {:.1} C · RH {:.0}%",
+                        a.dry_bulb_c,
+                        a.wet_bulb_c,
+                        a.relative_humidity * 100.0
+                    ),
+                    mono(9.5),
+                    t::MUTED,
+                    crate::answer::Src::Catalog,
+                ));
+            }
+        }
+        callouts.push(Callout {
+            target: egui::pos2(l.inlet_r.right(), l.inlet_r.center().y),
+            lines,
+            tone: t::SLOT,
+            bay: false,
+            key: "callout:inlet".into(),
+        });
+    }
+    if let Some(o) = run.output.as_ref() {
+        // The basin, and the engine's lumped "fixed losses" row with it: the lumped row has no band of its
+        // own, so it lives with the floor of the machine (rather than disappearing from the screen).
+        let mut lines = vec![(
+            format!("basin {} m3/hr", t::fmt(o.water_flow_m3_hr)),
+            mono(if phone { 9.0 } else { 10.0 }),
+            t::WATER,
+            crate::answer::Src::Calc,
+        )];
+        if let Some((pa, share)) = crate::answer::shown_share_f(run, ZoneId::Fixed) {
+            lines.push((
+                format!("fixed {pa:.1} Pa · {share}%"),
+                mono(if phone { 9.0 } else { 9.5 }),
+                t::MUTED,
+                crate::answer::Src::Calc,
+            ));
+        }
+        callouts.push(Callout {
+            target: egui::pos2(l.basin.right() - 2.0, l.water_surface_y + 4.0),
+            lines,
+            tone: t::SLOT,
+            bay: false,
+            key: "callout:basin".into(),
+        });
+    }
+
+    // ---- place the call-outs: band order, each at its target's height where it can be, pushed down past the
+    // one above it, then pulled back up from the bottom if the column ran out. One column, no overlaps.
+    if !gutter_plates {
+        // the Curves view's reference section: the plates are not drawn, so they are not placed and no
+        // `label:callout:*` entry is published for a plate that is not on the screen.
+        callouts.clear();
+    }
+    let gut = l.gutter;
+    let mut placed: Vec<(Callout, Rect)> = Vec::new();
+    {
+        let gap = if phone { 2.0 } else { 6.0 };
+        let pad = if phone { 2.5 } else { 4.0 };
+        let mut sized: Vec<(Callout, egui::Vec2)> = callouts
+            .into_iter()
+            .map(|mut c| {
+                // fit the gutter: step the type down, then drop the leading piece, then cut
+                let room = gut.width() - pad * 2.0 - 2.0 - MARK_GUTTER;
+                while plate_size(&p, &c.lines, None, 0.0).x > room && c.lines[0].1.size > 8.0 {
+                    for ln in c.lines.iter_mut() {
+                        ln.1 = FontId::new(ln.1.size - 0.5, ln.1.family.clone());
+                    }
+                }
+                // #91 round 2, correctness (a): a line that does not fit the gutter is *reflowed* at its
+                // last ` · ` into a second line, not shortened. Round 1 dropped the leading piece, which
+                // is how the fill lost its Pa on a phone (its plate read "44 % · KaV/L 1.326" with no
+                // pressure): dropping a figure is not an option on a screen whose whole point is that
+                // every number is sourced. Only a piece that still cannot fit after reflowing is cut.
+                let mut fitted: Vec<(String, FontId, Color32, crate::answer::Src)> = Vec::new();
+                for ln in c.lines.drain(..) {
+                    let (mut text, font, color, src) = ln;
+                    let mut tails: Vec<String> = Vec::new();
+                    loop {
+                        if p.layout_no_wrap(text.clone(), font.clone(), color).size().x <= room {
+                            break;
+                        }
+                        match text.rsplit_once(" · ") {
+                            Some((head, tail)) if !head.is_empty() => {
+                                tails.push(tail.to_string());
+                                text = head.to_string();
+                            }
+                            _ => {
+                                text = truncate_to(&p, &text, &font, room);
+                                break;
+                            }
+                        }
+                    }
+                    fitted.push((text, font.clone(), color, src));
+                    for tail in tails.iter().rev() {
+                        fitted.push((tail.clone(), font.clone(), color, src));
+                    }
+                }
+                c.lines = fitted;
+                let s = plate_size(&p, &c.lines, None, pad);
+                (c, egui::vec2((s.x + pad * 2.0).min(gut.width()), s.y))
+            })
+            .collect();
+        sized.sort_by(|a, b| a.0.target.y.total_cmp(&b.0.target.y));
+        // Issue #81: the column has a height as well as a width. At 390x844 the section is 234 px tall and
+        // the eight plates wanted 242, so the packer pulled them back on top of one another (the fan plate
+        // and the operating-point call-out shared eight rows of pixels). Step the type down to the floor -
+        // the same floor the width fit uses - and only then drop plates from the bottom of the band order,
+        // until the stack fits the column: what is dropped is still on the tap-detail.
+        let col_top = l.area.top() + 2.0;
+        let col_bottom = gut.bottom().max(l.area.bottom() - 4.0);
+        let budget = col_bottom - col_top;
+        let heights_of =
+            |s: &[(Callout, egui::Vec2)]| -> Vec<f32> { s.iter().map(|(_, v)| v.y).collect() };
+        while !column_holds(&heights_of(&sized), gap, budget) {
+            let mut stepped = false;
+            for (c, s) in sized.iter_mut() {
+                if c.lines.iter().any(|ln| ln.1.size > 8.0) {
+                    for ln in c.lines.iter_mut() {
+                        ln.1 = FontId::new(ln.1.size - 0.5, ln.1.family.clone());
+                    }
+                    let sz = plate_size(&p, &c.lines, None, pad);
+                    *s = egui::vec2((sz.x + pad * 2.0).min(gut.width()), sz.y);
+                    stepped = true;
+                }
+            }
+            if !stepped {
+                break;
+            }
+        }
+        while !column_holds(&heights_of(&sized), gap, budget) && sized.len() > 1 {
+            sized.pop();
+        }
+        let targets: Vec<f32> = sized.iter().map(|(c, _)| c.target.y).collect();
+        let heights: Vec<f32> = sized.iter().map(|(_, s)| s.y).collect();
+        let ys = pack_column(&targets, &heights, gut.top(), col_top, col_bottom, gap);
+        for (i, (c, s)) in sized.into_iter().enumerate() {
+            let r = Rect::from_min_size(egui::pos2(gut.left(), ys[i]), s);
+            placed.push((c, r));
+        }
+        let _ = pad;
+    }
+    // the leaders, under the plates: from the target, level to the drawing's edge, then to the plate
+    for (c, r) in placed.iter() {
+        let col = t::with_alpha(c.tone, 150);
+        let elbow = egui::pos2(gut.left() - if phone { 4.0 } else { 10.0 }, r.center().y);
+        let knee = egui::pos2(l.rail.left() - 4.0, c.target.y);
+        p.circle_filled(c.target, 2.2, col);
+        p.line_segment(
+            [c.target, knee],
+            Stroke::new(1.0, t::with_alpha(c.tone, 120)),
         );
+        p.line_segment([knee, elbow], Stroke::new(1.0, t::with_alpha(c.tone, 120)));
+        p.line_segment(
+            [elbow, egui::pos2(r.left(), r.center().y)],
+            Stroke::new(1.0, col),
+        );
+    }
+    for (c, r) in placed.into_iter() {
+        let pl = Plate {
+            rect: r,
+            lines: c.lines,
+            tag: None,
+            pad: if phone { 2.5 } else { 4.0 },
+            tone: c.tone,
+        };
+        if c.bay {
+            if !l.area.contains_rect(r) {
+                info.bay_label_outside += 1;
+            }
+            bay_rects.push(r);
+        }
+        hits.0.push((
+            format!("label:{}", c.key),
+            [r.min.x, r.min.y, r.width(), r.height()],
+        ));
         plates.push(pl);
     }
 
-    // ---- the fan deck: what is spinning and at what speed. Round 5 moved this line into the fan bay's own
-    // label block (round 4 drew it right-aligned to the left of the stack, where the speed ratio - the left
-    // end of the string - was cut off by the drawing's own left edge).
-    if let Some(a) = run.output.as_ref() {
-        if phone {
-            // A phone: no plate for the operating point (see `op_reserve` above) - the label is drawn over
-            // the flow as round 4 drew it, and the four bay blocks keep their backings.
-            p.text(
-                egui::pos2(l.op_rail.right(), l.op_rail.top() - 3.0),
-                Align2::RIGHT_BOTTOM,
-                op_text(a),
-                mono(9.5),
-                t::PRIMARY,
-            );
-        } else {
-            let pl = plate_at(
-                &p,
-                egui::pos2(l.op_rail.right(), l.op_rail.top() - 3.0),
-                Align2::RIGHT_BOTTOM,
-                vec![(op_text(a), mono(9.5), t::PRIMARY)],
-                3.0,
-                t::with_alpha(t::PRIMARY, 200),
-            );
-            plates.push(pl);
-        }
-    }
-
-    // ---- round 5, item 2: **the annotation layer, painted last.** Every plate built above (the four bay
-    // blocks, the fill layers' own rows, the zone call-outs, the operating point, the ambient line) is
-    // painted here - after `flow_overlay`, so a streamline passes under a label and never through it. The
-    // section reports what it drew: how many blocks, how many left their bay, how many pairs of plates
-    // overlap each other (a layout that overlaps is a layout that failed).
+    // ---- the annotation layer, painted last (round 5, item 2): every plate is painted after the flow, so a
+    // streamline passes under a label and never through it. The section reports what it drew.
     info.bay_labels = bay_rects.len() as u32;
     info.bay_label_overlaps = overlaps(&bay_rects);
     info.plates = plates.len() as u32;
@@ -2981,50 +3066,17 @@ fn scene_overlay(
     // ---- round 2, change B: the label legend. Round 3, item 7: it used to sit at the section's top-left
     // corner, where it covered the fan bay and clipped its label. It now sits in the plinth corner (the one
     // band no bay reaches), it is dismissible, and the state is remembered for the session.
-    let legend_lines: Vec<(String, Color32, bool)> = if phone {
-        vec![(
-            "illustrative streamlines · not CFD".to_string(),
-            t::AIR,
-            true,
-        )]
-    } else {
-        vec![
-            ("illustrative flow map".to_string(), t::AIR, true),
-            (
-                "streamlines are an illustration, not a CFD result".to_string(),
-                t::MUTED,
-                false,
-            ),
-            (
-                "spray coverage: illustrative (no distribution model)".to_string(),
-                t::AMBER,
-                false,
-            ),
-            (
-                if run
-                    .output
-                    .as_ref()
-                    .map(|o| o.provenance.engine.starts_with("RealEngine"))
-                    .unwrap_or(false)
-                {
-                    format!(
-                        "rpm {} · ratio {:.2} · computed by the real engine",
-                        m::rpm_text(draft.0.speed_ratio, draft.0.fan.nominal_rpm),
-                        draft.0.speed_ratio
-                    )
-                } else {
-                    format!(
-                        "rpm {} · ratio {:.2} · fixture-driven preview",
-                        m::rpm_text(draft.0.speed_ratio, draft.0.fan.nominal_rpm),
-                        draft.0.speed_ratio
-                    )
-                },
-                t::AMBER,
-                false,
-            ),
-        ]
-    };
-    let legend_anchor = egui::pos2(l.area.left() + 8.0, l.plinth.top() + 4.0);
+    // Issue #91: the legend is a colour key - short labels only. Its honesty sentences ("streamlines are an
+    // illustration, not a CFD result", "spray coverage: illustrative (no distribution model)") and the rpm
+    // provenance line are in the notes drawer, behind the header's validation badge.
+    let legend_lines: Vec<(String, Color32, bool)> = vec![
+        ("air".to_string(), t::AIR, true),
+        ("water".to_string(), t::WATER, false),
+        ("spray".to_string(), t::AMBER, false),
+    ];
+    // Issue #91: the colour key sits in the section's top-left corner, beside the ruler's head, where the
+    // headroom above the stack leaves the ground empty.
+    let legend_anchor = egui::pos2(l.area.left() + 8.0, l.area.top() + 8.0);
     if !vis.legend_open {
         // A single restore chip in the same corner, so a dismissed legend is never lost.
         let txt = "labels hidden · L".to_string();
@@ -3127,86 +3179,20 @@ fn scene_overlay(
         }
     }
 
-    // ---- the pressure rail labels: zone name, Pa, share
+    // ---- the pressure split rail's caption (issue #91: its per-zone values are the call-outs beside it,
+    // in the same order, so the rail carries no text of its own except its total)
     if let Some(o) = run.output.as_ref() {
-        let total_share: f64 = o
-            .pressure_by_zone
-            .iter()
-            .map(|z| z.share_pct.max(0.6))
-            .sum();
-        let mut bottom = l.rail.bottom();
-        for z in o.pressure_by_zone.iter() {
-            let h = (l.rail.height() as f64 * z.share_pct.max(0.6) / total_share) as f32;
-            let cy = bottom - h * 0.5;
-            if h > 8.0 {
-                let txt = if phone {
-                    format!("{:.0}", z.pressure_pa)
-                } else if h > 15.0 {
-                    format!(
-                        "{} · {:.1} Pa · {:.1}%",
-                        short_label(&z.label),
-                        z.pressure_pa,
-                        z.share_pct
-                    )
-                } else {
-                    format!("{} · {:.1} Pa", short_label(&z.label), z.pressure_pa)
-                };
-                p.text(
-                    egui::pos2(l.area.right() - 4.0, cy),
-                    Align2::RIGHT_CENTER,
-                    txt,
-                    mono(9.5),
-                    t::INK_2,
-                );
-            }
-            bottom -= h;
-        }
         p.text(
-            egui::pos2(l.area.right() - 4.0, l.rail.top() - 4.0),
-            Align2::RIGHT_BOTTOM,
+            egui::pos2(l.rail.center().x, l.rail.top() - 6.0),
+            Align2::CENTER_BOTTOM,
             if phone {
-                "Zone Pa".to_string()
+                "Pa".to_string()
             } else {
-                // Round 3, item 5: this bar is the engine's per-zone split, which the fixture holds at the
-                // recorded run; the operating-point pressure is stated (once) with the operating point.
-                format!(
-                    "air-path split · recorded run · sum {:.1} Pa",
-                    zone_sum_pa(o)
-                )
+                format!("total {:.0} Pa", zone_sum_pa(o))
             },
-            semi(9.5),
+            semi(9.0),
             t::MUTED,
         );
-    }
-
-    // ---- the ambient (recorded) inlet air, next to the air that enters (desktop; the phone shows it in
-    // the read-out rail, where there is room)
-    if !phone {
-        if let Some(cat) = cat {
-            if let Some(a) = cat.ambient {
-                let pl = plate_at(
-                    &p,
-                    egui::pos2(l.inlet_l.left() - 3.0, l.inlet_l.bottom() + 10.0),
-                    Align2::LEFT_TOP,
-                    vec![(
-                        format!(
-                            "inlet air {:.1} C DB / {:.1} C WB · RH {:.0}% (recorded)",
-                            a.dry_bulb_c,
-                            a.wet_bulb_c,
-                            a.relative_humidity * 100.0
-                        ),
-                        mono(9.5),
-                        t::MUTED,
-                    )],
-                    3.0,
-                    t::SLOT,
-                );
-                // The ambient line is the last annotation of the section, so its plate is painted here -
-                // after every other plate and after the flow, like all of them.
-                paint_plate(&p, &pl);
-                plates.push(pl);
-            }
-        }
     }
 }
 
@@ -3387,22 +3373,81 @@ fn flow_overlay(
         .map(|r| r.top() - 2.0)
         .unwrap_or(l.fill_band.top());
     let bottom_y = l.water_surface_y;
+    // Issue #91: the water carries its own temperature down the tower. It enters at `hot_water_c` (the spray
+    // header, the top) and leaves at `cold_water_c` (the basin, the bottom), so a streak is tinted by where
+    // it is: warm near the nozzles, cool by the water surface. The two ends are the run's own temperatures;
+    // the walk between them is the pass's look (`water.temperature` in the seams table).
+    // The engine returns the cold side and the range, so the hot end is the recorded sum (the duty panel
+    // prints the pair from the duty inputs; here the *output* pair is what the drawn water is tinted from).
+    let (hot_c, cold_c) = run
+        .output
+        .as_ref()
+        .map(|o| (o.cold_water_c + o.range_c, o.cold_water_c))
+        .unwrap_or((37.0, 32.0));
+    let span = (bottom_y - top_y).max(1.0);
+    // How far apart the run's own two water temperatures are sets how much of the warm end shows
+    // (`water.temperature` in the seams table; the rule itself is in the seams crate).
+    let ramp = m::water_ramp(hot_c, cold_c);
+    // How far down the fall the run's heat reaches: a wide spread walks warm most of the way to the basin,
+    // a narrow one shows a short hot band under the spray and cools almost at once.
+    let hot_reach = 0.35 + 0.45 * ramp;
+    let hue = |fall_frac: f32| -> f32 { ((1.0 - fall_frac) / hot_reach).clamp(0.0, 1.0) };
+    // Issue #91: the *wash* - the temperature read at a glance, before the streaks. Sixteen bands from the
+    // spray down to the water surface, each carrying its own height's colour: warm at the top, cool at the
+    // basin. The structure and the drops are drawn over it; the band alpha decays down the fall, so the
+    // gradient reads as "hot water entering, cooled water leaving" without shouting over the section.
+    if !phone {
+        let bands = 16;
+        for i in 0..bands {
+            let t0 = i as f32 / bands as f32;
+            let t1 = (i as f32 + 1.0) / bands as f32;
+            let y0 = top_y + span * t0;
+            let y1 = top_y + span * t1;
+            let mid_t = 1.0 - (t0 + t1) * 0.5; // 1.0 at the nozzle, 0.0 at the surface
+            let u = hue(1.0 - mid_t); // 1.0 at the nozzle, 0.0 once the fall has cooled
+            let c = t::water_tint(u);
+            let a = 64.0 * f_water * (0.25 + 0.75 * u);
+            p.rect_filled(
+                egui::Rect::from_min_max(
+                    egui::pos2(l.fill_band.left(), y0),
+                    egui::pos2(l.fill_band.right(), y1),
+                ),
+                0.0,
+                t::with_alpha(c, a as u8),
+            );
+        }
+    }
     for k in 0..streaks {
         let x = l.fill_band.left() + l.fill_band.width() * (k as f32 + 0.5) / streaks as f32;
         let phase = (anim_t * 0.30 * flow_f + k as f32 / streaks as f32) % 1.0;
-        let y = top_y + (bottom_y - top_y) * phase;
-        let len = if phone { 12.0 } else { 16.0 };
-        p.line_segment(
-            [egui::pos2(x, y), egui::pos2(x, (y + len).min(bottom_y))],
-            Stroke::new(
-                if phone { 1.3 } else { 1.6 },
-                t::with_alpha(t::WATER, (150.0 * f_water) as u8),
-            ),
-        );
-        // the faint thread the drops are falling along
+        let y = top_y + span * phase;
+        let len = if phone { 14.0 } else { 22.0 };
+        // The hue is the run's own walk down the fall: 1.0 at the nozzle (hot), 0.0 at the water surface.
+        let c_head = t::water_tint(hue((y - top_y) / span));
+        let c_tail = t::water_tint(hue(((y + len).min(bottom_y) - top_y) / span));
+        for (i, tt) in [0.0_f32, 0.5, 1.0].into_iter().enumerate() {
+            let a = c_head.lerp_to_gamma(c_tail, tt);
+            let yy = y + len * tt;
+            let seg = len / 3.0;
+            p.line_segment(
+                [egui::pos2(x, yy), egui::pos2(x, (yy + seg).min(bottom_y))],
+                Stroke::new(
+                    if phone { 1.4 } else { 2.0 },
+                    t::with_alpha(a, (200.0 * f_water) as u8),
+                ),
+            );
+            let _ = i;
+        }
+        // the faint thread the drops are falling along, its tint following the same ramp
         p.line_segment(
             [egui::pos2(x, y), egui::pos2(x, bottom_y)],
-            Stroke::new(0.8, t::with_alpha(t::WATER, (34.0 * f_water) as u8)),
+            Stroke::new(
+                0.8,
+                t::with_alpha(
+                    t::water_tint(hue((y - top_y) / span) * 0.9),
+                    (40.0 * f_water) as u8,
+                ),
+            ),
         );
     }
     let _ = m::MIN_WATER_STREAKS;
@@ -3487,192 +3532,280 @@ fn drop_part(
     }
 }
 
-// ============================================================================================== dock
+// ======================================================================================= control bar
 
-/// The knob of the instrument: rpm -> the fixture's `speed_ratio` -> `Engine::run` -> everything redrawn.
+// =================================================================================== the fan's speed
+
+/// #91 round 2: **fan speed has one implementation and lives where the fan lives.** The Instrument reaches
+/// it through the fan bay's tap-detail (`answer::detail_card`); the Curves view carries the same row under
+/// its chart. Nothing else paints an rpm control - the old control bar is gone, and with it the duplicate
+/// the round-2 brief called out.
 #[allow(clippy::too_many_arguments)]
-fn dock(
+pub(crate) fn fan_speed_controls(
     ui: &mut egui::Ui,
-    draft: Option<&mut Draft>,
+    draft: &mut Draft,
     run: &Run,
-    anchor: &Anchor,
     vis: &mut Visual,
-    cat: Option<&Catalog>,
-    clock: &mut AnimClock,
     hits: &mut HitMap,
     phone: bool,
 ) {
-    t::card_flat().show(ui, |ui| {
-        let Some(draft) = draft else {
-            ui.label(t::body("the engine is not loaded - no rpm to set"));
-            return;
-        };
-        let [lo, hi] = draft.0.fan.allowed_speed_ratio;
-        // Issue #59: the rpm read-out is the fan record's own rated speed times the ratio - the
-        // record's datum, not a constant of the pass. A record that states none shows no rpm
-        // (`m::rpm` then answers `None`, and the control is not offered).
-        let nominal_rpm = draft.0.fan.nominal_rpm;
-        let rpm_range = m::rpm_range(draft.0.fan.allowed_speed_ratio, nominal_rpm);
-        let air = run.output.as_ref().map(|o| o.airflow_m3_s).unwrap_or(0.0);
-        // Round 3, item 5: the dock reports the operating point's pressure - the same field the fan/system
-        // chart marks - so the knob, the read-out and the curve can never disagree again.
-        let pa = run.output.as_ref().map(op_pressure).unwrap_or(0.0);
-        let kw = run.output.as_ref().map(|o| o.fan_power_kw).unwrap_or(0.0);
-        let anchor_air = anchor.output.as_ref().map(|o| o.airflow_m3_s).unwrap_or(air);
-        let anchor_pa = anchor.output.as_ref().map(op_pressure).unwrap_or(pa);
-
-        ui.horizontal(|ui| {
-            // the tachometer, drawn in egui on the same data the scene spins the blades with
-            let (tr, _) = ui.allocate_exact_size(egui::vec2(if phone { 84.0 } else { 104.0 }, if phone { 58.0 } else { 66.0 }), Sense::hover());
-            tacho(ui, tr, draft.0.speed_ratio, lo, hi);
-            ui.vertical(|ui| {
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new(m::rpm_text(draft.0.speed_ratio, nominal_rpm)).size(if phone { 26.0 } else { 32.0 }).color(t::PRIMARY).family(t::family_mono_med()));
-                    ui.label(RichText::new("rpm").size(12.0).color(t::MUTED));
-                    // Issue #58 fix round: the dock's chip names the engine that answered, not a
-                    // hardcoded round-5 claim. The provenance of the output on the frame is the truth
-                    // available here (the slot itself is borrowed `&`-ly upstream).
-                    let computed_real = run
-                        .output
-                        .as_ref()
-                        .map(|o| o.provenance.engine.starts_with("RealEngine"))
-                        .unwrap_or(false);
-                    if computed_real {
-                        chip(ui, "real engine · computed", t::PRIMARY, t::PRIMARY_SOFT, t::PRIMARY_DEEP);
-                    } else {
-                        chip(ui, "fixture-driven preview", t::AMBER, t::AMBER_SOFT, t::with_alpha(t::AMBER, 120));
-                    }
-                });
-                ui.set_max_width(if phone { 210.0 } else { 330.0 });
-                ui.label(RichText::new(format!("speed ratio {:.3} · {} range {:.2}-{:.2}", draft.0.speed_ratio, draft.0.fan.id, lo, hi)).size(10.0).color(t::MUTED));
-                // Issue #59: the ratio is handed to the engine as authored - a ratio outside the
-                // record's own band is never clamped into it here, so the engine's own named limit
-                // is what the dock shows where the numbers would be.
-                if let Some(limit) = run
-                    .output
-                    .as_ref()
-                    .and_then(|o| o.validation.iter().find(|limit| limit.field == "fan.speedRatio"))
-                {
-                    ui.label(RichText::new(format!(
-                        "outside the record's band {} - {}: the engine returns no numbers rather than a ratio clamped into the band",
-                        t::fmt(limit.min.unwrap_or(lo)),
-                        t::fmt(limit.max.unwrap_or(hi))
-                    )).size(10.0).color(t::AMBER));
-                }
-                // Issue #59: the nominal is the fan record's own `nominalRpm` (the speed its recorded
-                // curve is published at) - the number the read-out above multiplies, not a pass constant.
-                ui.label(RichText::new(match nominal_rpm {
-                    Some(nominal) => format!("rpm = ratio x {} · the record's nominalRpm at speed ratio 1.000", t::fmt(nominal)),
-                    None => "this fan record states no rated speed: no rpm is shown rather than an invented one".to_string(),
-                }).size(10.0).color(t::MUTED));
+    let btn_h = if phone { 44.0 } else { 28.0 };
+    let [lo, hi] = draft.0.fan.allowed_speed_ratio;
+    let nominal_rpm = draft.0.fan.nominal_rpm;
+    let rpm_range = m::rpm_range(draft.0.fan.allowed_speed_ratio, nominal_rpm);
+    // ---- the knob: tachometer, the rpm, the slider over the record's band
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = if phone { 6.0 } else { 10.0 };
+        let (tr, _) = ui.allocate_exact_size(
+            egui::vec2(
+                if phone { 52.0 } else { 64.0 },
+                if phone { 40.0 } else { 44.0 },
+            ),
+            Sense::hover(),
+        );
+        tacho(ui, tr, draft.0.speed_ratio, lo, hi);
+        ui.vertical(|ui| {
+            ui.spacing_mut().item_spacing.y = 0.0;
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(m::rpm_text(draft.0.speed_ratio, nominal_rpm))
+                        .size(if phone { 22.0 } else { 24.0 })
+                        .color(t::INK)
+                        .family(t::family_mono_med()),
+                );
+                ui.label(RichText::new("rpm").size(11.0).color(t::MUTED));
             });
-            if !phone {
-                let d_air = air - anchor_air;
-                let d_pa = pa - anchor_pa;
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    for (label, value, unit, hot) in [
-                        ("delta", format!("{d_air:+.2} / {d_pa:+.2}"), "m3/s / Pa", d_air.abs() > 1e-9 || d_pa.abs() > 1e-9),
-                        ("fan power", t::fmt(kw), "kW", true),
-                        ("pressure", t::fmt(pa), "Pa", true),
-                        ("airflow", t::fmt(air), "m3/s", true),
-                    ] {
-                        t::chip_frame(t::PANEL_RAISED, t::LINE_SOFT).show(ui, |ui| {
-                            ui.set_min_width(74.0);
-                            ui.vertical(|ui| {
-                                ui.label(RichText::new(label.to_uppercase()).size(8.5).color(t::MUTED).family(t::family_semi()).extra_letter_spacing(0.6));
-                                ui.horizontal(|ui| {
-                                    ui.label(RichText::new(value).size(13.5).color(if hot { t::PRIMARY } else { t::INK }).family(t::family_mono_med()));
-                                    ui.label(RichText::new(unit).size(9.0).color(t::MUTED));
-                                });
-                            });
-                        });
-                    }
+            ui.label(
+                RichText::new(format!("speed ratio {:.3}", draft.0.speed_ratio))
+                    .size(10.0)
+                    .color(t::MUTED)
+                    .family(t::family_mono_med()),
+            );
+        });
+        if let (Some(nominal), Some((rpm_lo, rpm_hi))) = (nominal_rpm, rpm_range) {
+            // The control's own grid is whole rpm and the value it is handed starts on that grid
+            // (`.round()`): egui then has nothing to snap, so it never writes a ratio nobody authored.
+            let shown = m::rpm(draft.0.speed_ratio, Some(nominal))
+                .unwrap_or(rpm_lo)
+                .round();
+            let mut rpm = shown;
+            let w = (ui.available_width() - 4.0).clamp(140.0, 460.0);
+            ui.spacing_mut().slider_width = w;
+            let sr = ui.add_sized(
+                egui::vec2(w, btn_h),
+                egui::Slider::new(&mut rpm, rpm_lo..=rpm_hi)
+                    .step_by(1.0)
+                    .fixed_decimals(0)
+                    .show_value(false)
+                    .trailing_fill(true),
+            );
+            let sr = hit(hits, "ctl:rpm-slider", sr);
+            if sr.changed() && (rpm - shown).abs() > 0.5 {
+                draft.0.speed_ratio = m::ratio_from_rpm(rpm, nominal);
+                vis.flash = Some(Flash {
+                    ok: true,
+                    text: format!("rpm {rpm:.0} (speed ratio {:.3})", draft.0.speed_ratio),
                 });
             }
-        });
+        } else {
+            ui.label(
+                RichText::new("the record states no rated speed")
+                    .size(10.5)
+                    .color(t::MUTED),
+            );
+        }
+    });
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing.x = 6.0;
+        let step_w = if phone { 44.0 } else { 30.0 };
+        if hit(
+            hits,
+            "ctl:rpm-down",
+            ui.add_sized(egui::vec2(step_w, btn_h), egui::Button::new("−")),
+        )
+        .on_hover_text("fan speed down ([)")
+        .clicked()
+        {
+            draft.0.speed_ratio = (draft.0.speed_ratio - 0.02).clamp(lo, hi);
+            vis.flash = Some(Flash {
+                ok: true,
+                text: format!(
+                    "rpm {} (one step down)",
+                    m::rpm_text(draft.0.speed_ratio, nominal_rpm)
+                ),
+            });
+        }
+        if hit(
+            hits,
+            "ctl:rpm-up",
+            ui.add_sized(egui::vec2(step_w, btn_h), egui::Button::new("+")),
+        )
+        .on_hover_text("fan speed up (])")
+        .clicked()
+        {
+            draft.0.speed_ratio = (draft.0.speed_ratio + 0.02).clamp(lo, hi);
+            vis.flash = Some(Flash {
+                ok: true,
+                text: format!(
+                    "rpm {} (one step up)",
+                    m::rpm_text(draft.0.speed_ratio, nominal_rpm)
+                ),
+            });
+        }
+        let at_fixture = (draft.0.speed_ratio - vis.reset_ratio).abs() < 1e-9;
+        if hit(
+            hits,
+            "ctl:reset",
+            ui.add_enabled(
+                !at_fixture,
+                egui::Button::new(format!("fixture {:.2}", vis.reset_ratio))
+                    .min_size(egui::vec2(if phone { 72.0 } else { 62.0 }, btn_h)),
+            ),
+        )
+        .on_hover_text("back to the fixture's own ratio (R)")
+        .clicked()
+        {
+            draft.0.speed_ratio = vis.reset_ratio.clamp(lo, hi);
+            vis.flash = Some(Flash {
+                ok: true,
+                text: format!("back to the fixture ratio {:.2}", vis.reset_ratio),
+            });
+        }
+        // Issue #59: a ratio outside the record's band reaches the engine and comes back as its named
+        // limit - the row shows that limit where the numbers would be.
+        if let Some(limit) = run.output.as_ref().and_then(|o| {
+            o.validation
+                .iter()
+                .find(|limit| limit.field == "fan.speedRatio")
+        }) {
+            ui.label(
+                RichText::new(format!(
+                    "outside {}–{} · no result",
+                    t::fmt(limit.min.unwrap_or(lo)),
+                    t::fmt(limit.max.unwrap_or(hi))
+                ))
+                .size(10.5)
+                .color(t::AMBER),
+            );
+        }
+    });
+}
 
-        ui.add_space(2.0);
-        // On a desktop the slider, the steppers and the engine read-out share a row; at 390px they cannot,
-        // so the slider gets its own row and the buttons the next one. Both rows are laid out the same way,
-        // which is why nothing on this panel is ever clipped.
-        ui.horizontal(|ui| {
-            ui.label(t::eyebrow("fan speed"));
-            match (nominal_rpm, rpm_range) {
-                (Some(nominal), Some((rpm_lo, rpm_hi))) => {
-                    // The control's own grid is whole rpm, and the value it is handed starts on that
-                    // grid (`.round()`): egui then has nothing to snap, so it never writes a ratio
-                    // nobody authored - the recorded ratio stays exactly what the run staged (0.78
-                    // stays 0.780, not 182/233). The guard below is the same rule at the write: only
-                    // a move off the draft's own rpm authors `rpm / nominalRpm`.
-                    let shown = m::rpm(draft.0.speed_ratio, Some(nominal))
-                        .unwrap_or(rpm_lo)
-                        .round();
-                    let mut rpm = shown;
-                    let slider = egui::Slider::new(&mut rpm, rpm_lo..=rpm_hi)
-                        .step_by(1.0)
-                        .fixed_decimals(0)
-                        .suffix(" rpm")
-                        .trailing_fill(true);
-                    let sr = ui.add_sized(egui::vec2(if phone { 226.0 } else { 420.0 }, 22.0), slider);
-                    let sr = hit(hits, "ctl:rpm-slider", sr);
-                    if sr.changed() && (rpm - shown).abs() > 0.5 {
-                        // The control's range IS the record's own band, and the ratio it writes is
-                        // `rpm / nominalRpm`: the value the engine evaluates is the one the control
-                        // authored - one mapping, no clamp of a ratio from outside the band (a ratio
-                        // from outside reaches the engine and comes back as its named limit).
-                        draft.0.speed_ratio = m::ratio_from_rpm(rpm, nominal);
-                        vis.flash = Some(Flash {
-                            ok: true,
-                            text: format!("rpm {rpm:.0} (speed ratio {:.3})", draft.0.speed_ratio),
-                        });
-                    }
-                }
-                _ => {
-                    ui.label(RichText::new("the record states no rated speed: no rpm to set").size(10.5).color(t::MUTED));
-                }
-            }
-        });
-        ui.horizontal(|ui| {
-            if hit(hits, "ctl:rpm-down", ui.add_sized(egui::vec2(30.0, 24.0), egui::Button::new("-"))).clicked() {
-                draft.0.speed_ratio = (draft.0.speed_ratio - 0.02).clamp(lo, hi);
+/// Issue #91: the nozzle bank's two controls (an editor value, not an engine input) and the coverage badge.
+/// The arrangement sentence, the cone geometry and the "illustrative" basis are in the notes drawer; the
+/// badge keeps its rect (`badge:coverage`) and its amber "illustrative" signal.
+pub(crate) fn nozzle_bank(
+    ui: &mut egui::Ui,
+    draft: &Draft,
+    vis: &mut Visual,
+    hits: &mut HitMap,
+    phone: bool,
+) {
+    let pitch = m::effective_pitch(
+        vis.nozzle_spacing_m,
+        vis.nozzle_pattern == Pattern::Staggered,
+    );
+    let half = m::spray_half_angle_deg(draft.0.nozzle.orifice_diameter_m);
+    let cone_r = m::spray_cone_radius_m(draft.0.tower.spray_zone_height_m, half);
+    let cov = m::coverage_fraction(pitch, cone_r);
+    let h = if phone { 44.0 } else { 28.0 };
+    ui.horizontal_wrapped(|ui| {
+        ui.label(t::eyebrow("nozzles"));
+        let mut spacing = vis.nozzle_spacing_m;
+        ui.spacing_mut().slider_width = if phone { 150.0 } else { 96.0 };
+        let sp = ui.add_sized(
+            egui::vec2(if phone { 210.0 } else { 150.0 }, h),
+            egui::Slider::new(&mut spacing, 0.3..=2.0)
+                .fixed_decimals(2)
+                .suffix(" m"),
+        );
+        let sp = hit(hits, "ctl:spacing", sp).on_hover_text("nozzle pitch");
+        if sp.changed() {
+            vis.nozzle_spacing_m = spacing;
+            vis.flash = Some(Flash {
+                ok: true,
+                text: format!("nozzle pitch {spacing:.2} m"),
+            });
+        }
+        for p in [Pattern::SingleRow, Pattern::Staggered] {
+            let sel = vis.nozzle_pattern == p;
+            let pr = ui.add(
+                egui::Button::selectable(
+                    sel,
+                    RichText::new(p.name()).size(11.0).color(if sel {
+                        t::PRIMARY
+                    } else {
+                        t::MUTED
+                    }),
+                )
+                .min_size(egui::vec2(0.0, h)),
+            );
+            let pr = hit(hits, &format!("ctl:pattern:{}", p.slug()), pr);
+            if pr.clicked() {
+                vis.nozzle_pattern = p;
                 vis.flash = Some(Flash {
                     ok: true,
-                    text: format!("rpm {} (one step down)", m::rpm_text(draft.0.speed_ratio, nominal_rpm)),
+                    text: format!("nozzle bank: {} pattern", p.name()),
                 });
             }
-            if hit(hits, "ctl:rpm-up", ui.add_sized(egui::vec2(30.0, 24.0), egui::Button::new("+"))).clicked() {
-                draft.0.speed_ratio = (draft.0.speed_ratio + 0.02).clamp(lo, hi);
-                vis.flash = Some(Flash {
-                    ok: true,
-                    text: format!("rpm {} (one step up)", m::rpm_text(draft.0.speed_ratio, nominal_rpm)),
-                });
-            }
-            if hit(hits, "ctl:reset", ui.add_sized(egui::vec2(96.0, 24.0), egui::Button::new("fixture 0.78"))).clicked() {
-                draft.0.speed_ratio = vis.reset_ratio.clamp(lo, hi);
-                vis.flash = Some(Flash {
-                    ok: true,
-                    text: format!("back to the fixture ratio {:.2}", vis.reset_ratio),
-                });
-            }
-            if hit(hits, "ctl:freeze", ui.add_sized(egui::vec2(74.0, 24.0), egui::Button::new(if clock.frozen { "unfreeze" } else { "freeze" }))).clicked() {
-                clock.frozen = !clock.frozen;
-                vis.flash = Some(Flash {
-                    ok: true,
-                    text: format!("clock {}", if clock.frozen { "frozen" } else { "running" }),
-                });
-            }
-            if phone {
-                ui.label(RichText::new(format!("{:.1} m3/s · {:.0} Pa", air, pa)).size(10.5).color(t::PRIMARY).family(t::family_mono_med()));
-            } else {
-                ui.label(RichText::new("the engine is re-run on every frame the slider moves - the scene, the rail and the operating point all read that output").size(10.0).color(t::MUTED));
-            }
-        });
-        let _ = cat;
+        }
+        // the pitch steppers: a slider alone is a coarse instrument on a phone, and the same one step
+        // down / up the fan row carries (0.05 m of pitch per tap, clamped to the bank's own band).
+        let step_w = if phone { 44.0 } else { 28.0 };
+        if hit(
+            hits,
+            "ctl:spacing-down",
+            ui.add_sized(egui::vec2(step_w, h), egui::Button::new("−")),
+        )
+        .on_hover_text("tighter pitch")
+        .clicked()
+        {
+            vis.nozzle_spacing_m = (vis.nozzle_spacing_m - 0.05).clamp(0.3, 2.0);
+            vis.flash = Some(Flash {
+                ok: true,
+                text: format!("nozzle pitch {:.2} m", vis.nozzle_spacing_m),
+            });
+        }
+        if hit(
+            hits,
+            "ctl:spacing-up",
+            ui.add_sized(egui::vec2(step_w, h), egui::Button::new("+")),
+        )
+        .on_hover_text("wider pitch")
+        .clicked()
+        {
+            vis.nozzle_spacing_m = (vis.nozzle_spacing_m + 0.05).clamp(0.3, 2.0);
+            vis.flash = Some(Flash {
+                ok: true,
+                text: format!("nozzle pitch {:.2} m", vis.nozzle_spacing_m),
+            });
+        }
+        let pct = ui.label(
+            RichText::new(format!("{:.0}%", cov * 100.0))
+                .size(12.0)
+                .color(t::AMBER)
+                .family(t::family_mono_med()),
+        );
+        let badge = chip(
+            ui,
+            "illustrative",
+            t::AMBER,
+            t::AMBER_SOFT,
+            t::with_alpha(t::AMBER, 120),
+        )
+        .on_hover_text(
+            "coverage: the flat-area overlap of two neighbouring cones - no distribution model",
+        );
+        let r = badge.rect.union(pct.rect);
+        hits.0.push((
+            "badge:coverage".to_string(),
+            [r.min.x, r.min.y, r.width(), r.height()],
+        ));
     });
 }
 
 /// A tachometer: the same speed ratio the blades spin at, drawn as an instrument.
-fn tacho(ui: &mut egui::Ui, rect: Rect, ratio: f64, lo: f64, hi: f64) {
+pub(crate) fn tacho(ui: &mut egui::Ui, rect: Rect, ratio: f64, lo: f64, hi: f64) {
     let p = ui.painter_at(rect);
     let centre = egui::pos2(rect.center().x, rect.bottom() - 6.0);
     let r = (rect.height() - 12.0).min(rect.width() * 0.5) - 4.0;
@@ -3762,7 +3895,7 @@ fn rail(
     let duty_ok = verdict.as_ref().map(|v| v.in_range()).unwrap_or(false);
 
     // ---- the answer this instrument is tuned around, straight from Engine::run
-    ui.label(t::eyebrow("operating read-out — engine output"));
+    ui.label(t::eyebrow("read-out"));
     let readout_card = t::card_flat().show(ui, |ui| {
         match run.output.as_ref() {
             Some(o) => {
@@ -3791,14 +3924,6 @@ fn rail(
                     true,
                     clip,
                     info,
-                );
-                ui.label(
-                    RichText::new(format!(
-                        "at the operating point — the engine's fan/system solve, total-pressure basis ({})",
-                        draft.0.fan.pressure_basis
-                    ))
-                    .size(9.5)
-                    .color(t::MUTED),
                 );
                 duty_panel::gated_kv(
                     ui,
@@ -3851,20 +3976,37 @@ fn rail(
                             ui.label(RichText::new(format!("• {line}")).size(9.5).color(t::AMBER));
                         }
                     }
-                    ui.label(
-                        RichText::new("the fixture engine may only interpolate what it recorded; edit the duty in the panel above to come back inside the recorded sweep")
-                            .size(9.0)
-                            .color(t::MUTED),
-                    );
                 }
+                // Issue #91: provenance and the recorded-run comparison are numbers now; the sentences
+                // that explained them are in the notes drawer.
                 ui.add_space(2.0);
-                ui.label(RichText::new(format!("engine {} · catalog {} · {}", engine_label(&o.provenance.engine), o.provenance.catalog_id, o.provenance.catalog_status)).size(9.5).color(t::MUTED));
                 if let Some(a) = anchor.output.as_ref() {
                     let d_air = o.airflow_m3_s - a.airflow_m3_s;
                     let d_pa = op_pa - op_pressure(a);
-                    ui.label(RichText::new(format!("against the recorded run (ratio {:.2}): airflow {d_air:+.2} m3/s · total pressure {d_pa:+.2} Pa", anchor.ratio)).size(9.5).color(if d_air.abs() > 1e-9 || d_pa.abs() > 1e-9 { t::AMBER } else { t::MUTED }));
-                    ui.label(RichText::new(format!("the recorded run's own air-path total is {} Pa, held at the recorded flow; the operating point moves with the speed ratio, and this read-out moves with it", t::fmt(o.total_pressure_pa))).size(9.5).color(t::MUTED));
+                    ui.label(
+                        RichText::new(format!(
+                            "Δ vs run @ {:.2} · {d_air:+.2} m3/s · {d_pa:+.2} Pa",
+                            anchor.ratio
+                        ))
+                        .size(10.0)
+                        .color(if d_air.abs() > 1e-9 || d_pa.abs() > 1e-9 {
+                            t::AMBER
+                        } else {
+                            t::MUTED
+                        })
+                        .family(t::family_mono_med()),
+                    );
+                    ui.label(
+                        RichText::new(format!(
+                            "run air path, total {} Pa",
+                            t::fmt(o.total_pressure_pa)
+                        ))
+                        .size(10.0)
+                        .color(t::MUTED)
+                        .family(t::family_mono_med()),
+                    );
                 }
+                let _ = engine_label(&o.provenance.engine);
             }
             None => {
                 ui.label(t::body("no run: the engine refused this input."));
@@ -3887,7 +4029,7 @@ fn rail(
     ui.add_space(8.0);
     let stack_head = ui
         .horizontal(|ui| {
-            ui.label(t::eyebrow("fill stack — engine input order, top first"));
+            ui.label(t::eyebrow("fill stack · top first"));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if hit(
                     hits,
@@ -3916,7 +4058,7 @@ fn rail(
         .response
         .rect;
     {
-        let head = "fill stack — engine input order, top first";
+        let head = "fill stack · top first";
         let avail = stack_head.width();
         let need = measure_text(ui, head, 9.5, egui::FontFamily::Proportional) + 104.0 + 12.0;
         clip.push("stack.header", head, stack_head, avail, need, 1);
@@ -3938,10 +4080,7 @@ fn rail(
                 let ident = format!("{} {} {:.2} m", i + 1, fill_id, depth);
                 let tail = lr.as_ref().map(|lr| {
                     if flow_ok {
-                        format!(
-                            "KaV/L {:.3} · {:.1} Pa · {:.0}%",
-                            lr.kavl, lr.pressure_pa, lr.cooling_share_pct
-                        )
+                        format!("KaV/L {:.3} · {:.1} Pa", lr.kavl, lr.pressure_pa)
                     } else {
                         drafthouse_cockpit_seams::duty::OUT_OF_FIXTURE_RANGE.to_string()
                     }
@@ -4045,322 +4184,28 @@ fn rail(
     }
 }
 
-/// Round 3, item 3: the right column keeps the operating read-out and the fill-stack list only, so the
-/// configuration controls the column used to carry - the nozzle arrangement, the internal host's command
-/// chips and the seams summary - moved into the bottom dock as three compact rows. Same controls, same hit
-/// keys, same labels; one column fewer.
-fn setup_cards(
-    ui: &mut egui::Ui,
-    draft: Option<&Draft>,
-    vis: &mut Visual,
-    cat: Option<&Catalog>,
-    options: &StartOptions,
-    hits: &mut HitMap,
-    phone: bool,
-) {
-    let Some(draft) = draft else { return };
-    let _ = cat;
-    // Every row wraps: a `ui.horizontal` row wider than the panel stretches the whole scroll content on a
-    // phone (the chips then lay out at 834 px and the rail's caret lands off-screen).
-    // ---- the nozzle arrangement (an editor value, not an engine input)
-    // The coverage the badge reports is computed here, before the row: since issue #58 the badge is its
-    // own row *below* the toggles (nit 3), so its value is no longer computed inside that row's closure.
-    let pitch = m::effective_pitch(
-        vis.nozzle_spacing_m,
-        vis.nozzle_pattern == Pattern::Staggered,
-    );
-    let half = m::spray_half_angle_deg(draft.0.nozzle.orifice_diameter_m);
-    let cone_r = m::spray_cone_radius_m(draft.0.tower.spray_zone_height_m, half);
-    let cov = m::coverage_fraction(pitch, cone_r);
-    ui.horizontal_wrapped(|ui| {
-        ui.label(t::eyebrow("nozzle bank"));
-        ui.label(
-            RichText::new(&draft.0.nozzle.id)
-                .size(11.0)
-                .color(t::INK)
-                .family(t::family_mono_med()),
-        );
-        ui.label(
-            RichText::new(format!(
-                "{:.0} mm · Cd {:.2}",
-                draft.0.nozzle.orifice_diameter_m * 1000.0,
-                draft.0.nozzle.discharge_coefficient
-            ))
-            .size(9.5)
-            .color(t::MUTED),
-        );
-        let mut spacing = vis.nozzle_spacing_m;
-        let sp = ui.add_sized(
-            egui::vec2(150.0, 20.0),
-            egui::Slider::new(&mut spacing, 0.3..=2.0)
-                .fixed_decimals(2)
-                .suffix(" m")
-                .text("pitch"),
-        );
-        let sp = hit(hits, "ctl:spacing", sp);
-        if sp.changed() {
-            vis.nozzle_spacing_m = spacing;
-            vis.flash = Some(Flash {
-                ok: true,
-                text: format!("nozzle pitch {spacing:.2} m"),
-            });
-        }
-        for p in [Pattern::SingleRow, Pattern::Staggered] {
-            let sel = vis.nozzle_pattern == p;
-            let pr = ui.selectable_label(
-                sel,
-                RichText::new(p.name())
-                    .size(11.0)
-                    .color(if sel { t::PRIMARY } else { t::MUTED }),
-            );
-            let pr = hit(hits, &format!("ctl:pattern:{}", p.slug()), pr);
-            if pr.clicked() {
-                vis.nozzle_pattern = p;
-                vis.flash = Some(Flash {
-                    ok: true,
-                    text: format!("nozzle bank: {} pattern", p.name()),
-                });
-            }
-        }
-    });
-    // Issue #58, the owner's layout nit 3: the coverage badge used to be laid out from the *right
-    // edge of the toggles' own row* (`with_layout(right_to_left)` inside it). When that row was full,
-    // the right-aligned group had less room than it needed and grew leftwards, over the `staggered`
-    // toggle - the same failure the status strip's row had in round 4. It is its own row now: the
-    // row's full width is available, the badge is right-aligned in it, and it cannot reach the toggle.
-    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-        let badge = chip(
-            ui,
-            "coverage: illustrative",
-            t::AMBER,
-            t::AMBER_SOFT,
-            t::with_alpha(t::AMBER, 120),
-        );
-        let pct = ui.label(
-            RichText::new(format!("{:.0}%", cov * 100.0))
-                .size(12.0)
-                .color(t::AMBER)
-                .family(t::family_mono_med()),
-        );
-        // The badge's own rect, so a frame can test the overlap the owner's nit 3 names against the
-        // pattern toggles' rects (`ctl:pattern:*`) instead of reading a picture.
-        let r = badge.rect.union(pct.rect);
-        hits.0.push((
-            "badge:coverage".to_string(),
-            [r.min.x, r.min.y, r.width(), r.height()],
-        ));
-    });
-    ui.label(
-        RichText::new(if phone {
-            format!(
-                "arrangement is an editor value, not an engine input yet · coverage is illustrative (flat-area overlap, no distribution model) · half-angle {:.1} deg, radius {:.2} m",
-                m::spray_half_angle_deg(draft.0.nozzle.orifice_diameter_m),
-                m::spray_cone_radius_m(draft.0.tower.spray_zone_height_m, m::spray_half_angle_deg(draft.0.nozzle.orifice_diameter_m)),
-            )
-        } else {
-            format!(
-            "the arrangement is an editor value, not an engine input yet · coverage is the flat-area overlap of two neighbouring cones (no distribution model) · cone half-angle {:.1} deg from the orifice, footprint radius {:.2} m at the recorded spray-zone height {:.2} m",
-            m::spray_half_angle_deg(draft.0.nozzle.orifice_diameter_m),
-            m::spray_cone_radius_m(draft.0.tower.spray_zone_height_m, m::spray_half_angle_deg(draft.0.nozzle.orifice_diameter_m)),
-            draft.0.tower.spray_zone_height_m
-            )
-        })
-        .size(9.0)
-        .color(t::MUTED),
-    );
-    // ---- the host difference, visible
-    if !options.host.public {
-        ui.horizontal_wrapped(|ui| {
-            ui.label(t::eyebrow("internal host"));
-            for c in [
-                cockpit::host::ServerCommand::SaveRevision { project: "tower selection".into(), note: "visual pass".into() },
-                cockpit::host::ServerCommand::ExportReportPdf { project: "tower selection".into() },
-                cockpit::host::ServerCommand::CompareLater { project: "tower selection".into(), against_revision: None },
-            ] {
-                chip(ui, &c.label(), t::PRIMARY, t::PRIMARY_SOFT, t::PRIMARY_DEEP);
-            }
-            ui.label(
-                RichText::new("these exist here and enqueue a ServerCommand; the public host hides them and keeps authoring + the mandatory label")
-                    .size(9.0)
-                    .color(t::MUTED),
-            );
-        });
+/// Issue #91: the internal host's command chips (the public host hides them). Round 5 drew them in the dock
+/// with a sentence explaining them; the sentence is in the notes drawer.
+fn host_actions(ui: &mut egui::Ui, options: &StartOptions) {
+    if options.host.public {
+        return;
     }
-    // ---- the seams, summarised (the full table is the third view)
     ui.horizontal_wrapped(|ui| {
-        let counts = seams::status_counts();
-        ui.label(t::eyebrow("data seams"));
-        ui.label(
-            RichText::new(format!("{} seams · {}", seams::SEAMS.len(), counts.line()))
-                .size(10.5)
-                .color(t::INK_2),
-        );
-        ui.label(
-            RichText::new(if phone {
-                "generated from seams/src/lib.rs - the same table the Data seams view shows".to_string()
-            } else {
-                "generated from seams/src/lib.rs (tools/gen-seams.sh) - the same table the Data seams view shows".to_string()
-            })
-            .size(9.0)
-            .color(t::MUTED),
-        );
-        let b = ui.add_sized(egui::vec2(120.0, 20.0), egui::Button::new("open the table"));
-        let b = hit(hits, "ctl:seams-open", b);
-        if b.clicked() {
-            vis.view = View::Seams;
-        }
-    });
-    let _ = phone;
-}
-
-// ============================================================================================= strip
-
-/// The selected part, the catalog's verdict on it, and **one** state-dependent hint.
-///
-/// Round 5, item 3. Round 4 put two hint sentences and a right-aligned group in one unbounded row: when the
-/// row was wider than the region, the right-aligned group was laid out from the region's right edge, which is
-/// *behind* the text the left side had already drawn - so the two strings were painted over each other. The
-/// strip is now two bounded rows (the part and the catalog's answer, then the hint), and there is exactly one
-/// hint string, chosen by the state:
-///
-/// | `data-hint-state` | when | the hint |
-/// |---|---|---|
-/// | `none` | nothing picked up | `drag a chip from the rail onto a bay, or tap a bay for its picker` |
-/// | `selected` | a part is picked and it is *not* the fitted one | `drag it onto a bay, or tap a bay to open its picker` |
-/// | `dragging` | a part is being carried | `release over a bay that accepts it - every bay answers before you release` |
-/// | `fitted` | the picked part is the one in its bay | `fitted - drag a chip from the rail, or tap a bay to replace it` |
-fn strip(
-    ui: &mut egui::Ui,
-    cat: Option<&Catalog>,
-    draft: Option<&Draft>,
-    vis: &Visual,
-    info: &mut crate::clip::LayoutInfo,
-    phone: bool,
-) {
-    let selected = vis.selected_part.clone();
-    let slot = vis.selected_slot;
-    let dragging = vis.drag.is_some();
-    // "Fitted" is measured against the draft, not assumed: the picked part is fitted when its id is the one
-    // the bay holds. (A chip click can select a part that is not the fitted record.)
-    let fitted = match (&selected, draft) {
-        (Some(part), Some(d)) => match part.class {
-            Class::Fan => d.0.fan.id == part.id,
-            Class::Drift => d.0.drift.id == part.id,
-            Class::Nozzle => d.0.nozzle.id == part.id,
-            Class::Fill => d.0.fill_layers.iter().any(|l| l.fill_id == part.id),
-        },
-        _ => false,
-    };
-    let (state, hint) = if dragging {
-        (
-            "dragging",
-            "release over a bay that accepts it - every bay answers before you release",
-        )
-    } else if selected.is_some() && fitted {
-        (
-            "fitted",
-            "fitted - drag a chip from the rail, or tap a bay to replace it",
-        )
-    } else if selected.is_some() {
-        (
-            "selected",
-            "drag it onto a bay, or tap a bay to open its picker",
-        )
-    } else {
-        (
-            "none",
-            "drag a chip from the rail onto a bay, or tap a bay for its picker",
-        )
-    };
-    info.hint_state = state;
-    info.hint = hint.to_string();
-
-    let note = "a drop replaces a fixture identity only - no new physics field";
-    let frame = t::card_flat();
-    frame.show(ui, |ui| {
-        // ---- row 1: the part, its spec and the catalog's own verdict.
-        ui.horizontal_wrapped(|ui| {
-            ui.label(t::eyebrow("selected part"));
-            match (&selected, cat, draft) {
-                (Some(part), Some(cat), Some(draft)) => {
-                    chip(ui, part.class.name(), t::INK, t::PANEL_RAISED, t::LINE);
-                    ui.label(
-                        RichText::new(&part.id)
-                            .size(13.0)
-                            .color(t::INK)
-                            .family(t::family_mono_med()),
-                    );
-                    if !phone {
-                        ui.label(
-                            RichText::new(state::part_spec(cat, part))
-                                .size(10.5)
-                                .color(t::MUTED),
-                        );
-                    }
-                    let verdict = check_drop(cat, &draft.0, slot, part);
-                    match &verdict {
-                        Ok(()) => {
-                            chip(
-                                ui,
-                                &format!("VALID for the {} bay", slot.name()),
-                                t::VALID,
-                                t::OK_SOFT,
-                                t::with_alpha(t::VALID, 140),
-                            );
-                        }
-                        Err(reason) => {
-                            chip(
-                                ui,
-                                &format!("REFUSED by the {} bay", slot.name()),
-                                t::INVALID,
-                                t::DANGER_SOFT,
-                                t::with_alpha(t::INVALID, 140),
-                            );
-                            ui.label(RichText::new(reason).size(10.5).color(t::DANGER));
-                        }
-                    }
-                }
-                _ => {
-                    ui.label(RichText::new("nothing selected").size(11.5).color(t::INK_2));
-                }
-            }
-            if let Some(flash) = &vis.flash {
-                let (fg, bg) = if flash.ok {
-                    (t::VALID, t::OK_SOFT)
-                } else {
-                    (t::INVALID, t::DANGER_SOFT)
-                };
-                chip(ui, &flash.text, fg, bg, t::with_alpha(fg, 130));
-            }
-        });
-        // ---- row 2: the one hint string, and the drop note (right-aligned on a desktop, its own line on a
-        // phone: a 390 px strip cannot hold both, and a wrapped hint is better than an overlapped one).
-        ui.add_space(2.0);
-        if phone {
-            // Truncated, not wrapped-on-layout: the hint and the note are free text, and a phone's strip is
-            // inside the stack - a label that wants more room than it has would widen the stack and every card
-            // under it (the desktop branch has always truncated here).
-            ui.add(egui::Label::new(RichText::new(hint).size(9.5).color(t::INK_2)).truncate());
-            ui.add(egui::Label::new(RichText::new(note).size(9.0).color(t::MUTED)).truncate());
-        } else {
-            ui.horizontal(|ui| {
-                let avail = ui.available_width();
-                let note_w = measure_text(ui, note, 9.5, egui::FontFamily::Proportional);
-                let room = (avail - note_w - 16.0).max(80.0);
-                ui.allocate_ui_with_layout(
-                    egui::vec2(room, 16.0),
-                    egui::Layout::left_to_right(egui::Align::Center),
-                    |ui| {
-                        ui.add(
-                            egui::Label::new(RichText::new(hint).size(10.0).color(t::INK_2))
-                                .truncate(),
-                        );
-                    },
-                );
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(RichText::new(note).size(9.5).color(t::MUTED));
-                });
-            });
+        ui.label(t::eyebrow("internal host"));
+        for c in [
+            cockpit::host::ServerCommand::SaveRevision {
+                project: "tower selection".into(),
+                note: "visual pass".into(),
+            },
+            cockpit::host::ServerCommand::ExportReportPdf {
+                project: "tower selection".into(),
+            },
+            cockpit::host::ServerCommand::CompareLater {
+                project: "tower selection".into(),
+                against_revision: None,
+            },
+        ] {
+            chip(ui, &c.label(), t::PRIMARY, t::PRIMARY_SOFT, t::PRIMARY_DEEP);
         }
     });
 }
@@ -5082,80 +4927,76 @@ fn chart(
     }
 }
 
-// ======================================================================================= seams view
+// --------------------------------------------------------------------------------------------- tests
 
-fn seams_view(ui: &mut egui::Ui, vis: &mut Visual, phone: bool) {
-    let counts = seams::status_counts();
-    ui.label(t::heading("Data seams"));
-    ui.label(RichText::new(format!("{} bindings · {}. Generated from seams/src/lib.rs (tools/gen-seams.sh) - the same table VISUAL_DATA_SEAMS.md ships.", seams::SEAMS.len(), counts.line())).size(11.0).color(t::INK_2));
-    ui.label(
-        RichText::new(seams::REQUIRED_COPY)
-            .size(11.0)
-            .color(t::PRIMARY),
-    );
-    ui.add_space(8.0);
-    for s in seams::SEAMS.iter() {
-        t::card_flat().show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(
-                    RichText::new(s.id)
-                        .size(12.0)
-                        .color(t::INK)
-                        .family(t::family_mono_med()),
-                );
-                status_chip(ui, s.status);
-                if !phone {
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.label(
-                            RichText::new(s.code)
-                                .size(9.5)
-                                .color(t::MUTED)
-                                .family(egui::FontFamily::Monospace),
-                        );
-                    });
-                }
-            });
-            if phone {
-                // A 390px card cannot hold a right-aligned code path: it gets its own wrapping line rather
-                // than being clipped at both edges.
-                ui.add(
-                    egui::Label::new(
-                        RichText::new(s.code)
-                            .size(9.5)
-                            .color(t::MUTED)
-                            .family(egui::FontFamily::Monospace),
-                    )
-                    .wrap(),
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The phone's eight plates as the 390x844 frame measured them (the `plate-rects` dataset in
+    /// `docs/design/small-screens-r1/instrument-390x844.json`), with the phone's own gap (2 px) and the
+    /// column the live fit uses: the section's height (234 px) less the packer's floor and ceiling.
+    const PHONE_PLATES: [f32; 8] = [29.0, 38.0, 29.0, 29.0, 36.0, 17.0, 17.0, 29.0];
+    const PHONE_GAP: f32 = 2.0;
+    const PHONE_COLUMN: f32 = 230.0;
+
+    /// The stack the phone drew did **not** fit its column: that is the eight-pixel overlap the frame
+    /// showed between the fan plate and the operating-point call-out, and the reason `scene_overlay` now
+    /// fits the column before it packs it.
+    #[test]
+    fn the_measured_phone_stack_overflows_its_column() {
+        assert!(!column_holds(&PHONE_PLATES, PHONE_GAP, PHONE_COLUMN));
+    }
+
+    /// Once the type has stepped down to fit, the packer's own promise: band order, every plate inside the
+    /// column, and a gap between each pair - one column, so no two plates can share pixels.
+    #[test]
+    fn the_packed_column_keeps_every_plate_on_its_own_pixels() {
+        let fitted: Vec<f32> = PHONE_PLATES.iter().map(|h| h * 0.94).collect();
+        assert!(
+            column_holds(&fitted, PHONE_GAP, PHONE_COLUMN),
+            "the fit step must make the stack fit"
+        );
+        let targets: Vec<f32> = (0..fitted.len()).map(|i| 6.0 + i as f32 * 27.0).collect();
+        let ys = pack_column(&targets, &fitted, 0.0, 0.0, PHONE_COLUMN, PHONE_GAP);
+        assert_eq!(ys.len(), fitted.len());
+        for i in 0..ys.len() {
+            assert!(
+                ys[i] >= 0.0 && ys[i] + fitted[i] <= PHONE_COLUMN + 0.01,
+                "plate {i} leaves the column ({}..{})",
+                ys[i],
+                ys[i] + fitted[i]
+            );
+            if i > 0 {
+                let gap = ys[i] - (ys[i - 1] + fitted[i - 1]);
+                assert!(
+                    gap >= PHONE_GAP - 0.01,
+                    "plate {i} rides on plate {} by {:.1} px",
+                    i - 1,
+                    -gap
                 );
             }
-            ui.label(
-                RichText::new(format!("drives: {}", s.drives))
-                    .size(10.5)
-                    .color(t::INK_2),
-            );
-            ui.label(
-                RichText::new(format!("today: {} → {}", s.source, s.rule))
-                    .size(10.0)
-                    .color(t::MUTED),
-            );
-            ui.label(
-                RichText::new(format!("binds to the engine field: {}", s.engine_field))
-                    .size(10.0)
-                    .color(t::PRIMARY),
-            );
-        });
-        ui.add_space(4.0);
+        }
     }
-    // Room under the last card, so it is not sliced by the status strip.
-    ui.add_space(if phone { 30.0 } else { 22.0 });
-    if !phone
-        && ui
-            .add_sized(
-                egui::vec2(180.0, 24.0),
-                egui::Button::new("back to the instrument"),
-            )
-            .clicked()
-    {
-        vis.view = View::Cockpit;
+
+    /// The same promise at every plate count a section can draw (one to twelve), including stacks that only
+    /// just fit: whatever the caller hands over, the packer keeps them apart.
+    #[test]
+    fn the_packed_column_never_overlaps_at_any_count() {
+        for n in 1..=12usize {
+            let h = PHONE_COLUMN / n as f32 - PHONE_GAP;
+            let heights = vec![h; n];
+            assert!(column_holds(&heights, PHONE_GAP, PHONE_COLUMN));
+            let targets: Vec<f32> = (0..n).map(|i| 4.0 + i as f32 * 9.0).collect();
+            let ys = pack_column(&targets, &heights, 2.0, 0.0, PHONE_COLUMN, PHONE_GAP);
+            for i in 1..ys.len() {
+                assert!(
+                    ys[i] >= ys[i - 1] + heights[i - 1] + PHONE_GAP - 0.01,
+                    "n={n}: plate {i} overlaps plate {}",
+                    i - 1
+                );
+            }
+            assert!(*ys.last().unwrap() + heights[n - 1] <= PHONE_COLUMN + 0.01);
+        }
     }
 }

@@ -1,18 +1,27 @@
 //! **Report** (#85): the export entry and a page preview of the PDF calc sheet - cover, inputs, worked
-//! steps, results, validation statement. Design only: nothing is generated.
+//! steps, results, validation statement. The export is real: the button builds the same sheet as a PDF
+//! in [`super::report_pdf`] and delivers it (a download on the web, a save on native); the pages below
+//! are a preview of that document.
+//!
+//! When a saved or opened project document backs the session, the sheet's revision row carries that
+//! document's own sha-256, computed from the document's canonical bytes at export time (issue #85
+//! completion); a sheet exported from a draft with no document behind it carries its labelled
+//! state-hash fallback ([`super::report_pdf::Revision`]).
 //!
 //! Every value on the pages is the cockpit's live draft and its `EngineOutput`: the duty, the tower record,
 //! the fill layers, `worked_steps` (label, formula, substitution, value, unit, reference), the headline
 //! results, `validation` (every limit the run checked) and `provenance` (engine, catalog id + revision +
 //! status, warning). The project name and the report number are STUB (`data::STUB_PROJECT`,
-//! `data::STUB_REPORT_NO`) - there is no project record yet (#74) - and carry the amber tag.
+//! `data::STUB_REPORT_NO`) - the `.drafthouse` format carries no name field, so those stay stubs - and
+//! carry the amber tag.
 
 use bevy_egui::egui::{self, pos2, vec2, Align2, Color32, Rect, Stroke, StrokeKind};
 use cockpit::engine::{EngineInput, EngineOutput};
 
 use super::data;
 use super::kit::{self, text, text_fit};
-use super::{title_band, toast, Account, Env, State};
+use super::report_pdf;
+use super::{title_band, toast, Account, DocumentSource, Env, State};
 use crate::theme as t;
 
 /// Round 2 (#91 decisions, "Report = all of them static"): a Charts page between Results and Validation.
@@ -125,7 +134,7 @@ pub fn ui(ui: &mut egui::Ui, st: &mut State, draft: &mut EngineInput, env: &Env,
                 );
             }
         }
-        export_button(ui, st, btn, demo);
+        export_button(ui, st, draft, out, btn, demo, env.document);
     } else {
         // left: the page thumbnails; centre: the page; right: the export card
         let thumbs_w = 150.0;
@@ -346,7 +355,7 @@ pub fn ui(ui: &mut egui::Ui, st: &mut State, draft: &mut EngineInput, env: &Env,
             ir.width(),
         );
         let btn = Rect::from_min_max(pos2(ir.left(), ir.bottom() - 48.0), ir.max);
-        export_button(ui, st, btn, demo);
+        export_button(ui, st, draft, out, btn, demo, env.document);
         if demo {
             let lr = Rect::from_min_max(
                 pos2(ir.left(), btn.top() - 66.0),
@@ -374,7 +383,15 @@ pub fn ui(ui: &mut egui::Ui, st: &mut State, draft: &mut EngineInput, env: &Env,
     }
 }
 
-fn export_button(ui: &egui::Ui, st: &mut State, r: Rect, demo: bool) {
+fn export_button(
+    ui: &egui::Ui,
+    st: &mut State,
+    draft: &EngineInput,
+    out: &EngineOutput,
+    r: Rect,
+    demo: bool,
+    document: Option<DocumentSource<'_>>,
+) {
     let label = if demo {
         "Export (DEMO watermark)"
     } else {
@@ -389,7 +406,22 @@ fn export_button(ui: &egui::Ui, st: &mut State, r: Rect, demo: bool) {
         t::INK,
     );
     if resp.clicked() {
-        toast(st, "Design only - no PDF is generated");
+        // The same bytes both hosts get: build the sheet, name it after its state hash, deliver it
+        // (download / save). The DEMO account exports the watermarked sample. Issue #85 completion:
+        // when a saved or opened project document backs the session, the revision row carries the
+        // document's own digest - the canonical bytes are produced (through the session's own
+        // writer) at this moment, so the sheet's revision is the state it was built from.
+        let document = document.and_then(|source| source(draft));
+        let mut meta = report_pdf::meta_for_export(st.account == Account::Staff, draft);
+        if let Some(document) = document.as_ref() {
+            meta.carry_document(document);
+        }
+        let bytes = report_pdf::document(draft, out, &st.cache, &meta);
+        let name = report_pdf::file_name(&meta.state_hash);
+        match report_pdf::deliver(&bytes, &name) {
+            Ok(done) => toast(st, &done),
+            Err(e) => toast(st, &format!("export failed: {e}")),
+        }
     }
 }
 

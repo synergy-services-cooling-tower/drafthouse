@@ -17,6 +17,9 @@ use cockpit::engine::{Engine, EngineError, EngineInput, EngineOutput};
 #[cfg(feature = "real-engine")]
 use cockpit_adapter::synergy_drafthouse as eng;
 
+#[cfg(feature = "real-engine")]
+use drafthouse_cockpit_seams::mapping as m;
+
 use crate::clock::now_ms;
 
 /// The frame budget for lazy engine work, in ms.
@@ -43,10 +46,6 @@ pub const STUB_REPORT_NO: &str = "CS-0000";
 pub const STUB_USER_INITIALS: &str = "SS";
 pub const STUB_USER: &str = "Synergy staff (stub identity)";
 pub const STUB_CATALOG: &str = "Synergy catalog";
-/// Compare's three variants: what each edits on a copy of the draft (the engine then runs each copy).
-/// These are design choices of the screen, not stubs - the results are engine output.
-pub const CMP_FILL_DEEPER_M: f64 = 0.3;
-pub const CMP_FAN_FASTER: f64 = 0.10;
 
 /// The performance-curve grid the Curves screen asks the engine for.
 pub const CURVE_WB: [f64; 6] = [20.0, 22.0, 24.0, 26.0, 28.0, 30.0];
@@ -217,6 +216,14 @@ pub struct XfGrid {
     pub outlet_h: f64,
     pub water: Vec<Vec<f64>>,
     pub air_h: Vec<Vec<f64>>,
+    /// The water loading the duty puts on this candidate's fill, kg/(m^2 s): the engine's own definition
+    /// (water mass flow over the fill's plan area, `airside.rs`). Drives the drawn droplets' speed (issue
+    /// #86 AC 1) - it is the number the loading is, not a look.
+    pub water_loading_kg_m2_s: f64,
+    /// The candidate's fan speed in rpm, from the record's own rated speed and this run's ratio. `None`
+    /// when the record states no rated speed, and then nothing is drawn turning (the seams' `rpm` has
+    /// nothing to say).
+    pub rpm: Option<f64>,
     /// The convergence block: the grid actually solved, the doubled grid Richardson extrapolated
     /// from, the extrapolated answer, and the engine's own discretisation-error estimate with its
     /// stated meaning (AC 2's error estimate, shown with the result).
@@ -229,15 +236,6 @@ pub struct XfGrid {
     pub error_meaning: &'static str,
     pub study: XfStudy,
     pub ms: f64,
-}
-
-#[derive(Clone, Debug)]
-pub struct Variant {
-    pub key: &'static str,
-    pub label: String,
-    pub change: String,
-    pub input: EngineInput,
-    pub out: Result<EngineOutput, String>,
 }
 
 /// The lazy cache. Keyed by the duty it was computed for, so an edited duty recomputes.
@@ -256,7 +254,6 @@ pub struct Cache {
     curves_runs: usize,
     curves_ms: f64,
     pub xf: Option<Result<XfGrid, String>>,
-    pub variants: Option<Vec<Variant>>,
     pub engine_ms_last: f64,
     #[cfg(feature = "real-engine")]
     catalog: Option<Result<eng::SelectionCatalog, String>>,
@@ -488,14 +485,6 @@ impl Cache {
                 Some(e) => self.step_curves(draft, e, t0),
                 None => false,
             },
-            Want::Compare => {
-                if self.variants.is_none() {
-                    if let Some(e) = engine {
-                        self.variants = Some(variants(draft, e));
-                    }
-                }
-                false
-            }
             Want::Report => {
                 // the Charts page needs both caches: stay busy across the hand-off, or a screenshot taken
                 // between the two steps catches a "computing" cell (round-2 QA)
@@ -783,6 +772,19 @@ impl Cache {
             let study = eng::crossflow_convergence_study(&eng::CrossflowStudyInput::new(input))
                 .map_err(|e| e.to_string())?;
             let conv = r.grid_convergence;
+            // Issue #86 AC 1: the two rates the crossflow canvas animates are the engine's quantities, read
+            // where the engine keeps them - the water loading of this duty over this candidate's fill, and the
+            // candidate fan's rpm through its own record. Nothing here is a drawn constant.
+            let catalog = self.catalog.as_ref().and_then(|c| c.as_ref().ok());
+            let fill_area_m2 = catalog
+                .and_then(|c| c.towers.iter().find(|t| t.id == best.tower_id))
+                .map(|t| t.physics.fill_area_m2);
+            let water_loading_kg_m2_s =
+                m::water_loading_kg_m2_s(water_kg_s(draft), fill_area_m2.unwrap_or(0.0))
+                    .unwrap_or(0.0);
+            let rpm = catalog
+                .and_then(|c| c.fans.iter().find(|f| f.physics.id == best.fan_id))
+                .and_then(|f| m::rpm(best.speed, f.nominal_rpm));
             Ok(XfGrid {
                 cand: best,
                 hot_c: draft.duty.hot_water_c,
@@ -798,6 +800,8 @@ impl Cache {
                 outlet_h: r.outlet_air_state.enthalpy_kj_kg_dry_air,
                 water: r.water_temperature_grid_c,
                 air_h: r.air_enthalpy_grid_kj_kg_dry_air,
+                water_loading_kg_m2_s,
+                rpm,
                 cells: conv.coarse_cells,
                 fine_cells: conv.fine_cells,
                 coarse_cold_c: conv.coarse_cold_water_c,
@@ -828,7 +832,6 @@ pub enum Want {
     Size,
     Rate,
     Curves,
-    Compare,
     Crossflow,
     /// Report's Charts page: the selection first, then the curves grid.
     Report,
@@ -1094,45 +1097,4 @@ pub fn predict_flow(c: &CurveData, wb: f64, range: f64, cold: f64) -> Option<(f6
     }
     #[cfg(not(feature = "real-engine"))]
     None
-}
-
-// ===================================================================================== compare
-
-fn variants(d: &EngineInput, e: &dyn Engine) -> Vec<Variant> {
-    let mut out = Vec::new();
-    let a = d.clone();
-    out.push(Variant {
-        key: "A",
-        label: "Current".into(),
-        change: "as drafted".into(),
-        out: e.run(&a).map_err(|x| format!("{x:?}")),
-        input: a,
-    });
-    // B: the lower fill layer 0.3 m deeper (the same records, a taller stack).
-    let mut b = d.clone();
-    if let Some(l) = b.fill_layers.last_mut() {
-        l.depth_m = (l.depth_m + CMP_FILL_DEEPER_M).min(2.4);
-    }
-    let bl = b.fill_layers.last().map(|l| l.depth_m).unwrap_or(0.0);
-    let al = d.fill_layers.last().map(|l| l.depth_m).unwrap_or(0.0);
-    out.push(Variant {
-        key: "B",
-        label: "Deeper fill".into(),
-        change: format!("lower layer {al:.2} → {bl:.2} m"),
-        out: e.run(&b).map_err(|x| format!("{x:?}")),
-        input: b,
-    });
-    // C: the fan 0.10 faster, inside its own validity band.
-    let mut c = d.clone();
-    let [lo, hi] = c.fan.allowed_speed_ratio;
-    c.speed_ratio = (c.speed_ratio + CMP_FAN_FASTER).clamp(lo, hi);
-    let cs = c.speed_ratio;
-    out.push(Variant {
-        key: "C",
-        label: "Faster fan".into(),
-        change: format!("fan speed {:.2} → {cs:.2}×", d.speed_ratio),
-        out: e.run(&c).map_err(|x| format!("{x:?}")),
-        input: c,
-    });
-    out
 }

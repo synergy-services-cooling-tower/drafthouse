@@ -121,6 +121,19 @@
     <button id="nav-focus" type="button" class="focus-only" title="Cycle the overlay emphasis (tab)">streamlines</button>
     <button id="nav-freeze" type="button" aria-pressed="false" title="Hold the animation clock for a reproducible frame (F)">freeze</button>
     <button id="nav-motion" type="button" aria-pressed="false" title="Reduced motion: hold the flow, droplets and fan still (M)">motion</button>
+    <!-- Issue #74: the internal host's file group. The PUBLIC host gets none of this - the rule is
+         unchanged: public can author, and public cannot save or export. The script removes this group
+         outright on the public host, so the buttons are not merely hidden. -->
+    <span class="sep" id="nav-files-sep"></span>
+    <span class="nav-label" id="nav-files-label">Project</span>
+    <span id="nav-files">
+      <button id="nav-project-new" type="button" title="Start a new project (the recorded default)">new</button>
+      <button id="nav-project-download" type="button" title="Download the project file (.drafthouse)">download project</button>
+      <button id="nav-project-upload" type="button" title="Upload a project file">upload project</button>
+      <button id="nav-revision-import" type="button" title="Import a catalog revision file (its sha256 is checked)">import revision</button>
+    </span>
+    <input id="nav-project-file" type="file" accept=".drafthouse,.json,application/json" hidden>
+    <input id="nav-revision-file" type="file" accept=".json,application/json" hidden>
     <span class="spacer"></span>
     <!-- Issue #91: the key list moved into the notes drawer (I), with every sentence the screen used to paint. -->
     <button id="nav-notes" type="button" aria-pressed="false" title="Notes, validation and keyboard (I)">notes</button>
@@ -145,12 +158,16 @@
     <p>Custom parts: <span id="mirror-custom">no custom parts</span></p>
     <p>Staged from the URL: <span id="mirror-staged">nothing staged</span></p>
     <p>Provenance: <span id="mirror-provenance">−</span></p>
+    <p>Project: <span id="mirror-project-status">nothing loaded from a file yet</span></p>
     <p>Error: <span id="mirror-error"></span></p>
   </div>
   <!-- Round 5: the clip probe. One JSON object per frame: the container every text unit of the right column
        is checked against, and one entry per text unit (id, text, drawn rect, available width, natural width,
        lines, overflow). Written by the Rust app; read by tools/clip-check.mjs; never shown. -->
   <pre id="mirror-clip" hidden></pre>
+  <!-- Issue #74: the project file's text, as the app published it for *Download project*. Written by the
+       Rust app; read by the page (and by the capture harness); never shown. -->
+  <pre id="mirror-project" hidden></pre>
   <!-- Issue #91: every text shape the frame painted (JSON), for the on-screen word count. Never shown. -->
   <pre id="mirror-words" hidden></pre>
 </div>
@@ -277,6 +294,48 @@ document.addEventListener('keydown', (e) => {
   else if (key === 'b' || key === 'B') { window.__viz.dispatch('bay:next'); e.preventDefault(); }
   else if (key === 'e' || key === 'E') { window.__viz.dispatch('picker:toggle'); e.preventDefault(); }
 });
+
+// Issue #74: the internal host's file buttons. The Rust side does every byte of the work - these handlers
+// only read a file the user picked and dispatch its text through the existing bridge (`viz_dispatch`), and
+// hand back the text the app published for download. The public host removes the group above, so there is
+// no save or export path there at all.
+if (!internal) {
+  for (const id of ['nav-files', 'nav-files-sep', 'nav-files-label', 'nav-project-file', 'nav-revision-file']) {
+    const el = document.getElementById(id);
+    if (el) el.remove();
+  }
+} else {
+  const projectFile = document.getElementById('nav-project-file');
+  const revisionFile = document.getElementById('nav-revision-file');
+  const readAnd = (input, command) => {
+    input.addEventListener('change', async () => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      window.__viz.dispatch(command + ':' + (await file.text()));
+    });
+  };
+  document.getElementById('nav-project-new').addEventListener('click', () => window.__viz.dispatch('project:new'));
+  document.getElementById('nav-project-upload').addEventListener('click', () => { projectFile.value = ''; projectFile.click(); });
+  document.getElementById('nav-revision-import').addEventListener('click', () => { revisionFile.value = ''; revisionFile.click(); });
+  readAnd(projectFile, 'project:upload');
+  readAnd(revisionFile, 'revision:import');
+  document.getElementById('nav-project-download').addEventListener('click', () => {
+    window.__viz.dispatch('project:download');
+    // The app publishes the file's text into #mirror-project; give the frame a moment, then hand it over.
+    setTimeout(() => {
+      const text = document.getElementById('mirror-project').textContent;
+      if (!text || !text.trim()) return;
+      const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = root.dataset.projectName || 'untitled.drafthouse';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }, 300);
+  });
+}
 
 // Mirror the app's published state back onto the control bar (one-way: the app is the source of truth).
 let lastFrozen = null, lastFocus = null;

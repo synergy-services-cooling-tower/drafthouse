@@ -11,7 +11,7 @@ use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
 use egui::{Align2, Color32, FontId, Rect, RichText, Sense, Shape, Stroke, StrokeKind};
 
-use cockpit::engine::{Engine, EngineOutput, ZoneId};
+use cockpit::engine::{Engine, EngineInput, EngineOutput, ZoneId};
 use drafthouse_cockpit_seams as seams;
 use drafthouse_cockpit_seams::mapping as m;
 
@@ -111,10 +111,15 @@ pub struct VizAux<'w, 's> {
     /// column, published to `#mirror-clip`) and the counters the layout frames read.
     pub clip: ResMut<'w, crate::clip::ClipProbe>,
     pub info: ResMut<'w, crate::clip::LayoutInfo>,
+    /// Issue #74: the project session (the file being edited, the recent list, the prompt) and the fixture
+    /// text ("New" needs the recorded default input). Both live here rather than as parameters of their
+    /// own: `viz_ui` is at the sixteen-parameter limit a Bevy system may have (see the note above).
+    pub session: ResMut<'w, crate::files::FileSession>,
     /// Issue #91: the painted-text inventory (`#mirror-words`).
     pub words: ResMut<'w, crate::clip::ScreenText>,
-    /// drafthouse#91 Part B: the fixture text, for the new screens' whole-catalog selection runs.
-    pub fixture: Res<'w, crate::app::FixtureText>,
+    /// The fixture text: one field for both needs - #74's "New" reads the recorded default input from it,
+    /// and the #91 screens select the whole catalog out of it.
+    pub fixture_text: Res<'w, crate::app::FixtureText>,
     #[doc(hidden)]
     pub _phantom: std::marker::PhantomData<&'s ()>,
 }
@@ -141,6 +146,11 @@ pub fn viz_ui(
     if !fonts_bound(ctx) {
         return;
     }
+    // Issue #86 AC 4: with reduced motion egui's own transitions (hover fades, pop-ups) run over zero time -
+    // the mode turns animation **off**, it does not slow it down. Otherwise egui keeps its own default.
+    if vis.reduced_motion {
+        ctx.all_styles_mut(|s| s.animation_time = 0.0);
+    }
 
     // The engine is called here, every frame, on the current draft: the fixture engine is arithmetic on the
     // recorded run (its own documented re-expression), so the read-outs never lag the slider.
@@ -161,15 +171,50 @@ pub fn viz_ui(
     // drafthouse#91 Part B: the app shell and the new screens (`crate::screens`). On a new screen the shell
     // draws the whole frame; on Instrument it hands this view the rect its chrome leaves.
     let full = ctx.viewport_rect();
+    // Issue #85 completion: the Report export's revision row carries the project document's own
+    // digest. The document's canonical bytes are produced **at click time** through the same writer
+    // the File menu's save uses (`files::snapshot_text`), so a project saved and exported unchanged
+    // carries the saved file's own sha-256 (project writes are deterministic; issue #74), and a
+    // sheet built after a modification carries the working document's. `None` - no saved or opened
+    // document in the session - keeps the export's labelled state-hash fallback.
+    let report_document = |input: &EngineInput| -> Option<crate::screens::DocumentBytes> {
+        let backed = aux.session.path.is_some()
+            || aux.session.loaded.is_some()
+            || !aux.session.outbox.is_empty();
+        if !backed {
+            return None;
+        }
+        let catalog = catalog.as_deref()?;
+        let fctx = crate::files::Ctx {
+            options: &options,
+            host_label: crate::files::plane_label(),
+            spec: aux.duty.spec.as_ref(),
+            output: run.output.as_ref(),
+            fixture_text: &aux.fixture_text.0,
+        };
+        let text =
+            crate::files::snapshot_text(&fctx, &aux.session, input, catalog, engine.0.as_deref());
+        // The session's own verdict on unsaved changes (the one the File menu's prompt uses);
+        // on the web an unmodified download must match what was handed out, clause by clause.
+        let unchanged = !aux.session.is_dirty(input, catalog)
+            && (aux.session.outbox.is_empty() || aux.session.outbox == text);
+        Some(crate::screens::DocumentBytes { text, unchanged })
+    };
     let shell = crate::screens::frame(
         ctx,
         crate::screens::Ctx {
             draft: draft.as_deref_mut().map(|d| &mut d.0),
             engine: engine.0.as_deref(),
             out: run.output.as_ref(),
-            fixture_text: &aux.fixture.0,
-            reduced_motion: options.reduced_motion,
+            fixture_text: &aux.fixture_text.0,
+            // Issue #86 AC 4: the **live** flag, not the startup option - the toggle turns the screens' own
+            // animation off too, and the seed only decides what the flag starts as.
+            reduced_motion: vis.reduced_motion,
             t: clock.t,
+            document: Some(&report_document),
+            // Issue #89: the comparison's variant reader resolves file records against this catalog,
+            // the same one `files::open_text` uses.
+            catalog: catalog.as_deref(),
         },
     );
     let screen = match shell {
@@ -347,7 +392,28 @@ pub fn viz_ui(
                     engine.0.as_deref(),
                     phone,
                     &mut hits,
-                )
+                );
+                // Issue #74: the File row. The native binary draws the menu here; the web-internal host
+                // reaches the same functions through the page's own buttons, and the public host reaches
+                // nothing at all (it can author, and it cannot save or export).
+                #[cfg(not(target_arch = "wasm32"))]
+                if !phone {
+                    let ctx = crate::files::Ctx {
+                        options: &options,
+                        host_label: crate::files::plane_label(),
+                        spec: aux.duty.spec.as_ref(),
+                        output: run.output.as_ref(),
+                        fixture_text: &aux.fixture_text.0,
+                    };
+                    crate::files::menu_row(
+                        ui,
+                        &ctx,
+                        &mut aux.session,
+                        draft_mut.as_deref_mut().map(|d| &mut d.0),
+                        catalog.as_deref_mut(),
+                        &mut engine,
+                    );
+                }
             });
 
             if !load.ready {
@@ -2569,34 +2635,11 @@ fn scene_overlay(
                 check_drop(cat.unwrap_or(&Catalog::default()), &draft.0, *slot, part),
             )
         });
-        let dragged = vis
-            .drag
-            .as_ref()
-            .map(|d| d.over == Some(*slot))
-            .unwrap_or(false);
         let accepts = matches!(verdict.as_ref().map(|(_, v)| v), Some(Ok(())));
         let refuses = matches!(verdict.as_ref().map(|(_, v)| v), Some(Err(_)));
-        let (color, width) = if dragged {
-            let v = vis.drag.as_ref().map(|d| &d.verdict).unwrap_or(&Ok(()));
-            (state::verdict_color(v), 2.4)
-        } else if accepts {
-            (t::VALID, 1.7)
-        } else if refuses {
-            (t::with_alpha(t::SLOT, 70), 1.0)
-        } else if vis.selected_slot == *slot {
-            (t::with_alpha(t::PRIMARY, 200), 1.4)
-        } else {
-            (t::SLOT, 1.1)
-        };
-        // The wash: an accepting bay is filled, a refusing one is left bare, the selected one keeps the
-        // quiet accent frame it had in round 2.
-        if accepts || vis.selected_slot == *slot {
-            let tint = if accepts { t::VALID } else { t::PRIMARY };
-            p.rect_filled(
-                *r,
-                egui::CornerRadius::same(3),
-                t::with_alpha(tint, if accepts { 30 } else { 12 }),
-            );
+        let (color, width, wash) = bay_paint(vis, *slot, accepts, refuses);
+        if let Some((tint, alpha)) = wash {
+            p.rect_filled(*r, egui::CornerRadius::same(3), t::with_alpha(tint, alpha));
         }
         let pts = [
             r.left_top(),
@@ -2615,13 +2658,7 @@ fn scene_overlay(
         let mut lines: Vec<(String, FontId, Color32, crate::answer::Src)> = Vec::new();
         let tone = match verdict.as_ref() {
             Some((part, v)) => {
-                let (txt, col) = match v {
-                    Ok(()) => (format!("drop · accepts {}", part.id), t::VALID),
-                    Err(_) => (
-                        format!("won't take {}", part.id),
-                        t::with_alpha(t::MUTED, 220),
-                    ),
-                };
+                let (txt, col) = carried_line(part, v);
                 lines.push((
                     txt,
                     semi(if phone { 9.0 } else { 10.0 }),
@@ -3218,6 +3255,16 @@ fn flow_overlay(
         .map(|o| o.airflow_m3_s)
         .unwrap_or(m::ANCHOR_AIRFLOW_M3_S);
     let flow_f = m::flow_factor(flow);
+    // Issue #86 AC 1: the falling water answers to the **water** the engine solved - the duty's mass flow
+    // over the tower's own fill area (the engine's own loading definition) - not to the airflow. The heads
+    // on the air path move at the airflow's own rate.
+    let water_loading = m::water_loading_kg_m2_s(
+        m::kg_s_from_m3_hr(draft.0.duty.water_flow_m3_hr),
+        draft.0.tower.fill_area_m2,
+    )
+    .unwrap_or(m::ANCHOR_WATER_LOADING_KG_M2_S);
+    let air_rate = m::air_head_rate(flow);
+    let water_rate = m::water_streak_rate(water_loading);
     let n = m::streamline_count(flow).min(if phone { 4 } else { m::MAX_STREAMLINES });
     let f_flow = if matches!(vis.focus, Focus::All | Focus::Airflow) {
         1.0
@@ -3334,11 +3381,9 @@ fn flow_overlay(
             // the travelling heads: speed from the airflow, count from the airflow
             let heads = (3.0 + 5.0 * flow_f).round() as usize;
             for k in 0..heads {
-                let t = (anim_t * 0.22 * flow_f
-                    + k as f32 / heads as f32
-                    + j as f32 * 0.13
-                    + side * 0.05)
-                    % 1.0;
+                let t =
+                    (anim_t * air_rate + k as f32 / heads as f32 + j as f32 * 0.13 + side * 0.05)
+                        % 1.0;
                 let i = (t * (pts.len() - 2) as f32) as usize;
                 let a = pts[i];
                 let b = pts[i + 1];
@@ -3419,7 +3464,7 @@ fn flow_overlay(
     }
     for k in 0..streaks {
         let x = l.fill_band.left() + l.fill_band.width() * (k as f32 + 0.5) / streaks as f32;
-        let phase = (anim_t * 0.30 * flow_f + k as f32 / streaks as f32) % 1.0;
+        let phase = (anim_t * water_rate + k as f32 / streaks as f32) % 1.0;
         let y = top_y + span * phase;
         let len = if phone { 14.0 } else { 22.0 };
         // The hue is the run's own walk down the fall: 1.0 at the nozzle (hot), 0.0 at the water surface.
@@ -3488,6 +3533,56 @@ fn catmull(anchors: &[egui::Pos2], per_segment: usize) -> Vec<egui::Pos2> {
 
 fn side_unused() {}
 
+/// What a bay's own frame paints (issue #86, defect (b)): the frame's colour and width, and the wash (a
+/// fill) or `None`. A bay carries an accent only while something is on it - the part being carried is
+/// accepted by it, the pointer is dragging over it, its picker or tap-detail card is open, or the keyboard
+/// is on it ([`Visual::bay_in_focus`]). At rest every bay is the same dashed slate frame with no fill;
+/// before this rule the *default* selected slot's accent and wash sat on the fan bay with nothing selected
+/// anywhere in the app, reading as an orphaned selection marker (the stray highlight the conductor found on
+/// live staging).
+fn bay_paint(
+    vis: &Visual,
+    slot: Slot,
+    accepts: bool,
+    refuses: bool,
+) -> (Color32, f32, Option<(Color32, u8)>) {
+    let dragged = vis
+        .drag
+        .as_ref()
+        .map(|d| d.over == Some(slot))
+        .unwrap_or(false);
+    let (color, width) = if dragged {
+        let v = vis.drag.as_ref().map(|d| &d.verdict).unwrap_or(&Ok(()));
+        (state::verdict_color(v), 2.4)
+    } else if accepts {
+        (t::VALID, 1.7)
+    } else if refuses {
+        (t::with_alpha(t::SLOT, 70), 1.0)
+    } else if vis.bay_in_focus(slot) {
+        (t::with_alpha(t::PRIMARY, 200), 1.4)
+    } else {
+        (t::SLOT, 1.1)
+    };
+    let wash = if accepts {
+        Some((t::VALID, 30))
+    } else if vis.bay_in_focus(slot) {
+        Some((t::PRIMARY, 12))
+    } else {
+        None
+    };
+    (color, width, wash)
+}
+
+/// The line a bay shows while a part is carried over it: the catalog's own verdict, in its own words
+/// (issue #86 AC 3). A refusal is the engine's sentence - `check_drop`'s own `Err` string, byte for byte -
+/// never a paraphrase, and the tests below compare it against that string so a rewrite fails here.
+fn carried_line(part: &PartRef, v: &Result<(), String>) -> (String, Color32) {
+    match v {
+        Ok(()) => (format!("drop · accepts {}", part.id), t::VALID),
+        Err(e) => (e.clone(), t::with_alpha(t::MUTED, 220)),
+    }
+}
+
 /// Apply a drop through the catalog, and record what happened for the strip and the frame.
 fn drop_part(
     cat: Option<&Catalog>,
@@ -3517,10 +3612,10 @@ fn drop_part(
                 }
             }
             Err(e) => {
-                vis.flash = Some(Flash {
-                    ok: false,
-                    text: format!("refused: {e}"),
-                })
+                // Issue #86 AC 3: the strip speaks the catalog's own sentence - `apply_drop` returns
+                // `check_drop`'s `Err` unchanged (it calls it first) and this flash carries it verbatim,
+                // with no prefix of its own. The test below compares this text against `check_drop`'s.
+                vis.flash = Some(Flash { ok: false, text: e })
             }
         },
         None => {
@@ -3811,14 +3906,13 @@ pub(crate) fn tacho(ui: &mut egui::Ui, rect: Rect, ratio: f64, lo: f64, hi: f64)
     let r = (rect.height() - 12.0).min(rect.width() * 0.5) - 4.0;
     let a0 = 200_f32.to_radians();
     let a1 = 340_f32.to_radians();
+    let at = |f: f32| {
+        let a = a0 + (a1 - a0) * f;
+        egui::pos2(centre.x + r * a.cos(), centre.y + r * a.sin() * 0.9)
+    };
     let mut pts = Vec::new();
     for i in 0..=24 {
-        let f = i as f32 / 24.0;
-        let a = a0 + (a1 - a0) * f;
-        pts.push(egui::pos2(
-            centre.x + r * a.cos(),
-            centre.y + r * a.sin() * 0.9,
-        ));
+        pts.push(at(i as f32 / 24.0));
     }
     p.add(Shape::line(pts, Stroke::new(2.0, t::LINE)));
     for i in 0..=4 {
@@ -3831,19 +3925,42 @@ pub(crate) fn tacho(ui: &mut egui::Ui, rect: Rect, ratio: f64, lo: f64, hi: f64)
         let outer = egui::pos2(centre.x + r * a.cos(), centre.y + r * a.sin() * 0.9);
         p.line_segment([inner, outer], Stroke::new(1.0, t::TICK));
     }
-    let f = if hi > lo {
-        ((ratio - lo) / (hi - lo)).clamp(0.0, 1.0) as f32
-    } else {
-        0.0
-    };
+    // Issue #86: the needle reads the record's own band **without clamping** - when the operating point
+    // leaves the band it points into the stall range (the span just past the band's end, drawn in the
+    // limits' colour and named) instead of sticking on the band's end as if the fan were there.
+    let (f, stall) = tacho_spans(ratio, lo, hi);
+    if let Some((s0, s1)) = stall {
+        let arc: Vec<egui::Pos2> = (0..=6)
+            .map(|i| at(s0 + (s1 - s0) * i as f32 / 6.0))
+            .collect();
+        p.add(Shape::line(
+            arc,
+            Stroke::new(3.0, t::with_alpha(t::DANGER, 210)),
+        ));
+    }
     let a = a0 + (a1 - a0) * f;
     let tip = egui::pos2(
         centre.x + (r - 8.0) * a.cos(),
         centre.y + (r - 8.0) * a.sin() * 0.9,
     );
-    // the recorded run's ratio, as a dim tick the needle moves away from
-    p.line_segment([centre, tip], Stroke::new(2.0, t::PRIMARY));
-    p.circle_filled(centre, 3.0, t::PRIMARY);
+    let needle = if stall.is_some() {
+        t::DANGER
+    } else {
+        t::PRIMARY
+    };
+    p.line_segment([centre, tip], Stroke::new(2.0, needle));
+    p.circle_filled(centre, 3.0, needle);
+    if let Some((s0, _)) = stall {
+        // the word, so the state is not colour-only (and it sits on the side the needle left the band on)
+        let at_txt = at(s0 + (if s0 < 0.0 { -0.02 } else { 0.02 }));
+        p.text(
+            egui::pos2(at_txt.x, at_txt.y - 2.0),
+            Align2::CENTER_BOTTOM,
+            "stall",
+            FontId::new(9.0, t::family_semi()),
+            t::DANGER,
+        );
+    }
     p.text(
         egui::pos2(rect.center().x, rect.top() + 2.0),
         Align2::CENTER_TOP,
@@ -3851,6 +3968,28 @@ pub(crate) fn tacho(ui: &mut egui::Ui, rect: Rect, ratio: f64, lo: f64, hi: f64)
         FontId::new(9.0, t::family_semi()),
         t::MUTED,
     );
+}
+
+/// How far past the band's end the tacho's needle may ride, as a fraction of the sweep (issue #86).
+pub const TACHO_STALL_SPAN: f32 = 0.25;
+
+/// The tacho's two reads of an operating point (issue #86): `(needle, stall)` - the needle's position in
+/// sweep fractions (it may ride past either end, into the stall range) and, when the point is outside the
+/// fan record's own band, the stall span to draw. Inside the band the span is `None` and the needle is the
+/// plain `fraction_of` reading. One function, so "inside the band" and "past the end" cannot drift apart.
+pub fn tacho_spans(ratio: f64, lo: f64, hi: f64) -> (f32, Option<(f32, f32)>) {
+    let f = m::band_fraction(ratio, [lo, hi]);
+    if m::in_stable_band(ratio, [lo, hi]) {
+        return (f.clamp(0.0, 1.0), None);
+    }
+    if f < 0.0 {
+        (f.max(-TACHO_STALL_SPAN), Some((-TACHO_STALL_SPAN, 0.0)))
+    } else {
+        (
+            f.min(1.0 + TACHO_STALL_SPAN),
+            Some((1.0, 1.0 + TACHO_STALL_SPAN)),
+        )
+    }
 }
 
 // ============================================================================================== rail
@@ -4998,5 +5137,98 @@ mod tests {
             }
             assert!(*ys.last().unwrap() + heights[n - 1] <= PHONE_COLUMN + 0.01);
         }
+    }
+
+    /// Issue #86, defect (b): **no bay is accented at rest.** A fresh `Visual` - the fixture's default fan
+    /// slot, nothing else - paints every bay the same dashed slate frame with no fill. The stray light-blue
+    /// highlight the conductor saw on live staging was the *default* slot's solid accent frame and its wash
+    /// sitting on the fan bay with nothing selected anywhere in the app. The accent comes back the moment
+    /// something is *on* a bay, and only on that bay.
+    #[test]
+    fn no_bay_is_accented_at_rest() {
+        let vis = Visual::default();
+        for slot in Slot::ALL {
+            let (color, width, wash) = bay_paint(&vis, slot, false, false);
+            assert_eq!((color, width), (t::SLOT, 1.1), "{slot:?} at rest");
+            assert!(wash.is_none(), "{slot:?} carries a wash at rest");
+        }
+        // The picker on the fan bay: the accent frame and the quiet wash, on that bay and no other.
+        let vis = Visual {
+            picker: Some(Picker::new(Slot::Fan, 0, [0.0; 4], false)),
+            ..Default::default()
+        };
+        let (color, _, wash) = bay_paint(&vis, Slot::Fan, false, false);
+        assert_eq!(color, t::with_alpha(t::PRIMARY, 200));
+        assert_eq!(wash, Some((t::PRIMARY, 12)));
+        assert!(bay_paint(&vis, Slot::Drift, false, false).2.is_none());
+        // ... and an accepting bay is filled even with nothing selected at all.
+        assert_eq!(
+            bay_paint(&vis, Slot::Drift, true, false).2,
+            Some((t::VALID, 30))
+        );
+    }
+
+    /// Issue #86 AC 3: **the screen speaks the catalog's own refusal.** The bay's carried line and the drop
+    /// strip's flash are the engine's sentence, byte for byte - the same string `check_drop` returns (and
+    /// `apply_drop` returns unchanged, because it calls `check_drop` first). The strip used to prefix
+    /// "refused: " and the call-out used to paraphrase ("won't take AX-700"); either coming back fails here.
+    #[test]
+    fn a_refusal_is_spoken_in_the_catalogs_own_words() {
+        use cockpit::fixture_engine::FixtureEngine;
+        let fx = FixtureEngine::from_json(include_str!("../assets/fixture.json"))
+            .expect("the fixture parses");
+        let cat = Catalog::from_fixture(&fx);
+        let input = fx.default_input();
+        let part = PartRef::new(Class::Fan, "AX-700");
+        let engine_reason =
+            check_drop(&cat, &input, Slot::Fan, &part).expect_err("AX-700 is not a listed fan");
+        // the line the bay shows while the part is carried over it
+        let (line, _) = carried_line(&part, &Err(engine_reason.clone()));
+        assert_eq!(
+            line, engine_reason,
+            "the bay repeats the catalog's sentence, it does not paraphrase it"
+        );
+        // and the strip's flash, through the real drop path
+        let mut vis = Visual::default();
+        let mut draft = Draft(input);
+        drop_part(Some(&cat), Some(&mut draft), &mut vis, Slot::Fan, &part);
+        let flash = vis.flash.expect("a refusal flash");
+        assert!(!flash.ok);
+        assert_eq!(
+            flash.text, engine_reason,
+            "the strip carries the same sentence, verbatim"
+        );
+        // the accepted case still reads as the screen's own line (that is a message, not a refusal)
+        let (line, _) = carried_line(&part, &Ok(()));
+        assert!(line.starts_with("drop · accepts"), "{line}");
+    }
+
+    /// Issue #86: **the stall range is shown when the operating point leaves the fan's own band.** Inside
+    /// the band the needle is the plain reading and no stall span is drawn; past either end the needle rides
+    /// into the stall span (a quarter of the sweep) and the span is returned so the tacho can draw it in the
+    /// limits' colour and name it. AX-500's record: allowedSpeedRatio [0.70, 1.13].
+    #[test]
+    fn the_tacho_shows_the_stall_range_only_outside_the_band() {
+        let (lo, hi) = (0.70, 1.13);
+        let (n, stall) = tacho_spans(0.78, lo, hi);
+        assert!((n - 0.186_046_5).abs() < 1e-3, "inside the band: {n}");
+        assert!(stall.is_none(), "inside the band no stall span is drawn");
+        for edge in [lo, hi] {
+            assert!(tacho_spans(edge, lo, hi).1.is_none(), "the edge is inside");
+        }
+        // above the band: the needle rides past the end, and the stall span is the quarter past it
+        let (n, stall) = tacho_spans(1.29, lo, hi);
+        assert!(
+            (1.0..=1.0 + TACHO_STALL_SPAN + 1e-6).contains(&n),
+            "above: {n}"
+        );
+        assert_eq!(stall, Some((1.0, 1.0 + TACHO_STALL_SPAN)));
+        // below the band: the same, on the other side
+        let (n, stall) = tacho_spans(0.60, lo, hi);
+        assert!((-TACHO_STALL_SPAN - 1e-6..0.0).contains(&n), "below: {n}");
+        assert_eq!(stall, Some((-TACHO_STALL_SPAN, 0.0)));
+        // a runaway operating point cannot send the needle off the dial
+        let (n, _) = tacho_spans(99.0, lo, hi);
+        assert!(n <= 1.0 + TACHO_STALL_SPAN + 1e-6);
     }
 }

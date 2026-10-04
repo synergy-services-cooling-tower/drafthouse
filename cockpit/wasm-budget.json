@@ -1,5 +1,5 @@
 {
-  "note": "Issue #82: the payload budget the release build enforces. The numbers are the measured build of this tree plus 2% slack, rounded up to whole kB: cockpit/tools/build-web.sh release on the lane host (Apple M4, macOS 26.6.2) with [profile.release] opt-level = 3 measured raw 23275261 / gzip 7409133 (the lane's recorded build log and report). Moving these numbers is a commit that says why, with the measurement that justifies it; the 8 MiB COCKPIT_GZIP_LIMIT_BYTES stays as the outer bound.",
-  "raw_bytes": 23740000,
-  "gzip_bytes": 7557000
+  "note": "Issue #82: the payload budget the release build enforces. The numbers are the measured build of this tree plus 2% slack, floored to whole kB: cockpit/tools/build-web.sh release on the lane host (Apple M4, macOS 26.6.2) with [profile.release] opt-level = 3 measured raw 23771666 / gzip 7568830 at the merge of the #74 project-file work into the #85/#86/#91 rounds (the raw build log is kept with the maintainers). The previous numbers (23740000 / 7557000) were measured before #85/#86/#91/#74 landed and were never re-measured while they did (this file's only earlier commit is #82's). Moving these numbers is a commit that says why, with the measurement that justifies it; the 8 MiB COCKPIT_GZIP_LIMIT_BYTES stays as the outer bound.",
+  "raw_bytes": 24247000,
+  "gzip_bytes": 7720000
 }

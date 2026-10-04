@@ -608,6 +608,28 @@ pub fn markdown() -> String {
     s.push_str("`mapping::altitude_m_from_pressure_pa`, `mapping::pressure_pa_from_altitude_m`.\n");
     s.push_str("All are unit-tested in `seams/src/lib.rs` and `seams/src/mapping.rs` (`cargo test --manifest-path seams/Cargo.toml --lib`).\n\n");
 
+    // Issue #74 (D26): the file model, and the server commands that will sit on top of it when the
+    // connect issue lands. The mapping is stated here because this document is generated - a table that
+    // drifted from the code would be worse than no table.
+    s.push_str("## Saving: one file model, and the server commands behind it (issue #74, D26)\n\n");
+    s.push_str("**Owner decision.** Native and web share **one persistence model - file-based first, optional connect\n");
+    s.push_str("later**. A project is a `.drafthouse` file (`docs/PROJECT_FORMAT.md`); a catalog revision is an\n");
+    s.push_str("immutable file object whose declared `sha256` is checked on **every** read; the custom parts a user\n");
+    s.push_str("authors live in that file, not in a page's memory. **Nothing in `cockpit/` talks to a network.**\n\n");
+    s.push_str("The internal host's stub commands map onto the file model like this - each row names what the\n");
+    s.push_str("command would carry once a server exists, and what the cockpit already writes locally:\n\n");
+    s.push_str("| `ServerCommand` | what it maps to in the file model |\n");
+    s.push_str("|---|---|\n");
+    s.push_str("| `SaveRevision { project, note }` | **push the project** (`File > Save` on native, *download project* on the internal host) to the server as a new revision, with the note as its label |\n");
+    s.push_str("| `ExportReportPdf { project }` | the server's own **report pipeline**, taking the project file as its input (the cockpit prints no PDF) |\n");
+    s.push_str("| `ExportJson { project }` / `ExportCsv { project }` | the results export this cockpit writes **locally** today (`File > Export results…`), from the same snapshot the project carries |\n");
+    s.push_str("| `LoadCatalogRevision { revision }` | the revision **id** a project pins (`catalogRevisionId`); the file itself is imported through `Revision::read`, digest checked |\n");
+    s.push_str("| `CompareLater { project, against_revision }` | a project file plus that pinned revision id - enough to recompute the comparison later |\n\n");
+    s.push_str("Every row is a label on a stub: no request is made, and the public host neither draws these commands\n");
+    s.push_str(
+        "nor answers the file commands at all (it can author, and it cannot save or export).\n\n",
+    );
+
     s.push_str("## What the pass does not claim\n\n");
     s.push_str("- Animated arrows are a **flow map illustration**, not a CFD or network solution, and the scene says so on\n");
     s.push_str("  the frame: `illustrative flow map`.\n");

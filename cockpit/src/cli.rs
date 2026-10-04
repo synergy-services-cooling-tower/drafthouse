@@ -8,6 +8,11 @@
 //! `?duty-open=`, ...) with the same names and the same defaults. An unknown flag, an unknown value
 //! or a missing value exits 2 with a message naming the flag - never a silent fallback.
 //!
+//! `--export-pdf <path>` is the one flag that leaves the app behind (issue #85): it runs the fixture
+//! project on the build's own engine, steps the Report screen's caches to completion and writes the
+//! same PDF the Report screen's export button builds - no window, no event loop. `--duty` staging is
+//! replayed; the rest of the staging flags describe a workspace a window would show.
+//!
 //! This lives in the lib, not in the binary, so its tests run in the lib's test harness: the binary
 //! target itself carries `test = false` (see `Cargo.toml`) because `cargo test` linking a
 //! Bevy-sized test harness for a thin `main` is a cost with no test behind it (issue #71 fix round).
@@ -17,12 +22,19 @@ use std::process::ExitCode;
 use crate::bootstrap;
 use crate::state::StartOptions;
 use bevy::window::{PresentMode, Window, WindowResizeConstraints, WindowResolution};
+use cockpit::fixture_engine::FixtureEngine;
 use cockpit::host::{Branding, HostConfig};
 
 /// The page's own catalog label (`cockpit/index.html`); the same string on both hosts.
 const CATALOG_LABEL: &str = "illustrative-catalog-v0.1";
 /// `--no-window` without `--frames`: how many updates the smoke runs before it exits 0.
 const DEFAULT_SMOKE_FRAMES: u32 = 3;
+/// Issue #74: with file work asked for, the headless run steps until that work is done. The frame bound
+/// is only a backstop; the deadline is the real stop, because the fixture arrives over frames, not
+/// immediately.
+const FILE_WORK_FRAMES: u32 = 100_000;
+/// How long a headless run may wait for the engine and the file work before it stops and says so.
+const FILE_WORK_TIMEOUT_S: u64 = 120;
 
 const USAGE: &str = "\
 drafthouse - the Synergy Drafthouse cockpit as a native desktop app (issue #71).
@@ -34,6 +46,7 @@ USAGE:
 WINDOW (default: a 1440x900 resizable window titled \"Synergy Drafthouse\", minimum 900x600):
     --no-window          build the App without a window and run --frames updates (the CI smoke)
     --frames N           exit after N updates; without it the app runs until the window is closed
+    --export-pdf <path>  write the fixture project's calculation sheet (PDF) to <path> and exit
 
 HOST AND ENGINE:
     --host public|internal        which host config to run as (default: public)
@@ -76,7 +89,16 @@ STAGING - the web plane's query parameters, same names, same defaults:
     --duty-open 0|1              ?duty-open=     the DUTY section expanded (default) / collapsed
     --water-open 0|1             ?water-open=    the WATER QUALITY section collapsed (default) / expanded
     --limits-open 0|1            ?limits-open=   the LIMITS section collapsed (default) / expanded
-";
+
+FILE (issue #74) - the File menu's own functions, with the path supplied on the command line:
+    --project-open <path>        open a project file before the first run (the menu's Open)
+    --project-save <path>        write the project file once a run exists (the menu's Save As)
+    --revision-import <path>     verify and import a catalog revision (the menu's Import)
+    --export-json <path>         write the results export as JSON (the menu's Export results JSON)
+    --export-csv <path>          write the results export as CSV (the menu's Export results CSV)
+    --compare <p1,p2[,p3]>       open 2-3 saved project files in the comparison screen (#89)
+                                 with any of these, a --no-window run waits for the work to finish and
+                                 exits 4 if the project file was asked for and not written";
 
 /// The parsed command line.
 #[derive(Debug, Default)]
@@ -85,6 +107,8 @@ struct Args {
     help: bool,
     no_window: bool,
     frames: Option<u32>,
+    /// `--export-pdf <path>`: write the sheet there and exit (issue #85).
+    export_pdf: Option<String>,
 }
 
 /// The whole command line: its arguments in, the process exit code out. `src/bin/drafthouse.rs`'s
@@ -218,6 +242,7 @@ fn apply(args: &mut Args, flag: &str, value: &str) -> Result<(), String> {
             });
         }
         "--frames" => args.frames = Some(count::<u32>(flag, value)?),
+        "--export-pdf" => args.export_pdf = Some(value.to_string()),
         "--view" => options.view = Some(value.to_string()),
         "--focus" => options.focus = Some(value.to_string()),
         "--rpm" => options.rpm = Some(number(flag, value)?),
@@ -254,6 +279,29 @@ fn apply(args: &mut Args, flag: &str, value: &str) -> Result<(), String> {
         "--duty-open" => options.duty_open = Some(switch(flag, value)?),
         "--water-open" => options.water_open = Some(switch(flag, value)?),
         "--limits-open" => options.limits_open = Some(switch(flag, value)?),
+        // Issue #74: the File menu's functions, with the path given here instead of by a dialog.
+        "--project-open" => options.project_open = Some(std::path::PathBuf::from(value)),
+        "--project-save" => options.project_save = Some(std::path::PathBuf::from(value)),
+        "--revision-import" => options.revision_import = Some(std::path::PathBuf::from(value)),
+        "--export-json" => options.export_json = Some(std::path::PathBuf::from(value)),
+        "--export-csv" => options.export_csv = Some(std::path::PathBuf::from(value)),
+        // Issue #89: the saved project files the comparison opens, comma-separated (2 or 3).
+        "--compare" => {
+            let paths: Vec<std::path::PathBuf> = value
+                .split(',')
+                .map(str::trim)
+                .filter(|p| !p.is_empty())
+                .map(std::path::PathBuf::from)
+                .collect();
+            if paths.len() < 2 || paths.len() > crate::compare::MAX_VARIANTS {
+                return Err(format!(
+                    "`--compare`: expected 2 to {} comma-separated project files, got {}",
+                    crate::compare::MAX_VARIANTS,
+                    paths.len()
+                ));
+            }
+            options.compare = paths;
+        }
         other => return Err(format!("unknown flag `{other}`")),
     }
     Ok(())
@@ -298,31 +346,162 @@ fn run(args: Args) -> ExitCode {
     }
     eprintln!("drafthouse: assets `{assets}`");
 
+    // #85: the export is its own headless path - the fixture project's sheet, written and exit.
+    if let Some(path) = args.export_pdf.as_deref() {
+        return export(path, &args.options, &assets);
+    }
+
     // `--no-window` alone still has to stop by itself; the CI smoke relies on that.
     let frames = args
         .frames
         .or(args.no_window.then_some(DEFAULT_SMOKE_FRAMES));
     let blank = args.no_window;
     let window = (!blank).then(desktop_window);
+    // The paths the run has to report on afterwards - and whether there is file work at all - have to be
+    // read before the options are handed to the app.
+    let project_save = args.options.project_save.clone();
+    let file_work = args.options.has_file_work();
     let mut app = bootstrap::assemble(args.options, window, frames);
 
     if blank {
         // No event loop to drive the app: step it by hand, exactly as Bevy's own `run_once` does.
         app.finish();
         app.cleanup();
-        for _ in 0..frames.unwrap_or(DEFAULT_SMOKE_FRAMES) {
-            app.update();
-        }
-        eprintln!(
-            "drafthouse: smoke OK - {} update(s) of the built App, no window",
+        // Issue #74: with file work asked for, the run steps until that work is done - a project save
+        // needs a completed run, and a run arrives after the fixture has been read and the engine has
+        // answered, which is not three frames. The deadline is the honest stop; a run that waited it out
+        // says so and exits non-zero.
+        // Two stopping rules: a smoke runs a fixed number of updates, and a run with file work runs
+        // until that work is done (its own deadline below is the backstop, and the frame bound is the
+        // far-off ceiling a runaway loop would eventually hit).
+        let bound = if file_work {
+            FILE_WORK_FRAMES
+        } else {
             frames.unwrap_or(DEFAULT_SMOKE_FRAMES)
-        );
+        };
+        let deadline =
+            std::time::Instant::now() + std::time::Duration::from_secs(FILE_WORK_TIMEOUT_S);
+        let mut runs = 0u32;
+        let mut timed_out = false;
+        loop {
+            app.update();
+            runs += 1;
+            let pending = app
+                .world()
+                .resource::<crate::files::FileSession>()
+                .has_pending();
+            if file_work {
+                if !pending {
+                    break;
+                }
+            } else if runs >= bound {
+                break;
+            }
+            if std::time::Instant::now() > deadline {
+                timed_out = true;
+                eprintln!(
+                    "drafthouse: the file work did not finish within {FILE_WORK_TIMEOUT_S}s - stopping"
+                );
+                break;
+            }
+            if file_work && pending {
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+        }
+        eprintln!("drafthouse: smoke OK - {runs} update(s) of the built App, no window");
+        // A file operation the run was *asked* for and refused is a failure, not a smoke that passed.
+        if app.world().resource::<crate::files::FileSession>().refused {
+            eprintln!("drafthouse: a file operation was refused - see the lines above");
+            return ExitCode::from(4);
+        }
+        if let Some(path) = project_save.as_ref() {
+            if !path.exists() {
+                eprintln!(
+                    "drafthouse: the project file `{}` was not written",
+                    path.display()
+                );
+                return ExitCode::from(4);
+            }
+        }
+        if timed_out {
+            return ExitCode::from(4);
+        }
         return ExitCode::SUCCESS;
     }
     match app.run() {
         bevy::app::AppExit::Success => ExitCode::SUCCESS,
         bevy::app::AppExit::Error(code) => ExitCode::from(code.get()),
     }
+}
+
+/// `--export-pdf`: the fixture project's calc sheet, headless (issue #85). The same pieces the
+/// Report screen runs - [`FixtureEngine::default_input`], the build's own engine
+/// ([`crate::engine_select::build`]), the Report caches stepped to completion - and the same
+/// [`crate::screens::report_pdf::document`] the export button builds. `--duty` is replayed through
+/// the same [`crate::app::apply_duty`] the URL staging uses. Exit 4 on any failure, naming it.
+fn export(path: &str, options: &StartOptions, assets_root: &str) -> ExitCode {
+    let fixture_path = std::path::Path::new(assets_root).join("fixture.json");
+    let fixture = match std::fs::read_to_string(&fixture_path) {
+        Ok(text) => text,
+        Err(e) => {
+            eprintln!("drafthouse: cannot read `{}`: {e}", fixture_path.display());
+            return ExitCode::from(3);
+        }
+    };
+    let file = match FixtureEngine::from_json(&fixture) {
+        Ok(file) => file,
+        Err(e) => {
+            eprintln!("drafthouse: fixture rejected: {e}");
+            return ExitCode::from(4);
+        }
+    };
+    let mut draft = file.default_input();
+    if let Some(pairs) = options.duty.as_deref() {
+        for line in crate::app::apply_duty(&mut draft, pairs) {
+            eprintln!("drafthouse: {line}");
+        }
+    }
+    let engine = match crate::engine_select::build(&fixture, options.engine.as_deref()) {
+        Ok(engine) => engine,
+        Err(e) => {
+            eprintln!("drafthouse: engine: {e}");
+            return ExitCode::from(4);
+        }
+    };
+    let out = match engine.run(&draft) {
+        Ok(out) => out,
+        Err(e) => {
+            eprintln!("drafthouse: run refused: {e:?}");
+            return ExitCode::from(4);
+        }
+    };
+    let mut cache = crate::screens::data::Cache::default();
+    let mut steps = 0;
+    while cache.step(
+        crate::screens::data::Want::Report,
+        &fixture,
+        &draft,
+        Some(&out),
+        Some(engine.as_ref()),
+    ) {
+        steps += 1;
+        if steps > 10_000 {
+            eprintln!("drafthouse: the Report caches never settled");
+            return ExitCode::from(4);
+        }
+    }
+    let meta = crate::screens::report_pdf::meta_for_export(true, &draft);
+    let bytes = crate::screens::report_pdf::document(&draft, &out, &cache, &meta);
+    if let Err(e) = std::fs::write(path, &bytes) {
+        eprintln!("drafthouse: cannot write `{path}`: {e}");
+        return ExitCode::from(4);
+    }
+    eprintln!(
+        "drafthouse: exported `{path}` ({} bytes, project state hash {})",
+        bytes.len(),
+        meta.state_hash
+    );
+    ExitCode::SUCCESS
 }
 
 #[cfg(test)]
@@ -443,6 +622,34 @@ mod tests {
             Some(DEFAULT_SMOKE_FRAMES)
         );
         assert_eq!(parsed(&["--no-window", "--frames", "0"]).frames, Some(0));
+    }
+
+    #[test]
+    fn export_pdf_takes_a_path_and_writes_the_fixture_sheet() {
+        let args = parsed(&["--export-pdf", "/tmp/sheet.pdf"]);
+        assert_eq!(args.export_pdf.as_deref(), Some("/tmp/sheet.pdf"));
+        assert!(!args.no_window);
+        assert_eq!(args.frames, None);
+
+        // And the flag really produces a sheet: the manifest's own assets, the build's engine,
+        // the Report caches - the same pieces the app runs. The artifact is the claim: the exit
+        // code is the process's, asserted by the evidence run, not here.
+        let dir = std::env::temp_dir().join(format!("drafthouse-export-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("the scratch directory");
+        let path = dir.join("sheet.pdf");
+        let _ = export(
+            path.to_str().expect("a path"),
+            &StartOptions::default(),
+            &format!("{}/assets", env!("CARGO_MANIFEST_DIR")),
+        );
+        let bytes = std::fs::read(&path).expect("the sheet was written");
+        assert!(bytes.starts_with(b"%PDF-1.7"));
+        let text = crate::pdf::extract_text(&bytes).join("\n");
+        assert!(
+            text.contains("The engine refused nothing"),
+            "the validation statement is missing from the CLI export"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -172,6 +172,23 @@ impl Plugin for VizPlugin {
             .init_resource::<Run>()
             .init_resource::<Visual>()
             .init_resource::<SceneRect>()
+            // Issue #74: the project session (the file being edited), pinned to the catalog revision this
+            // build ships, and seeded with the native CLI's file work when it asked for any.
+            .insert_resource(crate::files::FileSession {
+                revision_id: crate::revision::SHIPPED_ID.to_string(),
+                revision_status: crate::revision::shipped()
+                    .as_ref()
+                    .map(|r| r.status.clone())
+                    .unwrap_or_else(|e| format!("the shipped revision did not verify: {e}")),
+                pending_open: self.options.project_open.clone(),
+                pending_revision: self.options.revision_import.clone(),
+                pending_save: self.options.project_save.clone(),
+                pending_json: self.options.export_json.clone(),
+                pending_csv: self.options.export_csv.clone(),
+                // Issue #89: `--compare` - the saved project files the comparison screen opens.
+                pending_compare: self.options.compare.clone(),
+                ..Default::default()
+            })
             .init_resource::<crate::perf::PerfGridRes>()
             .init_resource::<crate::state::ChartStats>()
             // Round 5: the layout measurement surface (the clip probe and the layout counters).
@@ -195,7 +212,18 @@ impl Plugin for VizPlugin {
                 PreUpdate,
                 crate::ui::init_fonts.before(bevy_egui::EguiPreUpdateSet::BeginPass),
             )
-            .add_systems(Update, (poll_loading, anim_clock, drain_commands, keyboard))
+            .add_systems(
+                Update,
+                (
+                    poll_loading,
+                    anim_clock,
+                    drain_commands,
+                    keyboard,
+                    // Issue #74: the bridge commands the session owns (`project:*`, `revision:*`) - split
+                    // out so each drainer takes only its own heads from the shared queue.
+                    crate::files::file_commands,
+                ),
+            )
             .add_systems(EguiPrimaryContextPass, crate::ui::viz_ui)
             .add_plugins(crate::scene::ScenePlugin);
         // Issue #71: the HTML mirror is the web host's, and it writes to the page's DOM - so it is
@@ -204,6 +232,16 @@ impl Plugin for VizPlugin {
         #[cfg(target_arch = "wasm32")]
         {
             app.add_systems(PostUpdate, crate::bridge::mirror_system);
+            // Issue #74: the page's command channel wakes a parked loop (#82). The proxy exists
+            // from the loop's first update; capturing it is what lets a later `viz_dispatch`
+            // from the DOM bar - which never reaches winit as input - still run a frame.
+            app.add_systems(Startup, crate::bridge::capture_wake_proxy);
+        }
+        // Issue #74: the native binary's own file work - open and import before the run, save and the
+        // exports after it. Not registered on the web planes at all: there the page does the plumbing.
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            app.add_systems(Update, crate::files::file_work);
         }
         {
             // Round 4, item 1: the 3D module (its plugin, its camera and `bevy_pbr`) is registered only
@@ -343,6 +381,65 @@ fn poll_loading(
     }
 }
 
+/// The duty staging (`--duty` on the native command line, `?duty` on the page), in the engine's
+/// own field names: one `key=value` per field, `;` between fields, keys the engine's own
+/// (`waterMassFlowKgS`, `hotWaterC`, …). Shared by [`apply_staging`] and the headless export
+/// (`drafthouse --export-pdf`), so both edit the same fields the same way. Returns the log lines,
+/// as `apply_staging` does.
+pub fn apply_duty(draft: &mut EngineInput, pairs: &str) -> Vec<String> {
+    let mut log = Vec::new();
+    for pair in pairs.split(';') {
+        let Some((k, v)) = pair.split_once('=') else {
+            continue;
+        };
+        let (k, v) = (k.trim(), v.trim());
+        match k {
+            "waterMassFlowKgS" => {
+                if let Ok(x) = v.parse::<f64>() {
+                    draft.duty.water_flow_m3_hr =
+                        drafthouse_cockpit_seams::mapping::m3_hr_from_kg_s(x);
+                    log.push(format!(
+                        "duty waterMassFlowKgS={x} -> {:.0} m3/hr at 1000 kg/m3",
+                        draft.duty.water_flow_m3_hr
+                    ));
+                }
+            }
+            "waterFlowM3Hr" => {
+                if let Ok(x) = v.parse::<f64>() {
+                    draft.duty.water_flow_m3_hr = x;
+                    log.push(format!("duty waterFlowM3Hr={x}"));
+                }
+            }
+            "hotWaterC"
+            | "targetColdWaterC"
+            | "wetBulbC"
+            | "dryBulbC"
+            | "pressurePa"
+            | "salinityGKg"
+            | "cyclesOfConcentration" => {
+                if let Ok(x) = v.parse::<f64>() {
+                    match k {
+                        "hotWaterC" => draft.duty.hot_water_c = x,
+                        "targetColdWaterC" => draft.duty.target_cold_water_c = x,
+                        "wetBulbC" => draft.duty.wet_bulb_c = x,
+                        "dryBulbC" => draft.duty.dry_bulb_c = x,
+                        "pressurePa" => draft.duty.pressure_pa = x,
+                        "salinityGKg" => draft.duty.salinity_g_kg = x,
+                        _ => draft.duty.cycles_of_concentration = x,
+                    }
+                    log.push(format!("duty {k}={x}"));
+                }
+            }
+            "waterQualityClass" => {
+                draft.duty.water_quality_class = v.to_string();
+                log.push(format!("duty waterQualityClass={v}"));
+            }
+            _ => log.push(format!("duty: {k} is not an editable duty field")),
+        }
+    }
+    log
+}
+
 /// `?…` staging. Every entry that a URL can set, applied in a fixed order, in words.
 #[allow(clippy::too_many_arguments)]
 pub fn apply_staging(
@@ -417,56 +514,7 @@ pub fn apply_staging(
     }
     // ---- round 4, item 4: the duty, in the engine's own field names (`waterMassFlowKgS=200`).
     if let Some(pairs) = o.duty.as_deref() {
-        // `;` between fields, the engine's own names on the left.
-        for pair in pairs.split(';') {
-            let Some((k, v)) = pair.split_once('=') else {
-                continue;
-            };
-            let (k, v) = (k.trim(), v.trim());
-            match k {
-                "waterMassFlowKgS" => {
-                    if let Ok(x) = v.parse::<f64>() {
-                        draft.0.duty.water_flow_m3_hr =
-                            drafthouse_cockpit_seams::mapping::m3_hr_from_kg_s(x);
-                        log.push(format!(
-                            "duty waterMassFlowKgS={x} -> {:.0} m3/hr at 1000 kg/m3",
-                            draft.0.duty.water_flow_m3_hr
-                        ));
-                    }
-                }
-                "waterFlowM3Hr" => {
-                    if let Ok(x) = v.parse::<f64>() {
-                        draft.0.duty.water_flow_m3_hr = x;
-                        log.push(format!("duty waterFlowM3Hr={x}"));
-                    }
-                }
-                "hotWaterC"
-                | "targetColdWaterC"
-                | "wetBulbC"
-                | "dryBulbC"
-                | "pressurePa"
-                | "salinityGKg"
-                | "cyclesOfConcentration" => {
-                    if let Ok(x) = v.parse::<f64>() {
-                        match k {
-                            "hotWaterC" => draft.0.duty.hot_water_c = x,
-                            "targetColdWaterC" => draft.0.duty.target_cold_water_c = x,
-                            "wetBulbC" => draft.0.duty.wet_bulb_c = x,
-                            "dryBulbC" => draft.0.duty.dry_bulb_c = x,
-                            "pressurePa" => draft.0.duty.pressure_pa = x,
-                            "salinityGKg" => draft.0.duty.salinity_g_kg = x,
-                            _ => draft.0.duty.cycles_of_concentration = x,
-                        }
-                        log.push(format!("duty {k}={x}"));
-                    }
-                }
-                "waterQualityClass" => {
-                    draft.0.duty.water_quality_class = v.to_string();
-                    log.push(format!("duty waterQualityClass={v}"));
-                }
-                _ => log.push(format!("duty: {k} is not an editable duty field")),
-            }
-        }
+        log.extend(apply_duty(&mut draft.0, pairs));
     }
     if let Some(v) = o.view.as_deref().and_then(View::from_slug) {
         vis.view = v;
@@ -854,25 +902,37 @@ fn pick_part(
             }
         }
         Err(e) => {
-            vis.flash = Some(Flash {
-                ok: false,
-                text: format!("refused: {e}"),
-            })
+            // Issue #86 AC 3: the same sentence `check_drop` returned, verbatim - the command path speaks
+            // the catalog's words exactly as the pointer path does (`ui::drop_part`).
+            vis.flash = Some(Flash { ok: false, text: e })
         }
     }
 }
 
 /// The animation clock. Frozen time is a constant, so `?frozen=1` frames are reproducible.
 fn anim_clock(time: Res<Time>, mut clock: ResMut<AnimClock>, vis: Option<Res<Visual>>) {
-    if clock.frozen {
-        clock.t = clock.frozen_at;
-    } else if vis.map(|v| v.reduced_motion).unwrap_or(false) {
-        // "reduced motion" holds the clock: the flow, the droplets and the wheel stand still while the
-        // engine's numbers still update (the button's own promise). Nothing snaps - the pose it holds is
-        // whichever pose it was in when the switch was flipped.
-        clock.t = FROZEN_T;
+    let reduced = vis.map(|v| v.reduced_motion).unwrap_or(false);
+    clock.t = clock_next(
+        clock.t,
+        time.delta_secs(),
+        clock.frozen.then_some(clock.frozen_at),
+        reduced,
+    );
+}
+
+/// The clock's next value (issue #86 AC 4). `frozen_at` is a frozen evidence frame's own time and wins
+/// first; with **reduced motion** the clock holds [`FROZEN_T`], so the flow, the droplets and the wheel
+/// stand still (the numbers still update and nothing snaps - the pose it holds is the one it was in);
+/// otherwise it advances by the frame's own delta. One function, so the mode cannot quietly become
+/// "slower" - a mutation that lets the clock advance under reduced motion fails
+/// `reduced_motion_holds_the_clock_and_never_slows_it`.
+pub fn clock_next(prev: f32, dt: f32, frozen_at: Option<f32>, reduced_motion: bool) -> f32 {
+    if let Some(t) = frozen_at {
+        t
+    } else if reduced_motion {
+        FROZEN_T
     } else {
-        clock.t += time.delta_secs();
+        prev + dt
     }
 }
 
@@ -888,7 +948,22 @@ fn drain_commands(
     if inbox.is_empty() {
         return;
     }
-    let cmds: Vec<String> = inbox.drain(..).collect();
+    // Issue #74: the file commands (`project:*`, `revision:*`) belong to `crate::files::file_commands`.
+    // They are left in the queue for it rather than drained here and dropped as unknown heads - this
+    // system takes the staging commands, and only those.
+    let taken: Vec<String> = inbox.drain(..).collect();
+    let mut cmds: Vec<String> = Vec::with_capacity(taken.len());
+    for command in taken {
+        let head = command
+            .split_once(':')
+            .map(|(head, _)| head)
+            .unwrap_or(command.as_str());
+        if head == "project" || head == "revision" {
+            inbox.push(command);
+        } else {
+            cmds.push(command);
+        }
+    }
     drop(inbox);
     for cmd in cmds {
         let (head, arg) = match cmd.split_once(':') {
@@ -1149,5 +1224,44 @@ fn keyboard(
             ratio = vis.reset_ratio;
         }
         draft.0.speed_ratio = ratio;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Issue #86 AC 4: **reduced motion turns the animation off, not down.** The clock holds one constant
+    /// however much time passes, so no animated draw can advance; the frozen evidence pose still wins; and
+    /// normal motion still advances by the frame's own delta. "Slower" is exactly what this forbids: a
+    /// slowed clock differs between two deltas, and the first loop pins it to the same value for all of them.
+    #[test]
+    fn reduced_motion_holds_the_clock_and_never_slows_it() {
+        for (prev, dt) in [
+            (0.0_f32, f32::EPSILON),
+            (12.5, 0.016),
+            (3.0, 1.0),
+            (99.0, 60.0),
+        ] {
+            assert_eq!(
+                clock_next(prev, dt, None, true),
+                FROZEN_T,
+                "reduced motion advanced the clock"
+            );
+        }
+        // A slowed clock would answer differently for different deltas; this one cannot.
+        assert_eq!(
+            clock_next(0.0, 3.0, None, true),
+            clock_next(100.0, 0.0, None, true)
+        );
+        assert_ne!(
+            clock_next(0.0, 3.0, None, false),
+            clock_next(0.0, 0.5, None, false),
+            "normal motion must still advance, or this test proves nothing"
+        );
+        // Normal motion advances by the frame's delta; a frozen frame's own time still wins.
+        assert!((clock_next(2.0, 0.5, None, false) - 2.5).abs() < 1e-6);
+        assert_eq!(clock_next(2.0, 0.5, Some(9.0), false), 9.0);
+        assert_eq!(clock_next(2.0, 0.5, Some(9.0), true), 9.0);
     }
 }

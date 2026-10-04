@@ -105,6 +105,27 @@ Functions: `mapping::rpm`, `mapping::rpm_text`, `mapping::ratio_from_rpm`, `mapp
 `mapping::altitude_m_from_pressure_pa`, `mapping::pressure_pa_from_altitude_m`.
 All are unit-tested in `seams/src/lib.rs` and `seams/src/mapping.rs` (`cargo test --manifest-path seams/Cargo.toml --lib`).
 
+## Saving: one file model, and the server commands behind it (issue #74, D26)
+
+**Owner decision.** Native and web share **one persistence model - file-based first, optional connect
+later**. A project is a `.drafthouse` file (`docs/PROJECT_FORMAT.md`); a catalog revision is an
+immutable file object whose declared `sha256` is checked on **every** read; the custom parts a user
+authors live in that file, not in a page's memory. **Nothing in `cockpit/` talks to a network.**
+
+The internal host's stub commands map onto the file model like this - each row names what the
+command would carry once a server exists, and what the cockpit already writes locally:
+
+| `ServerCommand` | what it maps to in the file model |
+|---|---|
+| `SaveRevision { project, note }` | **push the project** (`File > Save` on native, *download project* on the internal host) to the server as a new revision, with the note as its label |
+| `ExportReportPdf { project }` | the server's own **report pipeline**, taking the project file as its input (the cockpit prints no PDF) |
+| `ExportJson { project }` / `ExportCsv { project }` | the results export this cockpit writes **locally** today (`File > Export results…`), from the same snapshot the project carries |
+| `LoadCatalogRevision { revision }` | the revision **id** a project pins (`catalogRevisionId`); the file itself is imported through `Revision::read`, digest checked |
+| `CompareLater { project, against_revision }` | a project file plus that pinned revision id - enough to recompute the comparison later |
+
+Every row is a label on a stub: no request is made, and the public host neither draws these commands
+nor answers the file commands at all (it can author, and it cannot save or export).
+
 ## What the pass does not claim
 
 - Animated arrows are a **flow map illustration**, not a CFD or network solution, and the scene says so on

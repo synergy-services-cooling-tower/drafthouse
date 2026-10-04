@@ -41,9 +41,46 @@ pub fn viz_start(canvas_selector: &str, options_json: &str) -> Result<(), JsValu
 }
 
 /// The page pushes commands here (keyboard, nav buttons, the capture harness).
+///
+/// Issue #74: the push also wakes a parked loop. #82's redraw policy parks an idle window (the
+/// page included), and a command arriving while it waits would otherwise sit in [`COMMANDS`]
+/// until the next *device* event - while the DOM bar sits above the canvas, a click on one of
+/// its buttons never reaches winit at all. So the page's own channel owns its wake: the frame's
+/// [`bevy::winit::WinitUserEvent::WakeUp`] is the same event `bootstrap`'s harness wakes with,
+/// sent through the proxy the running loop provides ([`capture_wake_proxy`]).
 #[wasm_bindgen]
 pub fn viz_dispatch(command: &str) {
     COMMANDS.lock().unwrap().push(command.to_string());
+    request_wake();
+}
+
+// The loop's wake handle, captured once the proxy exists. `thread_local` and not a `OnceLock`:
+// winit's web proxy is main-thread-bound (its `Waker` holds `Rc`s), and this page runs it all
+// on one thread anyway.
+thread_local! {
+    static WAKE_PROXY: std::cell::RefCell<Option<bevy::winit::EventLoopProxy<bevy::winit::WinitUserEvent>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Capture the event-loop proxy the first update that has one. Registered at `Startup` on wasm
+/// builds (`app.rs`), so every later `viz_dispatch` can wake the loop.
+pub fn capture_wake_proxy(proxy: Option<Res<bevy::winit::EventLoopProxyWrapper>>) {
+    if let Some(proxy) = proxy {
+        let proxy = (**proxy).clone();
+        WAKE_PROXY.with(|wake| {
+            wake.replace(Some(proxy));
+        });
+    }
+}
+
+/// Ask a parked loop for one frame. Best-effort: before the loop exists (the page's first
+/// dispatches) or after it closes, the queued command is still the record that matters.
+fn request_wake() {
+    WAKE_PROXY.with(|wake| {
+        if let Some(proxy) = wake.borrow().as_ref() {
+            let _ = proxy.send_event(bevy::winit::WinitUserEvent::WakeUp);
+        }
+    });
 }
 
 fn set_text(doc: &web_sys::Document, id: &str, text: &str) {
@@ -85,6 +122,9 @@ pub struct Round5Mirror<'w, 's> {
     pub clip: Res<'w, crate::clip::ClipProbe>,
     pub info: Res<'w, crate::clip::LayoutInfo>,
     pub engine: Res<'w, crate::app::EngineSlot>,
+    /// Issue #74: the project session. Bundled here rather than as a parameter of its own, because
+    /// `mirror_system` is at the sixteen-parameter limit a system may have.
+    pub session: Res<'w, crate::files::FileSession>,
     /// Issue #91: the painted-text inventory, published to `#mirror-words`.
     pub words: Res<'w, crate::clip::ScreenText>,
     #[doc(hidden)]
@@ -1085,6 +1125,75 @@ pub fn mirror_system(
             ),
         );
     }
+    // ---- issue #74: the run's own eleven headline values, at the display precision, in the contract's
+    // own order. One attribute, so a frame can state every number it shows and two frames can be compared
+    // for equality without reading pixels.
+    match run.output.as_ref() {
+        Some(o) => {
+            let values: Vec<String> = cockpit::engine::HEADLINES
+                .iter()
+                .zip(o.headline_values())
+                .map(|(headline, value)| format!("{}={value:.2}", headline.name))
+                .collect();
+            set_attr(&doc, "viz-root", "data-headlines", &values.join("|"));
+        }
+        None => set_attr(&doc, "viz-root", "data-headlines", ""),
+    }
+
+    // ---- issue #74: the project session. `data-project*` is what the page's own buttons read, and
+    // `#mirror-project` carries the project file's text for *Download project* - the page hands those
+    // bytes to the user, and nothing is sent anywhere.
+    set_attr(
+        &doc,
+        "viz-root",
+        "data-project-name",
+        &round5.session.file_name(),
+    );
+    set_attr(
+        &doc,
+        "viz-root",
+        "data-project-dirty",
+        if draft
+            .as_deref()
+            .map(|d| round5.session.is_dirty(&d.0, &catalog))
+            .unwrap_or(false)
+        {
+            "1"
+        } else {
+            "0"
+        },
+    );
+    set_attr(
+        &doc,
+        "viz-root",
+        "data-project-path-set",
+        if round5.session.path.is_some() {
+            "1"
+        } else {
+            "0"
+        },
+    );
+    set_attr(
+        &doc,
+        "viz-root",
+        "data-project-bytes",
+        &round5.session.outbox.len().to_string(),
+    );
+    set_attr(
+        &doc,
+        "viz-root",
+        "data-catalog-revision",
+        &round5.session.revision_id,
+    );
+    set_text(&doc, "mirror-project", &round5.session.outbox);
+    let session_line = if round5.session.status.is_empty() {
+        round5.session.recompute_line(run.output.as_ref())
+    } else {
+        round5.session.status.clone()
+    };
+    set_text(&doc, "mirror-project-status", &session_line);
+    let _ = &load;
+
     let provenance = run
         .output
         .as_ref()

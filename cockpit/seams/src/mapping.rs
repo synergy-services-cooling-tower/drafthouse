@@ -223,6 +223,97 @@ pub fn water_streak_count(water_flow_m3_hr: f64) -> usize {
     n.clamp(MIN_WATER_STREAKS as i64, MAX_WATER_STREAKS as i64) as usize
 }
 
+// ---------------------------------------------------------------- round 3 (issue #86): the flow rates
+//
+// The drawn flow is animated, and an animation needs a *rate*. None of these rates is a measured quantity:
+// the record has no px/s. What the engine owns is the **scaling** - the airflow and the water loading it
+// solved - so every rate here is a documented base rate times an engine factor, and the draw code holds no
+// number of its own. Issue #86's test drives these with different engine outputs: if a rate ignores the
+// record, the picture does not move when the engine does, and that test fails.
+
+/// Streamline speed at the recorded run's airflow, in points per second at the pass's base scale (a caller
+/// multiplies by its own px-per-metre). The pre-#86 canvas drew `(40 + 0.35 x 124.84) x 0.28` px/s at the
+/// anchor; this is that rate, kept so the fix moved where the number comes from and not the look.
+pub const STREAMLINE_BASE_PX_S: f32 = 23.4;
+
+/// Airflow (`anchor.headline.airflow_m3_s` in the fixture) -> how fast the drawn streamlines advance.
+pub fn streamline_speed_px_s(airflow_m3_s: f64) -> f32 {
+    STREAMLINE_BASE_PX_S * flow_factor(airflow_m3_s)
+}
+
+/// The water loading the droplet speeds are referenced to, kg/(m^2 s): the recorded run's own (200 kg/s of
+/// water over the 64 m^2 fill). The droplets' rate is 1.0 at this loading.
+pub const ANCHOR_WATER_LOADING_KG_M2_S: f64 = 3.125;
+
+/// Droplet speed at the anchor loading, in points per second at the pass's base scale.
+pub const DROPLET_BASE_PX_S: f32 = 34.0;
+
+/// Water loading (kg/(m^2 s)) -> the load factor every water animation is scaled by: 1.0 at
+/// [`ANCHOR_WATER_LOADING_KG_M2_S`], clamped so a near-zero loading still reads as falling water and a
+/// runaway one stays watchable. A record that states no loading (0) reads as the anchor.
+pub fn loading_factor(water_loading_kg_m2_s: f64) -> f32 {
+    if water_loading_kg_m2_s <= 0.0 {
+        return 1.0;
+    }
+    ((water_loading_kg_m2_s / ANCHOR_WATER_LOADING_KG_M2_S) as f32).clamp(0.2, 3.0)
+}
+
+/// Water loading (kg/(m^2 s)) -> how fast the drawn droplets fall.
+pub fn droplet_speed_px_s(water_loading_kg_m2_s: f64) -> f32 {
+    DROPLET_BASE_PX_S * loading_factor(water_loading_kg_m2_s)
+}
+
+/// The travelling heads on the drawn air path: the fraction of a path one head advances per second at the
+/// recorded airflow. The pre-#86 overlay moved at `0.22 x flow_factor`; this is that rate, kept so the fix
+/// moved where the number lives and not the look.
+pub const AIR_HEAD_RATE: f32 = 0.22;
+
+/// Airflow -> the heads' advance along their path, path fractions per second.
+pub fn air_head_rate(airflow_m3_s: f64) -> f32 {
+    AIR_HEAD_RATE * flow_factor(airflow_m3_s)
+}
+
+/// The falling water's streaks: path fractions per second at the recorded run's water loading. The
+/// pre-#86 overlay moved at `0.30 x flow_factor`; the rate is unchanged at the anchor.
+pub const WATER_STREAK_RATE: f32 = 0.30;
+
+/// Water loading -> the streaks' advance down the fall, path fractions per second. The drops answer to the
+/// **water** the engine solved (loading = mass flow over fill area), not to the airflow.
+pub fn water_streak_rate(water_loading_kg_m2_s: f64) -> f32 {
+    WATER_STREAK_RATE * loading_factor(water_loading_kg_m2_s)
+}
+
+/// The water loading of a duty over a tower, kg/(m^2 s): the engine's own definition (`rust/src/airside.rs`
+/// validates its loading exactly this way - water mass flow over the fill's plan area). `None` when the
+/// record states no usable fill area, so a caller cannot divide by nothing.
+pub fn water_loading_kg_m2_s(water_mass_flow_kg_s: f64, fill_area_m2: f64) -> Option<f64> {
+    if fill_area_m2 <= 0.0 || water_mass_flow_kg_s < 0.0 {
+        None
+    } else {
+        Some(water_mass_flow_kg_s / fill_area_m2)
+    }
+}
+
+/// Is the operating point inside the band the fan record allows? This is the engine's *stability* band
+/// (`allowedSpeedRatio`), not a look: the record's low and high ends are where the fan may run.
+pub fn in_stable_band(speed_ratio: f64, allowed_speed_ratio: [f64; 2]) -> bool {
+    let lo = allowed_speed_ratio[0].min(allowed_speed_ratio[1]);
+    let hi = allowed_speed_ratio[0].max(allowed_speed_ratio[1]);
+    speed_ratio >= lo && speed_ratio <= hi
+}
+
+/// Where the operating point sits against the record's own band, **without clamping**: 0..1 inside the band,
+/// below 0 under it and above 1 over it. [`fraction_of`] clamps (the rails' draw wants that); this one keeps
+/// the sign, so the fan's needle can point into the unstable range instead of sticking on the band's end.
+pub fn band_fraction(speed_ratio: f64, allowed_speed_ratio: [f64; 2]) -> f32 {
+    let lo = allowed_speed_ratio[0].min(allowed_speed_ratio[1]);
+    let hi = allowed_speed_ratio[0].max(allowed_speed_ratio[1]);
+    if hi <= lo {
+        return 0.5;
+    }
+    ((speed_ratio - lo) / (hi - lo)) as f32
+}
+
 /// The cell plan size the tower record implies: a square reading of `fillAreaM2`, in metres.
 pub fn cell_plan_m(fill_area_m2: f64) -> f64 {
     fill_area_m2.max(1.0).sqrt()
@@ -367,7 +458,60 @@ mod tests {
                 "the drawn blade never outruns the shaft"
             );
         }
-        assert!(BLADE_VISUAL_SLOWDOWN > 0.0 && BLADE_VISUAL_SLOWDOWN <= 1.0);
+        // The const block makes clippy 1.97's assertions_on_constants a compile-time check (issue #74
+        // merge-lane repair; the same shape reds `-D warnings` on this pinned toolchain).
+        const { assert!(BLADE_VISUAL_SLOWDOWN > 0.0 && BLADE_VISUAL_SLOWDOWN <= 1.0) };
+    }
+
+    #[test]
+    fn the_flow_rates_are_the_engines_numbers_scaled() {
+        // Issue #86 AC 1: the drawn flow moves when the engine moves. Feed these two seams different engine
+        // outputs and every rate has to change - if a rate is a constant the picture is a decoration.
+        assert!((streamline_speed_px_s(ANCHOR_AIRFLOW_M3_S) - STREAMLINE_BASE_PX_S).abs() < 1e-3);
+        assert!(streamline_speed_px_s(60.0) < streamline_speed_px_s(124.84));
+        assert!(streamline_speed_px_s(124.84) < streamline_speed_px_s(250.0));
+        assert!(streamline_speed_px_s(1.0e9) <= STREAMLINE_BASE_PX_S * 2.2 + 1e-3);
+        // The droplet rate follows the water loading the engine solved, not a constant.
+        assert!((droplet_speed_px_s(ANCHOR_WATER_LOADING_KG_M2_S) - DROPLET_BASE_PX_S).abs() < 1e-3);
+        assert!(droplet_speed_px_s(4.0) > droplet_speed_px_s(2.0));
+        assert!(droplet_speed_px_s(0.0) > 0.0, "still falling water");
+        assert!(droplet_speed_px_s(1.0e9) <= DROPLET_BASE_PX_S * 3.0 + 1e-3);
+        // the path rates the section's overlays move by: the air heads follow the airflow, the water
+        // streaks follow the loading - and each is its pre-#86 rate at the anchor.
+        assert!((air_head_rate(ANCHOR_AIRFLOW_M3_S) - AIR_HEAD_RATE).abs() < 1e-4);
+        assert!(air_head_rate(250.0) > air_head_rate(ANCHOR_AIRFLOW_M3_S));
+        assert!(air_head_rate(60.0) < air_head_rate(ANCHOR_AIRFLOW_M3_S));
+        assert!((water_streak_rate(ANCHOR_WATER_LOADING_KG_M2_S) - WATER_STREAK_RATE).abs() < 1e-4);
+        assert!(water_streak_rate(6.0) > water_streak_rate(3.0));
+        assert!(water_streak_rate(0.0) > 0.0);
+        assert_eq!(
+            loading_factor(0.0),
+            1.0,
+            "a record with no loading reads as the anchor"
+        );
+        // The loading itself is the engine's definition: water mass flow over the fill's plan area.
+        assert_eq!(water_loading_kg_m2_s(200.0, 64.0), Some(3.125));
+        assert_eq!(water_loading_kg_m2_s(200.0, 0.0), None);
+    }
+
+    #[test]
+    fn the_stable_band_is_the_records_own_band() {
+        // AX-500's record: allowedSpeedRatio [0.70, 1.13]. The band is the record's, so a ratio outside it is
+        // unstable and the needle reads past the end of the band rather than sticking on it.
+        let band = [0.70, 1.13];
+        for inside in [0.70, 0.78, 1.0, 1.13] {
+            assert!(in_stable_band(inside, band), "{inside} is inside");
+        }
+        for outside in [0.60, 1.20, 1.29] {
+            assert!(!in_stable_band(outside, band), "{outside} is outside");
+        }
+        assert!(in_stable_band(0.78, [1.13, 0.70]), "written the other way round");
+        assert!((band_fraction(0.78, band) - 0.186_046_5).abs() < 1e-4);
+        assert!(band_fraction(0.70, band).abs() < 1e-4, "the band's low end is 0");
+        assert!((band_fraction(1.13, band) - 1.0).abs() < 1e-4, "the band's high end is 1");
+        assert!(band_fraction(1.20, band) > 1.0, "over the band reads over 1");
+        assert!(band_fraction(0.60, band) < 0.0, "under the band reads under 0");
+        assert_eq!(band_fraction(0.9, [1.0, 1.0]), 0.5, "a degenerate band reads centred");
     }
 
     #[test]
@@ -491,8 +635,8 @@ mod tests {
         assert!(CAM_DEFAULT.2 >= CAM_DIST_RANGE.0 && CAM_DEFAULT.2 <= CAM_DIST_RANGE.1);
         assert!(CAM_DEFAULT.2 > 1.5, "far enough to see a two-cell row");
         assert!((0.0..360.0).contains(&CAM_DEFAULT.0));
-        assert!(CUT_FRACTION > 0.0 && CUT_FRACTION < 1.0);
-        assert!(DRIFT_BANK_T_M > 0.0 && BASIN_DEPTH_M > 0.0 && CUTAWAY_CASING_T_M > 0.0);
+        const { assert!(CUT_FRACTION > 0.0 && CUT_FRACTION < 1.0) };
+        const { assert!(DRIFT_BANK_T_M > 0.0 && BASIN_DEPTH_M > 0.0 && CUTAWAY_CASING_T_M > 0.0) };
     }
 
     // ---- round 4: the duty conversion and the site definition --------------------------------------
@@ -537,10 +681,12 @@ mod tests {
 
     #[test]
     fn the_approach_margin_is_a_stated_panel_rule() {
-        assert!(APPROACH_MARGIN_MIN_C > 0.0);
-        assert!(
-            APPROACH_MARGIN_MIN_C >= 0.5,
-            "the brief's example minimum: cold water clears the wet bulb by at least 0.5 C"
-        );
+        const { assert!(APPROACH_MARGIN_MIN_C > 0.0) };
+        const {
+            assert!(
+                APPROACH_MARGIN_MIN_C >= 0.5,
+                "the brief's example minimum: cold water clears the wet bulb by at least 0.5 C"
+            )
+        };
     }
 }

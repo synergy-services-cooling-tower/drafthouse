@@ -14,4 +14,8 @@ cockpit/assets/fonts/subset/IBMPlexMono-Medium.ttf
 cockpit/assets/fonts/subset/IBMPlexMono-Regular.ttf
 cockpit/assets/fonts/subset/IBMPlexSans-Regular.ttf
 cockpit/assets/fonts/subset/IBMPlexSans-SemiBold.ttf
+cockpit/assets/revision-illustrative-catalog-v0.1.json
+cockpit/assets/variants/a-base.drafthouse
+cockpit/assets/variants/b-fan-faster.drafthouse
+cockpit/assets/variants/c-recorded.drafthouse
 cockpit/index.html

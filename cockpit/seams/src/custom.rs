@@ -581,7 +581,8 @@ pub fn range_hint(spec: &Field) -> String {
 /// This is what the rail holds, what the picker lists and what a drop writes into the machine - through
 /// the *same* `PartRef` / `check_drop` / `apply_drop` path a catalog card takes, because the record is
 /// built into the engine's own type below and then lives in the session catalog beside the fixture's.
-/// Nothing here is persisted: see [`Self::persistence`].
+/// A record the user authored. Where it lives changed in issue #74 (D26): it is part of the **project
+/// file**, not of the page's session - see [`PERSISTENCE_PUBLIC`] and [`PERSISTENCE_INTERNAL`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct CustomPart {
     /// `fan` / `drift` / `fill` / `nozzle` (the descriptor's class slugs).
@@ -589,12 +590,15 @@ pub struct CustomPart {
     pub values: Values,
 }
 
-/// What happens to a custom record when the page is reloaded. The app prints this in the form's footer.
+/// What happens to a custom record now that a project is a file (issue #74, D26). The app prints this in
+/// the form's footer. The public host keeps its own rule: it can author, and it cannot save or export.
 pub const PERSISTENCE_PUBLIC: &str =
-    "Session only - a custom part lives in this page's memory. Nothing is exported and nothing is sent anywhere.";
-/// The internal host's version, which names the command the real deployment will send.
-pub const PERSISTENCE_INTERNAL: &str = "Session only: the internal host will send ServerCommand::SaveCustomPart \
-     { class, id, values } to the server - that command is not in the shipped enum yet, so nothing is sent anywhere today.";
+    "Saved in the project file when you save one - the public host cannot save or export, so these records \
+     live in this page until then.";
+/// The internal host's version: the same file, and the connect issue that will push it later.
+pub const PERSISTENCE_INTERNAL: &str = "Saved in the project file: `File > Save` on the native app, \
+     `download project` here. A later server connect (ServerCommand::SaveRevision) pushes the same file - \
+     nothing is sent anywhere today.";
 
 impl CustomPart {
     pub fn new(class: impl Into<String>, values: Values) -> Self {
@@ -1065,7 +1069,7 @@ mod tests {
                 .iter()
                 .find(|(k, _)| *k == field.key)
                 .map(|(_, i)| i.clone())
-                .unwrap_or_else(|| Input::default());
+                .unwrap_or_else(Input::default);
             let entries = parse_field_entries(field, &input)
                 .unwrap_or_else(|e| panic!("{}.{}: {e}", class, field.key));
             out.extend(entries);
@@ -1198,10 +1202,13 @@ mod tests {
         assert!((d.curve[1].pressure_drop_pa - 101.0).abs() < 1e-9);
     }
 
+    /// The note says where a custom record lives now: in the project file (issue #74, D26). The public
+    /// host's copy still says, in the same breath, that the public host cannot save or export.
     #[test]
     fn the_persistence_note_is_the_shipped_copy() {
-        assert!(PERSISTENCE_PUBLIC.contains("Session only"));
-        assert!(PERSISTENCE_PUBLIC.contains("Nothing is exported"));
-        assert!(PERSISTENCE_INTERNAL.contains("ServerCommand::SaveCustomPart"));
+        assert!(PERSISTENCE_PUBLIC.contains("project file"));
+        assert!(PERSISTENCE_PUBLIC.contains("cannot save or export"));
+        assert!(PERSISTENCE_INTERNAL.contains("ServerCommand::SaveRevision"));
+        assert!(PERSISTENCE_INTERNAL.contains("nothing is sent anywhere today"));
     }
 }

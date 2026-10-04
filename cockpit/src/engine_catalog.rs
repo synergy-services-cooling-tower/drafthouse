@@ -189,7 +189,20 @@ fn zone_correlation(zone: &JsonZone) -> ZoneCorrelation {
 pub fn catalog_from_fixture(fixture_text: &str) -> Result<SelectionCatalog, String> {
     let head: FixtureHead =
         serde_json::from_str(fixture_text).map_err(|e| format!("fixture: {e}"))?;
-    let catalog = &head.catalog;
+    build(head.catalog)
+}
+
+/// The same catalog, built from a **catalog revision's** `records` block (issue #74). The revision's
+/// records are the fixture's own `catalog` object, so this is the same builder - an imported revision and
+/// the shipped one cannot drift apart in how they are read.
+pub fn catalog_from_records(records: &Value) -> Result<SelectionCatalog, String> {
+    let block: CatalogBlock = serde_json::from_value(records.clone())
+        .map_err(|e| format!("catalog revision records: {e}"))?;
+    build(block)
+}
+
+fn build(catalog: CatalogBlock) -> Result<SelectionCatalog, String> {
+    let catalog = &catalog;
 
     let mut water_quality_factors: HashMap<String, WaterQualityFactor> = HashMap::new();
     for (class, factor) in &catalog.water_quality_factors {

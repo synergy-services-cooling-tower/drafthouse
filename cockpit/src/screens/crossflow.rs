@@ -12,6 +12,8 @@ use bevy_egui::egui::{
 };
 use cockpit::engine::EngineInput;
 
+use drafthouse_cockpit_seams::mapping as m;
+
 use super::kit::{self, text};
 use super::{data::XfGrid, info_card, title_band, toggle_info, Env, State};
 use crate::theme as t;
@@ -435,7 +437,8 @@ pub fn ui(ui: &mut egui::Ui, st: &mut State, draft: &mut EngineInput, env: &Env,
     let stack = sec.stack;
     let tt = env.t;
     // ---- motion: air across the fill (both sides inward), up the plenum, out of the stack
-    let air_speed = (40.0 + grid.cand.airflow_m3_s as f32 * 0.35) * s;
+    // The speed is the engine's airflow through the seams' rate (issue #86 AC 1), not a number of the canvas.
+    let air_speed = m::streamline_speed_px_s(grid.cand.airflow_m3_s) * s;
     let rows = 6;
     for i in 0..rows {
         let y = top + pack_h * (i as f32 + 0.5) / rows as f32;
@@ -468,15 +471,15 @@ pub fn ui(ui: &mut egui::Ui, st: &mut State, draft: &mut EngineInput, env: &Env,
             kit::flow_ticks(
                 &p,
                 &path,
-                tt * air_speed * 0.28 + i as f32 * 7.0,
+                tt * air_speed + i as f32 * 7.0,
                 26.0 * s.max(0.5),
                 7.0 * s.max(0.6),
                 t::with_alpha(Color32::from_rgb(0xe8, 0xee, 0xf2), 190),
             );
         }
     }
-    // water drops falling through each pack
-    let water_speed = (34.0 + (grid.cand.depth_m as f32) * 4.0) * s;
+    // water drops falling through each pack, at the rate the engine's water loading sets (issue #86 AC 1)
+    let water_speed = m::droplet_speed_px_s(grid.water_loading_kg_m2_s) * s;
     for pk in [left_pack, right_pack] {
         for i in 0..8 {
             let x = pk.left() + pk.width() * (i as f32 + 0.5) / 8.0;
@@ -516,7 +519,10 @@ pub fn ui(ui: &mut egui::Ui, st: &mut State, draft: &mut EngineInput, env: &Env,
         Stroke::new(1.2, t::with_alpha(t::INK_2, 160)),
     ));
     for k in 0..6 {
-        let a = tt * 3.2 + k as f32 * std::f32::consts::TAU / 6.0;
+        // the blades turn at the candidate fan's own rpm (issue #86): the seams map the record's rated
+        // speed and this run's ratio to turns, so the wheel's speed is the engine's number, not a look.
+        let a = tt * std::f32::consts::TAU * m::blade_turn_hz(grid.rpm.unwrap_or(0.0))
+            + k as f32 * std::f32::consts::TAU / 6.0;
         let tip = fan_c + vec2(a.cos() * fr * 0.94, a.sin() * 4.6 * s);
         let front = a.sin() > 0.0;
         p.line_segment(

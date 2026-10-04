@@ -1,6 +1,6 @@
 [package]
 name = "drafthouse-cockpit"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 description = "Synergy Drafthouse cockpit - the owner-approved visual pass (issue #55), imported as the product UI (issue #58): an illustrative engineering instrument over the engine contract, on the real engine by default."
 license = "PolyForm-Noncommercial-1.0.0"
@@ -51,7 +51,13 @@ drafthouse-cockpit-seams = { path = "seams" }
 # which is where the physics lives. Optional: `real-engine` (on by default) turns it on.
 cockpit-adapter = { path = "../rust/cockpit-adapter", optional = true }
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+# Issue #74: a project file's numbers must survive `write -> read -> write` byte for byte, and the
+# results snapshot carries the engine's full-precision f64s. serde_json's default float parser is fast but
+# not round-trip exact - measured on this file set: `10.345404866101763` reads back as
+# `10.345404866101765`, which is a different double and would move a file every time it was opened. The
+# `float_roundtrip` feature turns on the exact parser; it is a feature, not a crate, so the dependency
+# graph is unchanged.
+serde_json = { version = "1", features = ["float_roundtrip"] }
 # Same pin, same feature set as the approved baseline: the dependency graph is otherwise identical to
 # the baseline's wasm build (only the view layer differs). Default features off: no audio, no
 # 3D/PBR, no gltf, no bevy_ui (egui carries the widgets), no picking, no bevy_text.
@@ -95,6 +101,28 @@ web-sys = { version = "0.3.104", features = [
   "Window", "Document", "Element", "HtmlElement", "Performance", "Location", "UrlSearchParams", "console",
 ] }
 console_error_panic_hook = "0.1"
+
+# Issue #74: the native file dialogs (`File > Open / Save As / Import catalog revision…`).
+# **Native only, and proved so**: it sits under the same `cfg(not(target_arch = "wasm32"))` split #71 gave
+# the web crates, which is the mirror image - so the wasm target's dependency tree carries no `rfd` at all
+# (`cargo tree --target wasm32-unknown-unknown -e normal` cannot find it) and the shipped payload does not
+# grow by it. The wasm build and its gzip gate are otherwise untouched.
+#
+# `default-features = false` + `xdg-portal` is deliberate: rfd's default Linux backend wants GTK. The
+# portal backend needs no GTK and no display server - but it is **not** "no system library": on **Linux**
+# the build needs the Wayland client, because `rfd -> ashpd -> wayland-backend -> wayland-sys` enables
+# wayland-sys's `client` feature and its build script runs `Config::new().probe("wayland-client").unwrap()`.
+# `libwayland-dev` is the Ubuntu package that ships `wayland-client.pc` and `libwayland-client.so`; the two
+# CI jobs that compile this half for Linux (`cockpit`, `cockpit-native`) install it in their apt step. That
+# is measured, not assumed: run 35991609300 failed in `wayland-sys v0.31.11` exactly there, and
+# `cargo tree --target x86_64-unknown-linux-gnu -e features -i wayland-sys` shows `client` is the only
+# wayland-sys feature in this lock (no `cursor`/`egl`/`server`, so no other module is probed). macOS and
+# Windows take the platform dialog (AppKit/Win32) and need no such package - which is why this lane's own
+# gates, all run on macOS, never saw it. See `docs/PROJECT_FORMAT.md`; the failing run and the
+# fix-round note are kept with the maintainers. No HTTP client appears in either tree: this crate has no
+# network code of any kind.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+rfd = { version = "0.15", default-features = false, features = ["xdg-portal", "async-std"] }
 
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = ["-Oz", "--enable-bulk-memory", "--enable-nontrapping-float-to-int", "--enable-sign-ext", "--enable-mutable-globals", "--enable-reference-types", "--enable-multivalue"]

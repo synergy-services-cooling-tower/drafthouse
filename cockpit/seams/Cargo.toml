@@ -1,6 +1,6 @@
 [package]
 name = "drafthouse-cockpit-seams"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 description = "Visual pass: the data-seam registry, the illustrative mapping, the custom-part value model and the duty/site evidence ranges. No Bevy - so the rules the app applies are unit-testable in seconds and the app, the docs and the tests share one table."
 license = "PolyForm-Noncommercial-1.0.0"

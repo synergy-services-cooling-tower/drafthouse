@@ -22,6 +22,8 @@ pub mod data;
 pub mod kit;
 pub mod rate;
 pub mod report;
+/// drafthouse#85: the report export - the sheet as a real PDF (writer: [`crate::pdf`]).
+pub mod report_pdf;
 pub mod size;
 pub mod water;
 
@@ -204,6 +206,18 @@ pub enum Account {
     Staff,
 }
 
+/// Issue #89: the comparison surface's state - the loaded variants (each a saved project file the
+/// engine recomputed on open) and the files it could not open, named.
+#[derive(Default)]
+pub struct CompareState {
+    pub variants: Vec<crate::compare::Variant>,
+    /// `compare:open:<name>:<text>` commands, queued by [`apply`] and opened on the next frame -
+    /// the frame is where the engine and the catalog are in hand.
+    pub pending: Vec<(String, String)>,
+    /// The loader's own refusals, shown by the surface: never silently dropped.
+    pub problems: Vec<String>,
+}
+
 pub struct State {
     pub screen: Screen,
     pub nav: Nav,
@@ -225,6 +239,8 @@ pub struct State {
     pub toast: Option<(String, f64)>,
     pub url_read: bool,
     pub cache: data::Cache,
+    /// Issue #89: the compare screen's loaded variants.
+    pub compare: CompareState,
     pub busy: bool,
     pub frame: u64,
     /// Round 2: the last screen open in each step (a step with two screens reopens the one you left).
@@ -269,6 +285,7 @@ impl Default for State {
             toast: None,
             url_read: false,
             cache: data::Cache::default(),
+            compare: CompareState::default(),
             busy: false,
             frame: 0,
             step_last: [
@@ -366,6 +383,31 @@ fn apply(st: &mut State, cmd: &str) {
         }
         "filter" => st.filter = num.map(|v| v as usize).unwrap_or(0).min(2),
         "base" => st.base = num.map(|v| v as usize).unwrap_or(0).min(2),
+        // issue #89: the page hands saved project files to the comparison - `compare:open:<name>:<text>`.
+        // The open itself happens in `frame`, where the engine and the catalog are in hand.
+        "compare" => {
+            if arg == "clear" {
+                st.compare = CompareState::default();
+            } else if let Some(rest) = arg.strip_prefix("open:") {
+                let (name, text) = rest.split_once(':').unwrap_or((rest, ""));
+                if name.is_empty() {
+                    st.compare
+                        .problems
+                        .push("compare:open needs a file name".to_string());
+                } else if st.compare.variants.len() + st.compare.pending.len()
+                    < crate::compare::MAX_VARIANTS
+                {
+                    st.compare
+                        .pending
+                        .push((name.to_string(), text.to_string()));
+                } else {
+                    st.compare.problems.push(format!(
+                        "a comparison holds {} variants; `{name}` was not added",
+                        crate::compare::MAX_VARIANTS
+                    ));
+                }
+            }
+        }
         "info" => {
             st.info = if arg.is_empty() || arg == "none" {
                 None
@@ -407,6 +449,23 @@ pub enum Frame {
     Instrument(Rect),
 }
 
+/// Issue #85 completion: the canonical bytes of the `.drafthouse` project document an export is
+/// built from, as the shell hands them to the Report screen. `text` is the document the session's
+/// own writer (`crate::files::snapshot_text`, the call the File menu's save makes) produces from the
+/// current state; `unchanged` is the session's verdict that the working state still matches the
+/// document it last saved or opened - so `text` is that file's own bytes, byte for byte, and the
+/// report may carry its digest as the saved document's.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DocumentBytes {
+    pub text: String,
+    pub unchanged: bool,
+}
+
+/// Issue #85 completion: how the shell offers the Report export its document, read at click time.
+/// `None` from the callback means no project document backs the session (the export keeps its
+/// labelled draft fallback).
+pub type DocumentSource<'a> = &'a dyn Fn(&EngineInput) -> Option<DocumentBytes>;
+
 pub struct Ctx<'a> {
     pub draft: Option<&'a mut EngineInput>,
     pub engine: Option<&'a dyn Engine>,
@@ -414,6 +473,13 @@ pub struct Ctx<'a> {
     pub fixture_text: &'a str,
     pub reduced_motion: bool,
     pub t: f32,
+    /// Issue #85 completion: the project document behind the Report export, if the session holds
+    /// one. Built by `ui::viz_ui` from the file session and the writer; called only when the
+    /// export button is pressed.
+    pub document: Option<DocumentSource<'a>>,
+    /// Issue #89: the session's catalog, for the comparison's variant reader (the same one
+    /// `files::open_text` resolves file records against).
+    pub catalog: Option<&'a crate::state::Catalog>,
 }
 
 /// Per-frame entry, called by `ui::viz_ui` right after its engine run.
@@ -435,6 +501,47 @@ pub fn frame(ctx: &egui::Context, mut c: Ctx<'_>) -> Frame {
         for cmd in &cmds {
             apply(&mut st, cmd);
         }
+        // issue #89: open the comparison's queued project files - the engine and the catalog, which
+        // the reader needs, live here. Each open is one engine run of that file's own inputs.
+        if !st.compare.pending.is_empty() {
+            if let Some(catalog) = c.catalog {
+                let pending: Vec<(String, String)> = st.compare.pending.drain(..).collect();
+                let mut loaded = 0usize;
+                let mut refused: Option<String> = None;
+                for (name, text) in pending {
+                    match c.engine {
+                        Some(engine) => match crate::compare::open(&text, &name, catalog, engine) {
+                            Ok(v) => {
+                                st.compare.variants.push(v);
+                                loaded += 1;
+                            }
+                            Err(e) => {
+                                st.compare.problems.push(format!("{name}: {e}"));
+                                refused = Some(name);
+                            }
+                        },
+                        None => {
+                            st.compare
+                                .problems
+                                .push(format!("{name}: no engine in this build"));
+                            refused = Some(name);
+                        }
+                    }
+                }
+                if loaded > 0 {
+                    toast(
+                        &mut st,
+                        &format!("{loaded} variant(s) loaded for comparison"),
+                    );
+                }
+                if let Some(name) = refused {
+                    toast(&mut st, &format!("{name} could not be opened"));
+                }
+            } else {
+                // no catalog yet: keep the queue for the next frame rather than dropping the files
+                ctx.request_repaint();
+            }
+        }
         let screen = ctx.viewport_rect();
         let phone = screen.width() < 760.0;
         kit::strings_begin();
@@ -445,7 +552,9 @@ pub fn frame(ctx: &egui::Context, mut c: Ctx<'_>) -> Frame {
             Screen::Size => data::Want::Size,
             Screen::Rate => data::Want::Rate,
             Screen::Curves => data::Want::Curves,
-            Screen::Compare => data::Want::Compare,
+            // the compare screen loads only what it was handed (saved project files), so it asks
+            // the data cache for nothing (#89)
+            Screen::Compare => data::Want::Nothing,
             // the Charts page draws the selection and the curves grid
             Screen::Report if st.page == 4 => data::Want::Report,
             _ => data::Want::Nothing,
@@ -593,6 +702,7 @@ fn body(ui: &mut egui::Ui, st: &mut State, c: &mut Ctx<'_>, area: Rect, phone: b
         t: if st.motion { c.t } else { 0.0 },
         motion: st.motion,
         phone,
+        document: c.document,
     };
     match st.screen {
         Screen::Instrument => crossflow::ui(ui, st, draft, &env, area),
@@ -613,6 +723,9 @@ pub struct Env<'a> {
     pub t: f32,
     pub motion: bool,
     pub phone: bool,
+    /// Issue #85 completion: see [`Ctx::document`] - the project document the Report export may
+    /// carry in its revision row, or `None` for the labelled draft fallback.
+    pub document: Option<DocumentSource<'a>>,
 }
 
 /// A screen's title band (desktop): the screen name, a one-line context and a slot for its controls.

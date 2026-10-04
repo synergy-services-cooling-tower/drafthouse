@@ -11,9 +11,14 @@
  *       `currency:`, `"bridge_price":`, `pub lifecycle_cost: f64`, `usd = …`;
  *   (b) the literal pass, the tokens whose absence cannot be a wording choice — `price`,
  *       `currency`, `capex`, `discount`, `lifecycle`, `usd`, `thb`, `penalty` — as raw text,
- *       wherever they sit. `cost` and `money` are deliberately key-pass only: the app's own
- *       comments attest the rule ("no money field", "the measured cost of one real run"), and
- *       banning those two words in prose would red the attestation itself.
+ *       wherever they sit. One exception, and it is a fragment rule, not a hole: a run of the
+ *       token's letters BETWEEN two letters is part of a longer word, not an occurrence of the
+ *       token — `thb` inside the std type `PathBuf` (pa-THB-uf) is the case that named it, and
+ *       every honest occurrence (a word, a snake or camel segment, a quoted value, a
+ *       digit-adjacent code) still has a non-letter flank and is caught. `cost` and `money` are
+ *       deliberately key-pass only: the app's own comments attest the rule ("no money field",
+ *       "the measured cost of one real run"), and banning those two words in prose would red the
+ *       attestation itself.
  *
  * The engine port keeps its own raw-token gate on `rust/src`
  * (`rust/tests/selection.rs::no_money_ish_identifier_exists_anywhere_in_the_port`, the same ten
@@ -52,7 +57,8 @@ const refuse = (message) => {
 
 /** The engine port's own ten tokens — one list, both surfaces (issue #1). */
 const TOKENS = ['cost', 'price', 'currency', 'capex', 'discount', 'lifecycle', 'money', 'usd', 'thb', 'penalty'];
-/** Tokens whose absence cannot be a wording choice: scanned as raw text wherever they sit. */
+/** Tokens whose absence cannot be a wording choice: scanned as raw text wherever they sit (see the
+ * fragment rule in the header: letters between letters do not count). */
 const LITERAL = TOKENS.filter((token) => token !== 'cost' && token !== 'money');
 
 const MANIFEST = 'deploy-manifest.txt';
@@ -147,6 +153,13 @@ for (const target of [...scanned].sort()) {
   const lowered = text.toLowerCase();
   for (const token of literalTokens) {
     for (let at = lowered.indexOf(token); at !== -1; at = lowered.indexOf(token, at + token.length)) {
+      // The fragment rule (issue #74 merge): a run of the token's letters BETWEEN two letters is part
+      // of a longer word, not an occurrence - `thb` inside `PathBuf` (pa-THB-uf) reds the whole app
+      // tree otherwise. Both flanks must be letters for the skip; every standalone, quoted,
+      // snake/camel-segment or digit-adjacent occurrence keeps a non-letter flank and stays red.
+      const betweenLetters =
+        /[a-z]/.test(lowered[at - 1] ?? '') && /[a-z]/.test(lowered[at + token.length] ?? '');
+      if (betweenLetters) continue;
       failures.push(`${target}:${lineAt(at)} contains the currency token (${token})`);
     }
   }

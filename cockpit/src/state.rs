@@ -470,6 +470,23 @@ pub struct Visual {
     pub reduced_motion: bool,
 }
 
+impl Visual {
+    /// Issue #86, defect (b): is the app *on* this bay? A bay is accented - a solid frame and a wash -
+    /// only while something is on it: its picker is open, its tap-detail card is open, or the keyboard is
+    /// on it. At rest nothing is, and the bay draws the same dashed slate frame as its neighbours. Before
+    /// this predicate the canvas painted the *default* `selected_slot`'s accent on the fan bay with
+    /// nothing selected anywhere in the app, which reads as an orphaned selection marker - the stray
+    /// filled highlight the conductor found on live staging.
+    pub fn bay_in_focus(&self, slot: Slot) -> bool {
+        self.picker
+            .as_ref()
+            .map(|p| p.slot == slot)
+            .unwrap_or(false)
+            || matches!(self.detail, Some(Detail::Bay(s)) if s == slot)
+            || self.bay_focus == Some(slot)
+    }
+}
+
 /// The default three-quarter camera. The number lives in the seam mapping, where every invented value the
 /// pass uses is unit-tested (`seams/src/mapping.rs`); this is the alias the UI reads.
 pub const CAM_DEFAULT: (f32, f32, f32) = drafthouse_cockpit_seams::mapping::CAM_DEFAULT;
@@ -568,7 +585,13 @@ pub struct Catalog {
 
 impl Catalog {
     pub fn from_fixture(fx: &FixtureEngine) -> Self {
-        let c = &fx.fixture.catalog;
+        Self::from_catalog_block(&fx.fixture.catalog)
+    }
+
+    /// The view catalog from a parsed catalog block: the fixture's own records, or an imported catalog
+    /// revision's (issue #74). One constructor for both - a revision's records take exactly the path the
+    /// fixture's take, which is what makes "import a revision" a swap rather than a second code path.
+    pub fn from_catalog_block(c: &cockpit::fixture_engine::FixtureCatalog) -> Self {
         Self {
             // Round 4: the session's own records start empty - the fixture catalog is the fixture's.
             custom: Vec::new(),
@@ -1069,6 +1092,31 @@ pub struct StartOptions {
     pub water_open: Option<bool>,
     /// `?limits-open=0|1` - the LIMITS section collapsed (default) / expanded.
     pub limits_open: Option<bool>,
+    // ---- issue #74: the native binary's file work. The page has no business passing these, and the
+    // native CLI is the only writer; every one of them is `None` on the web planes.
+    /// `--project-open <path>` - open a project file before the first run.
+    pub project_open: Option<std::path::PathBuf>,
+    /// `--project-save <path>` - write the project file once a run exists (the headless save path).
+    pub project_save: Option<std::path::PathBuf>,
+    /// `--revision-import <path>` - verify and import a catalog revision before the first run.
+    pub revision_import: Option<std::path::PathBuf>,
+    /// `--export-json <path>` / `--export-csv <path>` - write the results export once a run exists.
+    pub export_json: Option<std::path::PathBuf>,
+    pub export_csv: Option<std::path::PathBuf>,
+    /// `--compare <p1,p2[,p3]>` (issue #89) - open these saved project files in the comparison.
+    pub compare: Vec<std::path::PathBuf>,
+}
+
+impl StartOptions {
+    /// Is there file work for the native binary to do before it may exit?
+    pub fn has_file_work(&self) -> bool {
+        self.project_open.is_some()
+            || self.project_save.is_some()
+            || self.revision_import.is_some()
+            || self.export_json.is_some()
+            || self.export_csv.is_some()
+            || !self.compare.is_empty()
+    }
 }
 
 // --------------------------------------------------------------------------------------- helpers

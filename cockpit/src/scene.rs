@@ -45,6 +45,9 @@ pub struct Layout {
     pub stack_cyl: egui::Rect,
     /// The cylinder's mouth: the ellipse the rim and the fan blades sit in.
     pub stack_rim: egui::Rect,
+    /// Issue #86: the wheel's own ellipse ([`FAN_MOUTH`] x [`FAN_FLAT`] of the mouth's width, [`FAN_DROP`]
+    /// of the cylinder's height below the rim's centre). Every wheel part is drawn inside it.
+    pub fan_el: egui::Rect,
     /// The fan deck plate under the cylinder.
     pub deck: egui::Rect,
     pub plenum: egui::Rect,
@@ -135,6 +138,14 @@ const DISC: u32 = 44;
 const HUBSLICE: u32 = 22;
 /// The wheel's halo rings.
 const FAN_GLOW: u32 = 16;
+
+/// Issue #86, defect (a): **the wheel's own ellipse** - the disc, the spokes, the blades and the hub are all
+/// drawn inside it, so the wheel can only turn where it was drawn. It sits inside the stack mouth, `FAN_MOUTH`
+/// of the mouth's width across, `FAN_FLAT` as tall as it is wide (it is a wheel seen from a low angle, not a
+/// circle), `FAN_DROP` of the cylinder's height below the rim's centre.
+pub const FAN_MOUTH: f32 = 0.94;
+pub const FAN_FLAT: f32 = 0.24;
+pub const FAN_DROP: f32 = 0.34;
 
 /// Issue #91: headroom above the stack mouth (m) - room for the plume the streamlines leave in.
 pub const HEADROOM_M: f32 = 0.9;
@@ -261,6 +272,15 @@ pub fn layout(area: egui::Rect, input: Option<&EngineInput>, phone: bool) -> Lay
         egui::pos2(cx, stack.top() + rim_h * 0.5),
         egui::vec2(top_w, rim_h),
     );
+    // Issue #86, defect (a): the wheel's own ellipse, held here (one source - the draw code and
+    // `the_drawn_wheel_stays_inside_its_shroud` both read it).
+    let fan_el = egui::Rect::from_center_size(
+        egui::pos2(
+            stack_rim.center().x,
+            stack_rim.center().y + stack_cyl.height() * FAN_DROP,
+        ),
+        egui::vec2(top_w * FAN_MOUTH, top_w * FAN_MOUTH * FAN_FLAT),
+    );
 
     // ---- the inlets: in the rain zone, as tall as the record's inlet area over two faces of the cell
     // (`inletAreaM2 / (2 x plan)`), never taller than the rain zone itself.
@@ -382,6 +402,7 @@ pub fn layout(area: egui::Rect, input: Option<&EngineInput>, phone: bool) -> Lay
         stack,
         stack_cyl,
         stack_rim,
+        fan_el,
         deck,
         plenum,
         drift,
@@ -940,11 +961,12 @@ pub fn plan(
     // ellipse, so the blades radiate from the hub and stay inside the barrel (issue #91; round 5's blades
     // sat on the rim ellipse as tangential bars and read as a scatter).
     let rim_r = l.stack_rim;
-    let flat = 0.24_f32;
-    let fan_el = egui::Rect::from_center_size(
-        egui::pos2(rim_r.center().x, rim_r.center().y + cyl.height() * 0.34),
-        egui::vec2(rim_r.width() * 0.94, rim_r.width() * 0.94 * flat),
-    );
+    // Issue #86, defect (a): the wheel's ellipse comes from the layout (`l.fan_el`); `flat` is its own
+    // flatness, read off it, so every wheel part is scaled by the very ellipse it is drawn in - the
+    // before-the-issue code scaled the spokes and blades by twice this, which drew the wheel outside the
+    // shroud it turns in (see `the_drawn_wheel_stays_inside_its_shroud`).
+    let fan_el = l.fan_el;
+    let flat = fan_el.height() / fan_el.width();
     let hub_r = (fan_el.width() * 0.13).max(4.0);
     for i in 0..DISC {
         let t01 = (i as f32 + 0.5) / DISC as f32;
@@ -984,16 +1006,22 @@ pub fn plan(
     for i in 0..8 {
         let aa = i as f32 * std::f32::consts::TAU / 8.0;
         let or = fan_el.width() * 0.47;
+        // Issue #86, defect (a): the spokes and the blades below are scaled by `flat` - the ellipse's own
+        // flatness - so they trace the same ellipse as the rim and the disc. Scaled by more (the `flat * 2`
+        // this drew before the issue) their vertical reach was twice the mouth's own half-height: the wheel
+        // was drawn outside the shroud it turns in, its tips crossing the fan bay's top edge and, on a
+        // phone, cut off by the top of the canvas. The test `the_drawn_wheel_stays_inside_its_shroud` holds
+        // every fan part inside the stack cylinder, and fails if this factor - or the halo's growth - moves.
         d.insert(
             Part::FanSpoke(i),
             Draw::seg(
                 egui::pos2(
                     fan_el.center().x + hub_r * aa.cos(),
-                    fan_el.center().y + hub_r * flat * 2.0 * aa.sin(),
+                    fan_el.center().y + hub_r * flat * aa.sin(),
                 ),
                 egui::pos2(
                     fan_el.center().x + or * aa.cos(),
-                    fan_el.center().y + or * flat * 2.0 * aa.sin(),
+                    fan_el.center().y + or * flat * aa.sin(),
                 ),
                 1.0,
                 t::with_alpha(t::LINE, 110),
@@ -1009,7 +1037,7 @@ pub fn plan(
         let pt = |r: f32| {
             egui::pos2(
                 fan_el.center().x + r * c1,
-                fan_el.center().y + r * flat * 2.0 * s1,
+                fan_el.center().y + r * flat * s1,
             )
         };
         d.insert(
@@ -1027,7 +1055,7 @@ pub fn plan(
         let pt2 = |r: f32| {
             egui::pos2(
                 fan_el.center().x + r * c2,
-                fan_el.center().y + r * flat * 2.0 * s2,
+                fan_el.center().y + r * flat * s2,
             )
         };
         d.insert(
@@ -1041,8 +1069,12 @@ pub fn plan(
         );
     }
     // the halo: the column of air the wheel pulls, as a soft ellipse just outside the disc (slices, like
-    // the disc itself, so it is an ellipse and not a box), brightening with rpm
-    let halo = fan_el.expand2(egui::vec2(fan_el.width() * 0.07, fan_el.height() * 0.07));
+    // the disc itself, so it is an ellipse and not a box), brightening with rpm. Its growth is clamped to
+    // the mouth it hangs in (issue #86, defect (a)): the glow belongs to the wheel, and the wheel is drawn
+    // inside the shroud it turns in - before the clamp the halo hung 3.6 % of the mouth's width over the
+    // barrel's own sides.
+    let grow_x = ((rim_r.width() - fan_el.width()) * 0.5 - 1.0).clamp(0.0, fan_el.width() * 0.07);
+    let halo = fan_el.expand2(egui::vec2(grow_x, fan_el.height() * 0.07));
     for i in 0..FAN_GLOW {
         let t01 = (i as f32 + 0.5) / FAN_GLOW as f32;
         let x = halo.left() + halo.width() * t01;
@@ -1582,15 +1614,13 @@ pub fn plan(
                 Draw::rect(*r, t::with_alpha(color, (52.0 * verdict) as u8)),
             );
         }
-        // The picker's bay, and the keyboard's bay, get a wash too: the affordance has to be visible in a
-        // still frame, not only under a pointer.
-        let picker_here = vis
-            .picker
-            .as_ref()
-            .map(|p| p.slot == *slot)
-            .unwrap_or(false);
-        let focus_here = vis.bay_focus == Some(*slot);
-        if picker_here || focus_here {
+        // The picker's bay, the tap-detail's bay and the keyboard's bay get a wash too: the affordance has
+        // to be visible in a still frame, not only under a pointer. Issue #86, defect (b): **one rule for
+        // the two surfaces** - the bay is marked only while something is *on* it, and that rule is
+        // [`Visual::bay_in_focus`] itself (not a copy of it), so the still frame and the pointer frame can
+        // never drift apart, and a bay at rest is never marked.
+        if vis.bay_in_focus(*slot) {
+            let picker_here = vis.picker.as_ref().is_some_and(|p| p.slot == *slot);
             let color = if picker_here { t::PRIMARY } else { t::AIR };
             d.insert(
                 Part::SlotFocus(i as u8),
@@ -1724,6 +1754,8 @@ fn sync_scene(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state::Detail;
+    use cockpit::engine::Engine as _;
     use cockpit::fixture_engine::FixtureEngine;
 
     const FIXTURE: &str = include_str!("../assets/fixture.json");
@@ -1850,5 +1882,126 @@ mod tests {
                 "{label}: the call-out gutter leaves the section"
             );
         }
+    }
+
+    /// The axis-aligned box a draw's sprite covers (rotation included), in the plan's own points.
+    fn drawn_aabb(dr: &Draw) -> egui::Rect {
+        let (sa, ca) = (dr.rot.sin().abs(), dr.rot.cos().abs());
+        let hx = (dr.size.x * ca + dr.size.y * sa) * 0.5;
+        let hy = (dr.size.x * sa + dr.size.y * ca) * 0.5;
+        egui::Rect::from_min_max(
+            dr.center - egui::vec2(hx, hy),
+            dr.center + egui::vec2(hx, hy),
+        )
+    }
+
+    /// Issue #86, defect (a): **the wheel is drawn inside the shroud it turns in.** Every drawn part of the
+    /// fan - the halo, the disc's slices, the ring's segments, the spokes, the blades and their leading
+    /// edges - stays inside the stack cylinder, and so inside the fan bay and inside the section. Before the
+    /// fix the blades and the spokes were scaled by *twice* the mouth ellipse's flatness, so their tips
+    /// reached 0.212 of the mouth's width above the wheel's centre where the mouth's own half-height is
+    /// 0.10: they were drawn past the mouth, across the fan bay's top edge, and on a phone cut off by the
+    /// top of the canvas (the conductor's staged defect). Moving the scale back to the ellipse's own `flat`,
+    /// or widening the halo's growth, fails here.
+    #[test]
+    fn the_drawn_wheel_stays_inside_its_shroud() {
+        let e = engine();
+        let input = e.default_input();
+        let run = e.run(&input).ok();
+        let vis = Visual::default();
+        for (label, w, h, phone) in TARGETS {
+            let l = layout(section(w, h), Some(&input), phone);
+            let p = plan(&l, &input, run.as_ref(), run.as_ref(), &vis, None, 0.0);
+            let mut checked = 0;
+            let mut halo = 0;
+            for (part, dr) in p.iter() {
+                let aabb = drawn_aabb(dr);
+                // the halo hangs around the wheel *inside the barrel it pulls on*: clamped to the cylinder
+                if matches!(part, Part::FanGlow(_)) {
+                    halo += 1;
+                    assert!(
+                        l.stack_cyl.contains_rect(aabb),
+                        "{label}: {part:?} hangs outside the barrel ({aabb:?} vs {:?})",
+                        l.stack_cyl
+                    );
+                    continue;
+                }
+                let wheel = matches!(
+                    part,
+                    Part::DiscSlice(_)
+                        | Part::FanRing(_)
+                        | Part::FanSpoke(_)
+                        | Part::FanBlade(_)
+                        | Part::FanBladeTip(_)
+                        | Part::FanHub
+                        | Part::FanHubCap(_)
+                );
+                if !wheel {
+                    continue;
+                }
+                checked += 1;
+                // **The wheel is drawn inside its own ellipse** (`l.fan_el`) - the one the rim and the
+                // blades share. Scaling the spokes and blades by the ellipse's flatness times two (the
+                // pre-#86 code) put the tips outside it, across the fan bay's top edge and, on a phone,
+                // cut off by the top of the canvas; widening the halo's growth hangs it over the barrel.
+                // The one pixel is the outline's own weight: the ring's tangential segments straddle the
+                // ellipse's edge (half of 1.6 px), and a disc slice is drawn 0.8 px wider than its cell so
+                // the fill reads solid. The pre-#86 scale overflowed this by 22 px at 1440x900.
+                assert!(
+                    l.fan_el.expand(1.0).contains_rect(aabb),
+                    "{label}: {part:?} is drawn outside the wheel's own ellipse ({aabb:?} vs {:?})",
+                    l.fan_el
+                );
+            }
+            assert!(
+                checked >= 100 && halo >= FAN_GLOW as i32,
+                "{label}: only {checked} wheel parts and {halo} halo rings were drawn - the check is not \
+                 looking at the wheel"
+            );
+        }
+    }
+
+    /// Issue #86, defect (b): **no bay is marked at rest.** A fresh `Visual` - which still carries the
+    /// fixture's default fan slot - draws no bay wash and no bay outline: the fan bay's solid accent frame
+    /// and its filled background with nothing selected anywhere was the stray highlight the conductor saw on
+    /// live staging. The mark appears the moment something is *on* the bay: its picker, its tap-detail card,
+    /// or the keyboard. The same rule on the ui.rs side (`bay_paint`) is tested beside this one.
+    #[test]
+    fn no_bay_is_marked_at_rest() {
+        let e = engine();
+        let input = e.default_input();
+        let run = e.run(&input).ok();
+        let l = layout(section(1312.0, 790.0), Some(&input), false);
+        let rest = Visual::default();
+        assert_eq!(
+            rest.selected_slot,
+            Slot::Fan,
+            "the default slot is still the fan (the defect was painting it, not choosing it)"
+        );
+        let p = plan(&l, &input, run.as_ref(), run.as_ref(), &rest, None, 0.0);
+        for i in 0..4u8 {
+            assert!(
+                !p.contains_key(&Part::SlotFocus(i)),
+                "bay {i} carries a mark at rest"
+            );
+        }
+        // ... and the mark is there as soon as the bay's own detail card is open.
+        let mut vis = rest.clone();
+        vis.detail = Some(Detail::Bay(Slot::Fan));
+        let p = plan(&l, &input, run.as_ref(), run.as_ref(), &vis, None, 0.0);
+        assert!(
+            p.contains_key(&Part::SlotFocus(0)),
+            "the fan bay's tap-detail is open"
+        );
+        assert!(
+            !p.contains_key(&Part::SlotFocus(1)),
+            "the drift bay is not on"
+        );
+        // and with the keyboard on a bay, that bay and no other.
+        let mut vis = rest.clone();
+        vis.bay_focus = Some(Slot::Drift);
+        let p = plan(&l, &input, run.as_ref(), run.as_ref(), &vis, None, 0.0);
+        assert!(p.contains_key(&Part::SlotFocus(1)));
+        assert!(!p.contains_key(&Part::SlotFocus(0)));
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "cockpit"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 description = "The cockpit's engine contract, its one recorded implementation (`FixtureEngine`) and `HostConfig`/branding. Trimmed from the approved baseline crate on import (issue #58): the baseline's own Bevy app (`app`, `bridge`, `scene`, `theme`, `ui`) is not part of this crate."
 license = "PolyForm-Noncommercial-1.0.0"

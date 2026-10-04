@@ -13,7 +13,9 @@
  *      token. This is the axis `deploytest-serve.mjs`'s wall-clock `cost: { wallClockMs }` shows
  *      exists: a token as a field name must be caught.
  *   2. the literal pass — `price`, `currency`, `capex`, `discount`, `lifecycle`, `usd`, `thb`,
- *      `penalty` as raw text are red wherever they sit;
+ *      `penalty` as raw text are red wherever they sit, except one fragment rule: a run of the
+ *      token's letters BETWEEN two letters is part of a longer word, not an occurrence (`thb`
+ *      inside `PathBuf` is that case);
  *   3. the deliberate exclusion — `cost` and `money` in the app's own prose ("no money field",
  *      "the measured cost of one real run") are NOT red: the rule's own attestation must not trip
  *      the rule. A case pins that, so the exclusion cannot rot into a hole in silence.
@@ -76,7 +78,16 @@ function failuresOf(run) {
 }
 
 test('control: the delivered tree has no money field or currency token', (t) => {
-  const directory = fixture();
+  const directory = fixture((dir) => {
+    // The fragment rule's own regression (issue #74's merge): the Rust std path type carries the
+    // letters `thb` inside a longer word, and a naive substring pass reds every path-using source
+    // (25 sites in the merged tree). A source full of `PathBuf`s must read clean; the standalone
+    // token cases elsewhere in this file stay red.
+    writeFileSync(
+      join(dir, 'cockpit', 'src', 'screens', 'pathbuf.rs'),
+      'pub fn new_path() -> std::path::PathBuf {\n    std::path::PathBuf::new()\n}\n'
+    );
+  });
   cleanup(t, directory);
   const run = runCheck(directory);
   assert.equal(run.status, 0, run.stderr);
@@ -181,7 +192,12 @@ test('the prose exemption stops at cost and money: other tokens stay literal', (
   const directory = fixture((dir) => {
     writeFileSync(
       join(dir, 'cockpit', 'src', 'screens', 'prose.rs'),
-      '// a discount is not a field name either, so this line is a real violation.\n'
+      [
+        '// a discount is not a field name either, so this line is a real violation.',
+        '// and the fragment rule does not swallow a standalone code:',
+        'pub fn unit() -> &\'static str { "thb" }',
+        ''
+      ].join('\n')
     );
   });
   cleanup(t, directory);
@@ -191,6 +207,12 @@ test('the prose exemption stops at cost and money: other tokens stay literal', (
   assert.ok(
     failures.some(
       (failure) => failure.startsWith('cockpit/src/screens/prose.rs:') && failure.includes('(discount)')
+    ),
+    JSON.stringify(failures)
+  );
+  assert.ok(
+    failures.some(
+      (failure) => failure.startsWith('cockpit/src/screens/prose.rs:') && failure.includes('(thb)')
     ),
     JSON.stringify(failures)
   );

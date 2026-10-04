@@ -5,6 +5,10 @@
 //!
 //! Module map:
 //! - [`state`]   what the instrument edits and shows: slots, drag, focus, staging, the drop rules
+//! - [`project`] issue #74: the `.drafthouse` project file - one reader/writer, deterministic bytes,
+//!   unknown fields preserved, plus the results export
+//! - [`revision`] issue #74: the catalog revision object - immutable, hash-checked on every read
+//! - [`sha256`]  issue #74: the in-crate digest those two are built on
 //! - [`clip`]    round 5: the clip probe + the layout counters `tools/clip-check.mjs` asserts on
 //! - [`scene`]   the tower section drawn with Bevy sprites (fan, flow map, spray, rails, operating point)
 //! - [`ui`]      the egui instrument: rail, bays, rpm dock, stack, nozzle arrangement, charts, seams
@@ -46,20 +50,37 @@ pub mod cli;
 pub mod clip;
 /// Issue #71: the app's millisecond clock, `performance.now()` on wasm and a monotonic `Instant` here.
 pub mod clock;
+/// Issue #89: the comparison surface's model - saved project variants opened through #74's reader,
+/// recomputed by the engine, with the diff/highlight and best-per-objective rules.
+pub mod compare;
 pub mod duty_panel;
 /// Issue #58: the fixture's catalog block as the engine's own selection catalog (real-engine builds).
 #[cfg(feature = "real-engine")]
 pub mod engine_catalog;
 /// Issue #58: the engine selection - which `Engine` the instrument runs on.
 pub mod engine_select;
+/// Issue #74: the project session - the file being edited, the native dialogs, the page's
+/// download/upload, and the catalog-revision import. The two planes share every function here.
+pub mod files;
 pub mod form;
 pub mod hover;
 /// Issue #91: the notes drawer - every explanatory sentence, behind the validation badge.
 pub mod notes;
+/// drafthouse#85: the dependency-free PDF 1.7 writer the report export is built on.
+pub mod pdf;
 pub mod perf;
+/// Issue #74: the `.drafthouse` project file - **one** reader/writer for both planes, with the results
+/// export. No Bevy, no file dialogs: the native menu and the page's download/upload both call this.
+pub mod project;
+/// Issue #74: the catalog revision object - an immutable file (`{ id, publishedAt, sha256, status,
+/// records }`), verified on every read, with the shipped `illustrative-catalog-v0.1`.
+pub mod revision;
 pub mod scene;
 /// drafthouse#91 Part B: the app shell and the new screens.
 pub mod screens;
+/// Issue #74: SHA-256, in crate: the revision's declared digest and the contract mark. A `sha2`
+/// dependency would enter the wasm target's dependency graph, which the issue's fence forbids moving.
+pub mod sha256;
 pub mod state;
 pub mod theme;
 #[cfg(feature = "three-d")]

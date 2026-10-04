@@ -46,6 +46,27 @@ const READY_TIMEOUT_MS = 45000;
 const CDP_TIMEOUT_MS = Number(process.env.CDP_TIMEOUT_MS || 30000);
 /** Stamped into every URL: a cached wasm must never stand in for the build on disk. */
 const BUILD_TAG = Date.now();
+/**
+ * Issue #74: the project-file frames. `--project <file>` is a `.drafthouse` file to open (the driver
+ * passes the one the **native binary** wrote), and `--web-project <file>` is where this run writes the
+ * file the *web-internal* host hands back, so the next frame can re-open it.
+ */
+const PROJECT = arg('project', null);
+const WEB_PROJECT = arg('web-project', null);
+
+/** What a project file says the numbers were when it was written, at the display precision. */
+const snapshotHeadlines = (file) => {
+  const project = JSON.parse(readFileSync(file, 'utf8'));
+  return project.results.headlines
+    .map((row) => `${row.metric}=${Number(row.value).toFixed(2)}`)
+    .join('|');
+};
+
+/** Do the eleven numbers on screen equal the eleven the file says were calculated on save? */
+const headlinesAgree = (shown, file) => !!shown && shown === snapshotHeadlines(file);
+/** The two directions of the round trip, compared with each other. */
+let downloadedProject = null;
+let downloadedHeadlines = null;
 
 const VIEWPORTS = [
   { tag: '1440x900', width: 1440, height: 900, mobile: false, wheel: [110, 420] },
@@ -63,7 +84,9 @@ const FRAMES = [
   // ---- round 1 frames, re-captured on the round-2 build (the tray is gone: a drag now starts in a picker)
   {
     name: 'instrument-idle',
-    query: { frozen: '1' },
+    query: { frozen: '1', rail: '1' },
+    // #91's round 2 moved the default pose to the collapsed rail; this frame's claim is the idle
+    // instrument with the parts rail at the left, so its URL states that pose outright.
     want: 'cockpit idle: the 2D section, the compact parts rail at the left, the tower scene, the pressure rail and the rpm dock',
     check: (s) => s.dataset.view === 'cockpit' && s.dataset.rail === 'open' && Number(s.dataset.rpm) > 0 && s.dataset.fillStack.includes('FILM-MF20') && !s.dataset.picker,
   },
@@ -585,6 +608,47 @@ const FRAMES = [
       return card[1] >= 4 && card[1] + card[3] <= 840 && Number(s.dataset.hoverCurveRows) >= 1 && Number(s.dataset.hoverEngineRows) >= 1;
     },
   },
+  // ---- issue #74: the `.drafthouse` project file, both directions, on the web-internal host.
+  {
+    name: 'project-internal-open',
+    query: { frozen: '1', host: 'internal' },
+    act: [{ kind: 'upload', input: 'nav-project-file', file: PROJECT }],
+    want: 'a project file saved by the NATIVE binary, opened on the web-internal host through the page\'s own upload path: the machine comes back and the read-out shows the file\'s own eleven numbers',
+    check: (s) =>
+      // Nothing has been downloaded in this frame yet (no outbox), the document is not dirty (it was just
+      // opened from a file), and the eleven numbers on screen are the eleven the file says it calculated.
+      s.dataset.projectDirty === '0' &&
+      s.dataset.projectBytes === '0' &&
+      s.project === '' &&
+      headlinesAgree(s.dataset.headlines, PROJECT),
+  },
+  {
+    name: 'project-web-download',
+    query: { frozen: '1', host: 'internal' },
+    act: [{ kind: 'clickDom', dom: 'nav-project-download' }],
+    want: 'the internal host downloads the project: the app publishes the file itself through the bridge and the page hands those bytes to the user',
+    check: (s) => {
+      if (!s.project || !s.project.includes('"formatVersion": 1')) return false;
+      downloadedProject = s.project;
+      downloadedHeadlines = s.dataset.headlines;
+      if (WEB_PROJECT) writeFileSync(WEB_PROJECT, s.project);
+      return s.project.includes('"savedBy"') && s.project.includes('"web-internal"');
+    },
+  },
+  {
+    name: 'project-web-reopen',
+    query: { frozen: '1', host: 'internal' },
+    act: [{ kind: 'upload', input: 'nav-project-file', file: WEB_PROJECT }],
+    want: 'the file the internal host just handed back, re-opened on the internal host: the same eleven numbers, and they are the snapshot\'s own',
+    check: (s) =>
+      // The file came back through the page's own upload path: it opened cleanly (not dirty), its eleven
+      // numbers are the numbers the download frame showed - and they are the file's own snapshot.
+      !!downloadedProject &&
+      s.dataset.projectDirty === '0' &&
+      headlinesAgree(s.dataset.headlines, WEB_PROJECT) &&
+      s.dataset.headlines === downloadedHeadlines,
+  },
+
   // ---- round 5 frames: the layout the owner asked for in round 4's single fix -------------------------
   {
     name: 'duty-open',
@@ -798,12 +862,19 @@ const READ_STATE = `(() => {
   for (const el of document.querySelectorAll('#a11y-mirror span')) mirror[el.id] = el.textContent;
   const domRect = (id) => { const el = document.getElementById(id); if (!el) return null; const r = el.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; };
   const navIds = [...document.querySelectorAll('#viz-nav button')].map((b) => b.id);
+  const project = document.getElementById('mirror-project');
+  const projectStatus = document.getElementById('mirror-project-status');
   return {
     navIds,
     view: root.dataset.view || '',
     load: root.dataset.load || '',
     boot: root.dataset.boot || '',
     dataset: { ...root.dataset },
+    // Issue #74: the project file's text, exactly as the app published it for *Download project*.
+    project: project ? project.textContent : '',
+    // Issue #74: the session's own line ("opened the project: …", "refused: …"), which is how a frame
+    // proves an upload reached the app even when the file describes the state already on screen.
+    projectStatus: projectStatus ? projectStatus.textContent : '',
     mirror,
     hits: (() => { try { return JSON.parse(root.dataset.hits || '{}'); } catch { return {}; } })(),
     // Round 4, item 5: the VIEW buttons left the bottom bar, so the view frames click the header tabs
@@ -813,7 +884,11 @@ const READ_STATE = `(() => {
     'nav-pick-fill': domRect('nav-pick-fill'), 'nav-pick-nozzle': domRect('nav-pick-nozzle'),
     'nav-pick-prev': domRect('nav-pick-prev'), 'nav-pick-next': domRect('nav-pick-next'),
     'nav-pick-pick': domRect('nav-pick-pick'), 'nav-pick-close': domRect('nav-pick-close'),
-    'nav-focus': domRect('nav-focus')
+    'nav-focus': domRect('nav-focus'),
+    // Issue #74: the internal host's file group. On the public host the whole group is removed from the
+    // document, so these are null there and a frame that tried to click one would fail loudly.
+    'nav-project-new': domRect('nav-project-new'), 'nav-project-download': domRect('nav-project-download'),
+    'nav-project-upload': domRect('nav-project-upload'), 'nav-revision-import': domRect('nav-revision-import')
   },
     firstFrameMs: root.dataset.firstFrameMs ? Number(root.dataset.firstFrameMs) : null,
     interactiveMs: root.dataset.interactiveMs ? Number(root.dataset.interactiveMs) : null
@@ -1004,7 +1079,51 @@ async function runActs(tab, acts, view, log) {
     if (a.kind === 'drag' || a.kind === 'drop') {
       throw new Error('drag steps are driven by runDrag');
     }
-    if (a.kind === 'clickHit') {
+    if (a.kind === 'upload') {
+      // Issue #74: the page's own upload path, driven where a user would drive it. The harness sets the
+      // file on the page's real `<input type="file">` (the platform dialog is not part of headless Chrome),
+      // the page's own change handler reads it, and the text goes through the existing bridge. Nothing here
+      // calls into the app directly, and the file is never fetched - it is handed to the input.
+      const before = (await readState(tab))?.projectStatus || '';
+      await tab.send('DOM.enable');
+      const { root } = await tab.send('DOM.getDocument', { depth: -1 });
+      const { nodeId } = await tab.send('DOM.querySelector', {
+        nodeId: root.nodeId,
+        selector: `#${a.input}`,
+      });
+      if (!nodeId) throw new Error(`the page has no #${a.input} (a public host removes it)`);
+      await tab.send('DOM.setFileInputFiles', { files: [a.file], nodeId });
+      await sleep(1500);
+      let after = await readState(tab);
+      let how = "the input's own change event";
+      if (!(after?.projectStatus || '').includes('opened the project')) {
+        // Headless Chromium does not always fire `change` when the files are set over the protocol (the
+        // platform picker is not part of headless). The page's handler is the same one a picker would call,
+        // so it is invoked on the page's own element - and the log says this happened, rather than the
+        // frame quietly claiming a picker path that did not run.
+        how =
+          "the input's change handler, invoked explicitly (headless Chromium did not fire change on DOM.setFileInputFiles)";
+        await tab.eval(
+          `(() => { const el = document.getElementById('${a.input}'); el.dispatchEvent(new Event('change', { bubbles: true })); })()`,
+        );
+        await sleep(2500);
+        after = await readState(tab);
+      }
+      if (!(after?.projectStatus || '').includes('opened the project')) {
+        throw new Error(
+          `the upload of ${a.file} did not reach the app (the session line is ${JSON.stringify(before)} -> ${JSON.stringify(after?.projectStatus)})`,
+        );
+      }
+      log.push({
+        kind: a.kind,
+        input: a.input,
+        file: a.file,
+        dispatch: `the page reads the file and dispatches its text as project:upload:<text> via ${how}`,
+        session_before: before,
+        session_after: after.projectStatus,
+        project_name_after: after.dataset.projectName,
+      });
+    } else if (a.kind === 'clickHit') {
       // `once: true` for a control that *toggles*: a retry would click the same spot again and undo the first
       // click (the rail caret and the legend's x both toggle), so those frames send exactly one click.
       const tries = a.once ? 1 : 3;
@@ -1542,6 +1661,15 @@ async function main() {
             clipClips: s.dataset.clipClips || null,
             firstFrameMs: s.firstFrameMs,
             interactiveMs: s.interactiveMs,
+            // Issue #74: the eleven published metrics, the project session's markers and the file's own
+            // text - so a reader (and `compare-numbers.mjs`) compares them without reading pixels.
+            headlines: s.dataset.headlines || '',
+            projectName: s.dataset.projectName || '',
+            projectDirty: s.dataset.projectDirty || '',
+            projectBytes: s.dataset.projectBytes || '',
+            catalogRevision: s.dataset.catalogRevision || '',
+            projectStatus: s.projectStatus || '',
+            projectText: s.project || '',
           },
           // Round 5: the app's own clip probe for this frame, read from `#mirror-clip`.
           clip: r.clip || null,

@@ -1,6 +1,6 @@
 # Validation Results
 
-**Prototype version:** 0.4.0
+**Prototype version:** 0.4.1
 **Catalog revision:** `illustrative-catalog-v0.1` (revision 2026-08-13, status `SYNTHETIC / NOT VENDOR DATA`)
 **Recorded:** 19 September 2026 on branch `impl/ct-validation`, re-derived 20 September 2026 on branch `impl/ct-retire` (issue #40 slice 4 and its fix round 1); every figure below was re-derived at this head after the JavaScript reference retired, and the legs it names are the ones that ran.
 **Node.js:** v26.7.0 for the issue #37 recording; the figures below are this head's own runs under the CI pin v20.20.2.
@@ -39,12 +39,12 @@ every commit.
 | static | `npm run static` | `{"passed": true, "scannedFiles": 64, "syntaxChecked": 40, "javascriptFiles": 40, "htmlDocuments": 1, "markdownFiles": 23, "references": 55, "licenceChecks": 3}` — every surviving module parses (`node --check`), every relative reference the tree makes resolves (JS imports, the served document's subresources, markdown links) and the licence claims hold (the six modules issue #72 adds for the native installers' icons and release path are the difference from the 62/34/34/1/27/58/2 this row read before; at the issue #67 base the same figures were 75/44/44/2/29/79/2) |
 | version-check | `npm run version-check` | `{"passed": true, "verified": false, "version": "0.2.0", "newestTag": null, …}` with `version-check: NOT VERIFIABLE — no v* tag is visible in this clone` on stderr — `package.json`'s version is the source of truth: the five `Cargo.toml`s and both `Cargo.lock`s record it, and it equals the newest `v*` tag or is strictly greater (a release tag whose version was never bumped fails, naming both; a published snapshot tree carries no `v*` tags of its own, so the guard prints `NOT VERIFIABLE` instead of passing silently — its own run above). Since issue #72 the guard also reads the packager metadata: `cockpit/Cargo.toml`'s `[package.metadata.packager]` carries **no** version of its own (so `cargo-packager`, which fills that field from the crate, is fed the guarded number), and a version written into it later must equal the source of truth or the guard fails naming both. The bite proof, with raw exits, is kept with the maintainers |
 | native-icons-check | `npm run native-icons-check` | `{"passed": true, "source": "cockpit/icons/mark.svg", "pngs": ["32x32.png 32x32", "128x128.png 128x128", "128x128@2x.png 256x256", "icon.png 512x512"], "ico": [16, 32, 48, 64, 128, 256]}` — the installer icon set (issue #72) is re-derived from `cockpit/icons/mark.svg` and compared pixel for pixel: the committed PNGs and the PNG payloads inside `icon.ico` are exactly what the neutral mark draws at their sizes, and no file outside the set is present |
-| test | `npm test` | 86 tests, 86 pass, 0 fail — see below |
+| test | `npm test` | 89 tests, 89 pass, 0 fail — see below |
 | smoke | `npm run smoke` | the JSON block below: the documented duty through the pinned engine piece |
 | server-smoke | `npm run server-smoke` | `{"passed": true, "results": [ ... ]}` — six cockpit paths (`/`, the wasm glue, the wasm module, the fixture record, the duty field list, a subset font), HTTP 200, expected MIME types, non-empty bodies (issue #58 re-pointed this leg at the surface that is served; a tree without a built plane prints the NOT VERIFIABLE diagnostic instead) |
 | deploy-check | `npm run deploy-check` | `{"passed": true, "surface": "cockpit", "document": "cockpit/index.html", "fileCount": 10, "totalBytes": 295252, "assets": 9, "manifest": "deploy-manifest.txt", "manifestVerified": true}` (the deploy set is the cockpit plane: its document, the committed assets and the pins it vendors; issue #60 re-pointed this leg at the served surface; issue #73's rename moved the fixture's own bytes, 96851 -> 96797, and the sum with them; issue #74 added `cockpit/assets/revision-illustrative-catalog-v0.1.json` - the first catalog revision, shipped in the binary and the wasm module - and the page's internal-only file group, 240500 -> 295252) |
 | parity-wasm | `npm run parity-wasm` | `compared 11524 quantities: 11524 pass, 0 fail` / `every quantity is within tolerance` / `wasm vs native: 299 replies compared — 223 identical to the last bit, 76 alike within 1e-12, 0 beyond` (the recorded regression baseline; the wasm binding section is not compared — see "Engine drift check") |
-| bundle-check | `npm run bundle-check` | `{"passed": true, "pins": ["bundles/engine.manifest.json", "bundles/visuals.manifest.json"], "pieces": [{"piece": "engine", "files": 2, "bytes": 633432, "digest": "b958d5a0…"}, {"piece": "visuals", "files": 9, "bytes": 2289937, "digest": "9a4e0eaf…"}]}` (the pin checks file digests, not the commit label: the manifests were published from `6beb8bc`, while the repository's head is newer — `npm run bundle-check` prints both) |
+| bundle-check | `npm run bundle-check` | `{"passed": true, "pins": ["bundles/engine.manifest.json", "bundles/visuals.manifest.json"], "pieces": [{"piece": "engine", "files": 2, "bytes": 633430, "digest": "99fa59e2…"}, {"piece": "visuals", "files": 9, "bytes": 2289937, "digest": "9a4e0eaf…"}]}` (the pin checks file digests, not the commit label: the manifests were published from `6beb8bc`, while the repository's head is newer — `npm run bundle-check` prints both) |
 | retirement-check | `npm run retirement-check` | passed — the retirement gate (issue #60, D22): the retired JavaScript surface is absent from the tree and no artifact the deployment ships references the retired module (the gate's raw JSON is kept with the maintainers) |
 
 No external package installation: the chain has no install step and the repository has no runtime
@@ -66,16 +66,23 @@ dropped answer card. Issue #83 adds the money gate's regressions
 (`tests/currency-check.test.js`), which run `cockpit/tools/currency-check.mjs` over a copy of the
 delivered tree, then over planted currency strings (the plane document, the fixture record, the
 app's own sources, a built module) and two fail-closed cases, and pin that the rule's own prose
-(`cost`, `money`) is exempt while every other token stays literal. The JavaScript engine's own tests
-were the
-reference's, and went with it. Node's runner decorates these lines (`ℹ` in its spec reporter, `#` in
+(`cost`, `money`) is exempt while every other token stays literal. Issue #117 adds the comparison's
+parity test (`tests/compare-web-parity.test.js`), which drives the web plane's compare picker in the
+real headless browser and the native route's own helper through cargo over the same two saved files,
+then requires the two exported sheets to be the same bytes; where the built plane, the built native
+target or the browser is absent it reports NOT VERIFIABLE rather than skipping. Issue #72's fix
+round adds the tamper self-test's own regressions (`tests/tamper-ident.test.js`), which build the
+published native set and the published bundle out of the repository's own writers and hold both
+verifiers to the contract that a tamper dispatch's RED names the self-test — while an unlabelled
+mismatch keeps the plain, unqualified failure a real run must have. The JavaScript
+engine's own tests were the reference's, and went with it. Node's runner decorates these lines (`ℹ` in its spec reporter, `#` in
 TAP, depending on where stdout goes); the decoration is dropped here, everything else is verbatim, and
 the duration line is left out because it changes with the host:
 
 ```text
-tests 86
+tests 89
 suites 0
-pass 86
+pass 89
 fail 0
 cancelled 0
 skipped 0
@@ -84,7 +91,9 @@ todo 0
 
 The suite is not build-free: `node --test tests/*.test.js` runs the smoke-drift gate, which executes the
 recorded wasm engine build (`bundles/engine.manifest.json`) into `rust/target` through `scripts/smoke.mjs`
-— the quick tier installs the wasm32 target and caches `rust/target` for it. No browser, no network. The
+— the quick tier installs the wasm32 target and caches `rust/target` for it. No browser, no network is
+required: issue #117's parity test uses a headless browser and a built plane where both exist, and
+reports NOT VERIFIABLE where they do not. The
 engine halves — the native binary and the wasm build — are exercised by `npm run smoke` (through the
 pinned engine piece), the parity legs of the chain and `cargo test`.
 

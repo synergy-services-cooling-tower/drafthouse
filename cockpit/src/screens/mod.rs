@@ -545,6 +545,9 @@ pub fn frame(ctx: &egui::Context, mut c: Ctx<'_>) -> Frame {
         let screen = ctx.viewport_rect();
         let phone = screen.width() < 760.0;
         kit::strings_begin();
+        // issue #117: the same per-frame discipline for the controls' hit rects - the screens report
+        // what they drew, and `publish` hands the inventory to a harness.
+        kit::hits_begin();
 
         let show_new = st.screen != Screen::Instrument || st.crossflow;
         let want = match st.screen {
@@ -2117,6 +2120,10 @@ fn src_detail(
 #[cfg(target_arch = "wasm32")]
 fn publish(st: &State, screen: Rect, content: Rect) {
     let strings = kit::strings_take();
+    // issue #117: the controls the frame drew, published the way the instrument publishes its own
+    // (`data-hits`, `crate::app::HitMap`): a headless harness can aim a real pointer at a named
+    // screen control - the comparison's export among them - instead of guessing coordinates.
+    let hits = kit::hits_take();
     let Some(doc) = web_sys::window().and_then(|w| w.document()) else {
         return;
     };
@@ -2155,6 +2162,15 @@ fn publish(st: &State, screen: Rect, content: Rect) {
     );
     set("data-motion", if st.motion { "on" } else { "off" });
     set("data-screen-busy", if st.busy { "1" } else { "0" });
+    // issue #117: the controls this frame drew, by their ids - `{}` when the frame drew none.
+    let mut hit_map = serde_json::Map::new();
+    for (id, r) in hits {
+        hit_map.insert(id, serde_json::json!(r));
+    }
+    set(
+        "data-screen-hits",
+        &serde_json::Value::Object(hit_map).to_string(),
+    );
     // The instrument's HTML control bar belongs to the instrument: hidden while a new screen is open.
     if let Some(nav) = doc.get_element_by_id("viz-nav") {
         let want = if slug == "instrument" {
@@ -2213,4 +2229,5 @@ fn publish(st: &State, screen: Rect, content: Rect) {
 #[cfg(not(target_arch = "wasm32"))]
 fn publish(_st: &State, _screen: Rect, _content: Rect) {
     let _ = kit::strings_take();
+    let _ = kit::hits_take();
 }

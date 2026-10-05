@@ -793,6 +793,29 @@ fn size_workspace_equals_the_native_cli() {
          ({}/{}@{} ~ {fan_kw} vs {electrical_kw})",
         card.tower_id, card.fill_id, card.depth_m
     );
+    // Issue #107: the electrical input's **value**, not only its difference from the fan power.
+    // The `assert_ne!` above kept its comparison discriminating, but nothing pinned the number: a
+    // negation of the field the CLI printed survived the whole suite. The engine computes it as
+    // `shaft_power_kw / drive_efficiency / motor_efficiency` (`rust/src/selection.rs`), so the
+    // printed field is compared, exact f64 bits like every other number in this module, against
+    // that definition over the winner's own fan record.
+    let fan = record(&fx, "fans", &card.fan_id);
+    let drive = fan["driveEfficiency"]
+        .as_f64()
+        .expect("the winner's drive efficiency");
+    let motor = fan["motorEfficiency"]
+        .as_f64()
+        .expect("the winner's motor efficiency");
+    let expected_kw = fan_kw / drive / motor;
+    assert_eq!(
+        electrical_kw,
+        expected_kw,
+        "{}: electricalInputKW - the CLI's printed {electrical_kw} is not the engine's \
+         shaftPowerKW/driveEfficiency/motorEfficiency ({fan_kw}/{drive}/{motor} = {expected_kw}); \
+         delta {}",
+        card.tower_id,
+        electrical_kw - expected_kw
+    );
     let (_, mirror) = draft_run(&draft);
 
     // The answer bar's own reading of the same field: the engine's run of the draft (its

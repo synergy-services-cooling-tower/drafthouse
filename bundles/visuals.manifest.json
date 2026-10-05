@@ -1,7 +1,7 @@
 {
   "piece": "visuals",
-  "version": "0.4.0+8a09d86470d144ad4aa7c73ad56f56a2685d9e15",
-  "commit": "8a09d86470d144ad4aa7c73ad56f56a2685d9e15",
+  "version": "0.4.1+b7755e618b9af05ebef697631a2ea51ec68952ed",
+  "commit": "b7755e618b9af05ebef697631a2ea51ec68952ed",
   "files": [
     {
       "path": "web/geometry.js",

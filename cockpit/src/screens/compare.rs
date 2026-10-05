@@ -740,7 +740,13 @@ fn empty(p: &egui::Painter, body: Rect, st: &State, phone: bool) {
         p,
         pos2(c.x, c.y + 10.0),
         Align2::CENTER_CENTER,
-        "load them with --compare a.drafthouse b.drafthouse",
+        // Issue #117: each plane names the route it actually has - the served page's Project bar
+        // carries the compare control, the desktop binary takes `--compare`.
+        if cfg!(target_arch = "wasm32") {
+            "load them with compare files, in the project bar"
+        } else {
+            "load them with --compare a.drafthouse b.drafthouse"
+        },
         kit::mono(11.0),
         t::MUTED,
     );

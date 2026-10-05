@@ -5231,4 +5231,135 @@ mod tests {
         let (n, _) = tacho_spans(99.0, lo, hi);
         assert!(n <= 1.0 + TACHO_STALL_SPAN + 1e-6);
     }
+
+    /// Issue #100: the fit loop's own call site. The pure tests above pin the helpers
+    /// (`column_holds`, `pack_column`) but cannot see whether the loop around them ran; the
+    /// behaviour that actually keeps the plates apart is orchestrated inside `scene_overlay`
+    /// itself - the type step-down, the drop stage, the packer. This test drives
+    /// `scene_overlay` at the four sizes, on the app's own fonts and each frame's own section
+    /// rect (`docs/design/small-screens-r1/instrument-*.json`'s `sceneRect` - the exact rect
+    /// the shell handed the overlay when that frame was captured), and reads the label rects
+    /// the call published. The rule is the frames check's own (`check.mjs`): no two labels
+    /// share more than half a pixel on both axes.
+    ///
+    /// Two stacks, both of them states the app itself can hold: the fixture's recorded one,
+    /// and the full one its own add path builds at `state::MAX_LAYERS`. The recorded columns
+    /// at 390x844 and 1024x768 overflow before the loop runs and are fitted by the type
+    /// step-down; the full stack at 1024x768 is the state where even the floor-sized type
+    /// cannot fit, so the drop stage is the stage that saves it. Disable that stage and this
+    /// test fails on that state, naming the pair the packer left sharing pixels.
+    #[test]
+    fn the_overlay_fit_loop_keeps_the_plates_apart_at_the_four_sizes() {
+        use cockpit::fixture_engine::FixtureEngine;
+        let fx = FixtureEngine::from_json(include_str!("../assets/fixture.json"))
+            .expect("the fixture parses");
+        let cat = Catalog::from_fixture(&fx);
+        let engine = crate::engine_select::build(include_str!("../assets/fixture.json"), None)
+            .expect("the build's engine");
+        let recorded = fx.default_input();
+        let mut full = recorded.clone();
+        while full.fill_layers.len() < state::MAX_LAYERS {
+            add_layer(&cat, &mut full, None).expect("the app's own add path holds a layer");
+        }
+        let stacks = [("recorded stack", &recorded), ("full stack", &full)];
+        // The four frames' own section rects (`sceneRect`), phone flag included: the shell
+        // handed `scene_overlay` exactly these rects.
+        let sizes: [(&str, Rect, bool); 4] = [
+            (
+                "1280x720",
+                Rect::from_min_size(egui::pos2(116.0, 58.0), egui::vec2(1152.0, 610.0)),
+                false,
+            ),
+            (
+                "1440x900",
+                Rect::from_min_size(egui::pos2(116.0, 58.0), egui::vec2(1312.0, 790.0)),
+                false,
+            ),
+            (
+                "1024x768",
+                Rect::from_min_size(egui::pos2(116.0, 358.0), egui::vec2(896.0, 358.0)),
+                false,
+            ),
+            (
+                "390x844",
+                Rect::from_min_size(egui::pos2(8.0, 549.0), egui::vec2(374.0, 234.0)),
+                true,
+            ),
+        ];
+        for (stack, input) in stacks {
+            let run = Run {
+                output: Some(engine.run(input).expect("the duty runs")),
+                error: None,
+                ratio: input.speed_ratio,
+            };
+            for (label, area, phone) in sizes {
+                let ctx = egui::Context::default();
+                ctx.set_fonts(t::fonts());
+                // one pass binds the fonts (`set_fonts` only queues; the app skips the same first frame)
+                let mut warm = ctx.run_ui(egui::RawInput::default(), |_| {});
+                warm.textures_delta.clear();
+                let mut draft = Draft(input.clone());
+                let mut vis = Visual::default();
+                let mut hits = HitMap::default();
+                let mut info = crate::clip::LayoutInfo::default();
+                let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+                    scene_overlay(
+                        ui,
+                        area,
+                        Some(&cat),
+                        &mut draft,
+                        &mut vis,
+                        &run,
+                        &ctx,
+                        &mut hits,
+                        &mut info,
+                        0.0,
+                        true,
+                        phone,
+                    );
+                });
+                out.textures_delta.clear();
+                // the frames check's own overlap rule, over the rects `scene_overlay` just
+                // published: >0.5 px on both axes, so the failure names the two labels, not a
+                // counter
+                let labels: Vec<(&str, [f32; 4])> = hits
+                    .0
+                    .iter()
+                    .filter(|(key, _)| key.starts_with("label:"))
+                    .map(|(key, rect)| (key.as_str(), *rect))
+                    .collect();
+                assert!(
+                    labels.len() >= 8,
+                    "{stack} at {label}: the overlay published only {} labels",
+                    labels.len()
+                );
+                let mut overlaps: Vec<String> = Vec::new();
+                for i in 0..labels.len() {
+                    for j in i + 1..labels.len() {
+                        let a = labels[i].1;
+                        let b = labels[j].1;
+                        let x = (a[0] + a[2]).min(b[0] + b[2]) - a[0].max(b[0]);
+                        let y = (a[1] + a[3]).min(b[1] + b[3]) - a[1].max(b[1]);
+                        if x > 0.5 && y > 0.5 {
+                            overlaps.push(format!(
+                                "{} x {} ({x:.1}x{y:.1} px)",
+                                labels[i].0, labels[j].0
+                            ));
+                        }
+                    }
+                }
+                assert!(
+                    overlaps.is_empty(),
+                    "{stack} at {label}: the overlay column leaves its plates sharing pixels: {} \
+                     (the app's own plate_overlaps counter reads {})",
+                    overlaps.join(", "),
+                    info.plate_overlaps
+                );
+                assert_eq!(
+                    info.plate_overlaps, 0,
+                    "{stack} at {label}: the app's own plate counter"
+                );
+            }
+        }
+    }
 }

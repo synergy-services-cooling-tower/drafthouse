@@ -1871,7 +1871,7 @@ checksum = "f079e83a288787bcd14a6aea84cee5c87a67c5a3e660c30f557a3d24761b3527"
 
 [[package]]
 name = "cockpit"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -1879,7 +1879,7 @@ dependencies = [
 
 [[package]]
 name = "cockpit-adapter"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "serde",
  "synergy-drafthouse",
@@ -2213,7 +2213,7 @@ checksum = "d8b14ccef22fc6f5a8f4d7d768562a182c04ce9a3b3157b91390b52ddfdf1a76"
 
 [[package]]
 name = "drafthouse-cockpit"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "bevy",
  "bevy_egui",
@@ -2231,7 +2231,7 @@ dependencies = [
 
 [[package]]
 name = "drafthouse-cockpit-seams"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "cockpit",
  "serde",
@@ -4620,7 +4620,7 @@ dependencies = [
 
 [[package]]
 name = "synergy-drafthouse"
-version = "0.4.0"
+version = "0.4.1"
 
 [[package]]
 name = "synstructure"

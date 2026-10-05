@@ -130,9 +130,13 @@
       <button id="nav-project-new" type="button" title="Start a new project (the recorded default)">new</button>
       <button id="nav-project-download" type="button" title="Download the project file (.drafthouse)">download project</button>
       <button id="nav-project-upload" type="button" title="Upload a project file">upload project</button>
+      <!-- Issue #117: the web plane's route into the comparison - the counterpart of the desktop
+           binary's `--compare a.drafthouse b.drafthouse`. Two or three saved files open side by side. -->
+      <button id="nav-compare-open" type="button" title="Open two or three saved project files in the comparison">compare files</button>
       <button id="nav-revision-import" type="button" title="Import a catalog revision file (its sha256 is checked)">import revision</button>
     </span>
     <input id="nav-project-file" type="file" accept=".drafthouse,.json,application/json" hidden>
+    <input id="nav-compare-file" type="file" accept=".drafthouse,.json,application/json" multiple hidden>
     <input id="nav-revision-file" type="file" accept=".json,application/json" hidden>
     <span class="spacer"></span>
     <!-- Issue #91: the key list moved into the notes drawer (I), with every sentence the screen used to paint. -->
@@ -300,7 +304,7 @@ document.addEventListener('keydown', (e) => {
 // hand back the text the app published for download. The public host removes the group above, so there is
 // no save or export path there at all.
 if (!internal) {
-  for (const id of ['nav-files', 'nav-files-sep', 'nav-files-label', 'nav-project-file', 'nav-revision-file']) {
+  for (const id of ['nav-files', 'nav-files-sep', 'nav-files-label', 'nav-project-file', 'nav-revision-file', 'nav-compare-file']) {
     const el = document.getElementById(id);
     if (el) el.remove();
   }
@@ -319,6 +323,21 @@ if (!internal) {
   document.getElementById('nav-revision-import').addEventListener('click', () => { revisionFile.value = ''; revisionFile.click(); });
   readAnd(projectFile, 'project:upload');
   readAnd(revisionFile, 'revision:import');
+  // Issue #117: "compare files" takes the same route into the comparison that the desktop binary's
+  // `--compare a.drafthouse b.drafthouse` takes - a `screen:compare`, then one
+  // `compare:open:<name>:<text>` per picked file, exactly the commands the native file work queues.
+  // The page only reads the picked files (the picker is where the bytes are); the command channel,
+  // the reader and the engine are all Rust. The name rule matches the native route's: `:` -> `_`,
+  // because the command's name field ends at its first `:`; the text is the file, verbatim.
+  const compareFile = document.getElementById('nav-compare-file');
+  document.getElementById('nav-compare-open').addEventListener('click', () => { compareFile.value = ''; compareFile.click(); });
+  compareFile.addEventListener('change', async () => {
+    const picked = [...(compareFile.files || [])];
+    if (!picked.length) return;
+    const files = await Promise.all(picked.map(async (file) => [file.name.replaceAll(':', '_'), await file.text()]));
+    window.__viz.dispatch('screen:compare');
+    for (const [name, text] of files) window.__viz.dispatch('compare:open:' + name + ':' + text);
+  });
   document.getElementById('nav-project-download').addEventListener('click', () => {
     window.__viz.dispatch('project:download');
     // The app publishes the file's text into #mirror-project; give the frame a moment, then hand it over.

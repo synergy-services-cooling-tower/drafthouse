@@ -8,6 +8,17 @@
  * bytes that arrived. Nothing it checks is taken on trust from the job that produced the file.
  *
  *     node scripts/native-verify.mjs --dir dist/downloaded --expect-mode dry-run
+ *     node scripts/native-verify.mjs --dir dist/downloaded --expect-mode dry-run \
+ *       --expect-tamper native --tamper-platform linux-x64
+ *
+ * `--expect-tamper native --tamper-platform <platform>` is for the run that dispatched a tamper
+ * input (issue #72): the run says it corrupted that platform's primary artifact, so the verifier
+ * *labels* the disagreements that corruption explains, in its failure output, in the job summary
+ * and as `expectedTamper` in the JSON. It is labelling only — the exit status stays 1, every check
+ * stays exactly as strict, and the label can only ever cover the corrupted artifact's own digest
+ * lines. Any disagreement those lines do not explain stays a real failure; a run that finds no
+ * disagreement at all fails as a self-test that did not bite. Without the flag the output is
+ * unchanged: a mismatch is an unqualified failure.
  *
  * What it re-derives and checks:
  *
@@ -27,7 +38,7 @@
  * 2 the check could not run (no directory, no manifest or provenance, ambiguous names, unreadable
  * JSON, an unknown expected mode).
  */
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -41,6 +52,86 @@ function refuse(message) {
 /** The four release names' shape, for spotting an artifact that is not one of them. */
 const NATIVE_NAME = /^(Synergy-Drafthouse-|synergy-drafthouse_)/;
 
+/**
+ * The dispatch's tamper scope (issue #72). A dispatch with `tamper=native` corrupts ONE platform's
+ * primary artifact — after its `.sha256` sidecar and its record were written — so exactly one
+ * class of disagreement is expected: that artifact's digest against the bytes that arrived, both
+ * in the manifest check and in the sidecar check. Nothing else is: a size disagreement, a missing
+ * file or any other artifact's digest stays real. The scope is derived from the manifest's own
+ * version and the same `artifactNames` the checks use, so it can only name a file this verifier
+ * actually checked — and if the name cannot be derived (no version), nothing is covered.
+ */
+function tamperScope(platform, version) {
+  const name = artifactNames(version ?? '').find((entry) => entry.platform === platform)?.name ?? null;
+  return {
+    platform,
+    name,
+    explains: (failure) => name !== null && (
+      failure.startsWith(`${name}: the manifest records sha256 `)
+      || failure.startsWith(`${name}.sha256 carries `)
+    ),
+    // The footprint the corruption always leaves: the artifact's bytes against the manifest's
+    // record. A run where only the sidecar line moved never had this artifact's bytes corrupted
+    // in the way the dispatch says, so nothing is credited there either.
+    signal: (failure) => name !== null && failure.startsWith(`${name}: the manifest records sha256 `),
+    explained: [],
+    unexplained: [],
+    didNotBite: false,
+  };
+}
+
+/**
+ * Names the self-test, in the failure output and in the job summary (issue #72). This is the
+ * surface a reader of a failed run sees, and the one this defect cost: the output alone read as
+ * a release defect. It states what the label covers and, when anything is not covered, says so
+ * instead of claiming the expected RED. The exit status is not touched — a designed RED is a RED.
+ */
+function reportTamperScope(scope) {
+  const say = (line) => console.error(`native-verify: ${line}`);
+  const what = scope.name ?? 'a platform artifact';
+  const summary = [];
+  if (scope.didNotBite) {
+    say(`TAMPER DISPATCH (tamper=native, platform ${scope.platform}) — THE SELF-TEST DID NOT BITE.`);
+    say(`this run dispatched the tamper self-test, which corrupts ${what} after its .sha256 sidecar and its record were written; every hash verified anyway.`);
+    say('a self-test that cannot fail is not a self-test — the verifier, the tamper step or the download path is not doing its job.');
+    summary.push(
+      `### TAMPER SELF-TEST DID NOT BITE — tamper=native, platform ${scope.platform}`,
+      '',
+      `This dispatch carried the tamper self-test for \`${what}\`, so \`native-verify\` was required to find that artifact's digests disagreeing with the bytes that arrived. It found no disagreement at all.`,
+      '',
+      '**A defect in the self-test — not a release defect.**',
+    );
+  } else if (scope.unexplained.length === 0) {
+    say(`EXPECTED RED — the tamper self-test (tamper=native, platform ${scope.platform}).`);
+    say(`this dispatch deliberately corrupted ${what} after its .sha256 sidecar and its record were written, so the published bytes cannot agree with the digests recorded beside them. Every failure below is that corruption's own disagreement: the self-test biting as designed, and this job failing is its designed outcome.`);
+    say('it is NOT a release defect, and it says nothing about the published artifact. The JSON below carries it as `expectedTamper`.');
+    summary.push(
+      `### EXPECTED RED — tamper self-test (tamper=native, platform ${scope.platform})`,
+      '',
+      `This dispatch deliberately corrupted \`${what}\` after its \`.sha256\` sidecar and its record were written. Every failure of this run is that corruption's own disagreement: \`native-verify\` failing is the self-test biting as designed.`,
+      '',
+      '**Not a release defect** — nothing here says the published artifact is wrong.',
+    );
+  } else {
+    say(`TAMPER DISPATCH (tamper=native, platform ${scope.platform}) — THIS FAILURE IS NOT FULLY EXPLAINED BY THE SELF-TEST.`);
+    say(`${scope.explained.length} disagreement(s) below are the self-test's expected RED for the corrupted artifact; ${scope.unexplained.length} further disagreement(s) are NOT explained by it and are real verification failures:`);
+    for (const failure of scope.unexplained) say(`  unexpected: ${failure}`);
+    summary.push(
+      `### NOT an expected RED — tamper=native, platform ${scope.platform}`,
+      '',
+      `This dispatch carried the tamper self-test, but ${scope.unexplained.length} of its ${scope.explained.length + scope.unexplained.length} failures are NOT explained by the corrupted artifact and are **real verification failures**:`,
+      '',
+      ...scope.unexplained.map((failure) => `- \`${failure}\``),
+    );
+  }
+  const path = process.env.GITHUB_STEP_SUMMARY;
+  if (path) {
+    // The job summary is a courtesy: if it cannot be written the banner above still carries the
+    // same words and the exit status is untouched either way.
+    try { appendFileSync(path, `${summary.join('\n')}\n`); } catch { /* see above */ }
+  }
+}
+
 function main() {
   const argv = process.argv.slice(2);
   const value = (flag) => {
@@ -51,9 +142,21 @@ function main() {
   };
   const dir = value('--dir');
   const expectMode = value('--expect-mode');
+  const expectTamper = value('--expect-tamper');
+  const tamperPlatform = value('--tamper-platform');
   if (!dir) refuse('--dir needs the directory of downloaded native assets');
   if (!existsSync(dir) || !statSync(dir).isDirectory()) refuse(`${dir} is not a directory`);
   if (!['tag', 'dry-run'].includes(expectMode)) refuse(`--expect-mode must be tag or dry-run (got ${JSON.stringify(expectMode)})`);
+  if (expectTamper !== null && expectTamper !== 'native') {
+    refuse(`--expect-tamper must be native — the mode that corrupts this verifier's products; the bundle's archive/manifest modes belong to scripts/release-verify.mjs (got ${JSON.stringify(expectTamper)})`);
+  }
+  if (expectTamper === 'native' && !tamperPlatform) {
+    refuse('--expect-tamper native needs --tamper-platform: the dispatch that corrupted a product named which platform\'s artifact it corrupted, and the run must say which');
+  }
+  if (expectTamper === null && tamperPlatform !== null) refuse('--tamper-platform only means something with --expect-tamper native');
+  if (tamperPlatform !== null && !PLATFORMS[tamperPlatform]) {
+    refuse(`--tamper-platform ${JSON.stringify(tamperPlatform)} is not one of ${Object.keys(PLATFORMS).join(', ')}`);
+  }
 
   const names = readdirSync(dir).filter((name) => statSync(join(dir, name)).isFile()).sort();
   const sole = (suffix) => {
@@ -168,8 +271,48 @@ function main() {
     }
   }
 
+  // The dispatch's tamper, labelled (issue #72): a run that carries the self-test is told which
+  // artifact it corrupted, and only the disagreements that corruption explains are marked. The
+  // exit status stays 1 either way — a designed RED is a RED — and a run whose tamper explains
+  // nothing, or that finds nothing at all, is not allowed to pass.
+  const tamper = expectTamper === 'native' ? tamperScope(tamperPlatform, version) : null;
+  if (tamper) {
+    if (failures.length === 0) {
+      tamper.didNotBite = true;
+      failures.push(`this run dispatched tamper=native (platform ${tamper.platform}): the dispatch corrupts ${tamper.name ?? 'that platform\'s primary artifact'} after its .sha256 sidecar and its record are written, yet every hash verified`);
+    } else {
+      const credited = failures.some(tamper.signal);
+      for (const failure of failures) (credited && tamper.explains(failure) ? tamper.explained : tamper.unexplained).push(failure);
+    }
+  }
+
   if (failures.length) {
-    console.error(JSON.stringify({ verified: false, dir, mode: expectMode, failures }, null, 2));
+    if (tamper) reportTamperScope(tamper);
+    console.error(JSON.stringify({
+      verified: false,
+      dir,
+      mode: expectMode,
+      failures,
+      ...(tamper ? {
+        expectedTamper: {
+          mode: 'native',
+          platform: tamper.platform,
+          explainsAllFailures: tamper.explained.length > 0 && tamper.unexplained.length === 0,
+          didNotBite: tamper.didNotBite,
+          explainedFailures: tamper.explained,
+          unexplainedFailures: tamper.unexplained,
+        },
+      } : {}),
+    }, null, 2));
+    if (tamper && !tamper.didNotBite && tamper.unexplained.length === 0) {
+      console.error(`native-verify: EXPECTED RED — the tamper self-test (tamper=native, platform ${tamper.platform}), not a release defect.`);
+    }
+    if (tamper && tamper.unexplained.length > 0) {
+      console.error(`native-verify: NOT an expected RED — ${tamper.unexplained.length} failure(s) are outside the tamper self-test (tamper=native, platform ${tamper.platform}).`);
+    }
+    if (tamper && tamper.didNotBite) {
+      console.error(`native-verify: TAMPER SELF-TEST DID NOT BITE (tamper=native, platform ${tamper.platform}) — a defect in the self-test, not a release defect.`);
+    }
     process.exit(1);
   }
 

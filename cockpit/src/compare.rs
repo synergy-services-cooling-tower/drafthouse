@@ -1003,6 +1003,115 @@ mod tests {
         write("c-recorded.drafthouse", &c.write());
     }
 
+    /// Issue #117: the native `--compare` route's exported sheet, written for the web parity test
+    /// (`tests/compare-web-parity.test.js`).
+    ///
+    /// This is the native side of the parity claim, driven through the route's own pieces: the
+    /// commands are built by the same function the native file work uses
+    /// ([`crate::files::compare_file_command`]), each is parsed exactly as the screens' command
+    /// channel parses them (`screens::apply`), opened through the same [`open`] the screen's frame
+    /// calls, and exported through the same [`export_pdf`] the screen's button calls. The sheet
+    /// lands as `<out>/native-sheet.pdf` and the readback facts as `<out>/native-facts.json`;
+    /// `DRAFTHOUSE_COMPARE_PARITY_OUT` names the directory. `#[ignore]`d: it writes files, so it is
+    /// run by the parity test, or deliberately with the variable set.
+    #[test]
+    #[ignore = "writes the native route's comparison sheet for tests/compare-web-parity.test.js; run through that test"]
+    fn native_compare_sheet_for_parity() {
+        let out = std::env::var("DRAFTHOUSE_COMPARE_PARITY_OUT").expect(
+            "DRAFTHOUSE_COMPARE_PARITY_OUT must name the directory the sheet is written to",
+        );
+        let out = PathBuf::from(out);
+        std::fs::create_dir_all(&out).expect("the parity out directory");
+
+        // The native route: one command per file, built where the file system is.
+        let assets = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/variants");
+        let paths = [
+            assets.join("a-base.drafthouse"),
+            assets.join("b-fan-faster.drafthouse"),
+        ];
+        let commands: Vec<String> = paths
+            .iter()
+            .map(|path| {
+                crate::files::compare_file_command(path)
+                    .unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
+                    .1
+            })
+            .collect();
+
+        // The command channel's own parse (`screens::apply`): everything after the verb and the
+        // name's first `:` is the file's text.
+        let engine = engine();
+        let cat = catalog();
+        let variants: Vec<Variant> = commands
+            .iter()
+            .map(|command| {
+                let rest = command
+                    .strip_prefix("compare:open:")
+                    .expect("the route's own verb");
+                let (name, text) = rest.split_once(':').expect("compare:open:<name>:<text>");
+                open(text, name, &cat, engine.as_ref())
+                    .unwrap_or_else(|e| panic!("open {name}: {e}"))
+            })
+            .collect();
+        assert_eq!(variants.len(), 2);
+        assert_eq!(variants[0].name, "a-base.drafthouse");
+        assert_eq!(variants[1].name, "b-fan-faster.drafthouse");
+        assert_ne!(
+            variants[0].digest, variants[1].digest,
+            "the two files are two variants"
+        );
+
+        // The button's own call: the sheet, at the default DEMO account (`screens::Account::Demo`).
+        let sheet = export_pdf(&variants, true).expect("the native sheet exports");
+        std::fs::write(out.join("native-sheet.pdf"), &sheet.bytes).expect("write the sheet");
+
+        // The facts the web leg checks its own screen against: the same names, every row's
+        // displayed string (the painter's own `display`), the sheet's name and digest.
+        let rows: Vec<serde_json::Value> = Metric::ALL
+            .iter()
+            .map(|m| {
+                serde_json::json!([
+                    m.label(),
+                    variants
+                        .iter()
+                        .map(|v| match value(*m, v) {
+                            Some(x) => display(*m, x),
+                            None => "refused".to_string(),
+                        })
+                        .collect::<Vec<String>>(),
+                ])
+            })
+            .collect();
+        let facts = serde_json::json!({
+            "files": variants.iter().map(|v| v.name.clone()).collect::<Vec<_>>(),
+            "digests": variants.iter().map(|v| v.digest.clone()).collect::<Vec<_>>(),
+            "sheet_name": sheet.name,
+            "sheet_bytes": sheet.bytes.len(),
+            "sheet_sha256": crate::sha256::hex(&sheet.bytes),
+            "demo": true,
+            "rows": rows,
+        });
+        std::fs::write(
+            out.join("native-facts.json"),
+            format!(
+                "{}\n",
+                serde_json::to_string_pretty(&facts).expect("facts serialize")
+            ),
+        )
+        .expect("write the facts");
+        println!(
+            "native comparison sheet: {} ({} bytes, sha256 {}) for {}",
+            sheet.name,
+            sheet.bytes.len(),
+            crate::sha256::hex(&sheet.bytes),
+            variants
+                .iter()
+                .map(|v| v.name.as_str())
+                .collect::<Vec<_>>()
+                .join(" + ")
+        );
+    }
+
     /// The verdict is the engine's own channel: a clean run is accepted; a run with validation
     /// limits, or an error, is refused naming the engine's reasons - no second opinion is formed.
     #[test]

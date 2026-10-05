@@ -48,6 +48,33 @@ fn record(s: &str) {
     }
 }
 
+// -------------------------------------------------------------------- control-hit inventory
+
+// Issue #117: the screens' interactive controls, by their own ids, in canvas pixels - the screens'
+// counterpart of the instrument's `data-hits` (`crate::app::HitMap`). The instrument reports what
+// it drew, so a headless harness can aim a real pointer at a tray card instead of guessing
+// coordinates; a screen like Compare owes a harness the same. The frame's start clears the
+// inventory ([`hits_begin`]) and its publish step takes it ([`hits_take`]), so it always describes
+// the frame that was just drawn.
+thread_local! {
+    static HITS: RefCell<Vec<(String, [f32; 4])>> = const { RefCell::new(Vec::new()) };
+}
+
+pub fn hits_begin() {
+    HITS.with(|h| h.borrow_mut().clear());
+}
+pub fn hits_take() -> Vec<(String, [f32; 4])> {
+    HITS.with(|h| std::mem::take(&mut *h.borrow_mut()))
+}
+fn record_hit(id: &str, rect: Rect) {
+    HITS.with(|h| {
+        h.borrow_mut().push((
+            id.to_string(),
+            [rect.min.x, rect.min.y, rect.width(), rect.height()],
+        ));
+    });
+}
+
 /// Paint one string and record it in the inventory. Returns the drawn rect.
 pub fn text(p: &Painter, pos: Pos2, align: Align2, s: &str, font: FontId, color: Color32) -> Rect {
     record(s);
@@ -277,6 +304,7 @@ pub fn hit(ui: &Ui, rect: Rect, id: &str) -> Response {
     if resp.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }
+    record_hit(id, resp.rect);
     resp
 }
 

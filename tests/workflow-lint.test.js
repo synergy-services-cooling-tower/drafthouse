@@ -21,15 +21,37 @@
  *     unit suite, and the snapshot leak gate (the builder and the checker together) — while the
  *     generated public CI keeps the full chain and the plane build;
  *   * the job a pull request may start — the private `quick` tier, or the generated public CI's
- *     `validate` job — carries **no escape hatch** (fix contract 2): no `|| true` / `|| :` /
- *     `set +e` in any step's `run:`, no `continue-on-error` (step level or job level), and no
- *     echo-only step. A leg that cannot fail the job is not a gate, so each of those shapes is
- *     refused, named with its step and line;
+ *     `validate` job — carries **no escape hatch** (fix contract 2, extended by issue #94): no
+ *     `|| true` / `|| :` / `set +e` in any step's `run:`, no `continue-on-error` (step level or
+ *     job level), no echo-only step, and **no step-level `if:`** — any value that can skip a
+ *     step (`false`, a condition, an expression) is refused, because no step on either surface
+ *     carries one, so nothing is allowlisted. A leg that cannot fail the job is not a gate, so
+ *     each of those shapes is refused, named with its step and line;
+ *   * the step-level `if:` refusal is **scoped by the trigger, and the scope enforces itself**
+ *     (issue #123): it reaches every workflow a pull request can start — a file whose `on:` block
+ *     carries `pull_request` may carry no step-level `if:` in any job, which
+ *     `assertNoStepLevelIfOnPullRequestWorkflows` re-derives from each file's own trigger on every
+ *     run. `.github/workflows/release.yml` is outside that set **because of its trigger**, not by
+ *     allowlist: a `v*` tag push plus `workflow_dispatch`, never `pull_request` — its `on:` block
+ *     is release.yml:15-18 — so it cannot start on a pull request, and the step-level `if:` sites
+ *     it carries (23 when this note was written; the scan re-derives the sites from the parse,
+ *     never from that number) are legal today. Add `pull_request` to that trigger and the scan
+ *     refuses them by name;
  *   * the release workflow the builder emits (issue #102) keeps the properties a consumer pins
  *     by: a `v*` tag push and a dispatch dry run, public (`ubuntu`) runners only, no repository
  *     secret, the plane built through its gated build script, the plane's three parts asserted
  *     before packing, and the archive + `.sha256` + manifest published — with the recognition
- *     sentence below, so this lint reads it as generated rather than as a private workflow.
+ *     sentence below, so this lint reads it as generated rather than as a private workflow;
+ *   * the lane archive's committed evidence carries no local paths (issue #94, part 2; the
+ *     report half is issue #25; the commitability rule is the follow-up): a log, a markdown
+ *     report under the archive, or the root lane report that still spells this machine's home,
+ *     lane-worktree or per-user temp path fails unless it is byte-identical to its recorded
+ *     seal; the writers redact before they write, and the pre-existing report population is
+ *     sealed like the logs. The scan judges only what a commit can carry — a file git ignores
+ *     (a probe's uncompressed `.log` leftover beside its committed `.log.gz`) reaches no commit
+ *     and is not judged, while anything tracked is, so the exemption cannot become an escape
+ *     hatch. (The check is embedded in the first case below, for the count-pin reason the
+ *     release-workflow checks state there.)
  *
  * The generated public CI is recognised by the provenance sentence its builder writes into it
  * (`GENERATED` below, from `scripts/public-snapshot.mjs`); a file that loses that sentence is
@@ -45,11 +67,13 @@
  */
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { gunzipSync } from 'node:zlib';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const workflowDir = join(process.env.WORKFLOW_LINT_ROOT ?? root, '.github', 'workflows');
@@ -103,6 +127,8 @@ const QUICK_LEGS = [
  *
  *   public-snapshot:not-published scripts/public-snapshot.mjs — snapshot tooling, excluded from the public tree; only spawned when this tree is the private repository.
  *   public-snapshot:not-published scripts/public-snapshot-check.mjs — snapshot tooling, excluded; only matched against the private repository's quick tier.
+ *   public-snapshot:not-published evidence — the lane archive is excluded from the public tree; the committed-evidence scan (issues #94, #25) reads it only when this tree is the private repository.
+ *   public-snapshot:not-published .lane-report.md — the root lane report is private-repo-only; the scan reads it only when this tree is the private repository.
  */
 
 const MAC_WIN = /macos|windows/i;
@@ -131,6 +157,8 @@ function readStepProperty(step, key, raw, lines, i) {
   const value = raw.trim();
   if (key === 'name') step.name = value;
   if (key === 'continue-on-error') step.continueOnError = { line: i + 1, value };
+  // A step-level `if:` (issue #94): captured here, refused in `assertNoEscapeHatch` below.
+  if (key === 'if') step.ifExpr = { line: i + 1, value };
   if (key !== 'run') return;
   step.runLine = i + 1;
   if (!/^[|>][-+]?$/.test(value)) {
@@ -214,7 +242,7 @@ function parseWorkflow(file, dir = workflowDir) {
     if (os) current.matrixOs.push(...os[1].split(',').map((name) => name.trim()).filter(Boolean));
     const dash = line.match(/^ {6}- (.*)$/);
     if (dash) {
-      const step = { line: i + 1, name: null, run: null, runLine: null, continueOnError: null };
+      const step = { line: i + 1, name: null, run: null, runLine: null, continueOnError: null, ifExpr: null };
       current.steps.push(step);
       const inline = dash[1].match(/^([A-Za-z_-]+):\s*(.*)$/);
       if (inline) readStepProperty(step, inline[1], inline[2], lines, i);
@@ -364,6 +392,21 @@ test('the workflow triggers match its shape', () => {
       rmSync(scratch, { recursive: true, force: true });
     }
   }
+
+  /*
+   * Issue #94, part 2 — the lane archive's committed logs, extended by issue #25 to its markdown
+   * reports and the root lane report. Embedded in this case rather than added as a top-level one
+   * for the same reason the release-workflow checks above are: the suite's total test count is
+   * drift-pinned to VALIDATION_RESULTS.md, and that figure must not move while two lanes share
+   * the tree. The public tree carries no `evidence` directory and no lane report, so the scan
+   * has nothing to read there (the declarations above keep the references legal).
+   */
+  assertCommittedEvidenceHasNoLocalPaths();
+  // Issue #25, the review's SHOULD-FIX: the scan's own bite witness, in-suite. The archive call
+  // above can no longer testify to a narrowed pattern list or file set (its historical carriers
+  // are sealed, so a narrowed scan still agrees with them), and the external `red-25-*` probes
+  // are not scheduled by anything — see `assertEvidenceScanBites`.
+  assertEvidenceScanBites();
 });
 
 test('the quick tier exists exactly when this is the private workflow', () => {
@@ -432,8 +475,11 @@ test('no private workflow runs a macOS/Windows or heavy job on a pull_request or
 });
 
 /**
- * Refuses every escape hatch (fix contract 2) in the job a pull request may start. Each failure
- * names the file, the line, the step and the shape, so a masked leg cannot slip through.
+ * Refuses every escape hatch (fix contract 2, extended by issue #94) in the job a pull request
+ * may start: a step-level `if:` first — any value, because neither the private `quick` tier nor
+ * the generated public CI's `validate` job carries one, so no shape is allowlisted — then the
+ * masked-run shapes, `continue-on-error` and echo-only steps. Each failure names the file, the
+ * line, the step and the shape, so a masked leg cannot slip through.
  */
 function assertNoEscapeHatch(file, job) {
   const stepName = (step) => `step ${JSON.stringify(step.name ?? '(unnamed)')}`;
@@ -444,6 +490,12 @@ function assertNoEscapeHatch(file, job) {
       + `\`continue-on-error: ${job.continueOnError?.value ?? ''}\` — a job a pull request may start must be able to fail`
   );
   for (const step of job.steps) {
+    if (step.ifExpr) {
+      assert.fail(
+        `${file}:${step.ifExpr.line}: ${stepName(step)} carries a step-level \`if: ${step.ifExpr.value}\` — `
+          + 'a step a pull request may start must not be conditionally skipped (issue #94)'
+      );
+    }
     if (step.continueOnError) {
       assert.fail(
         `${file}:${step.continueOnError.line}: ${stepName(step)} carries `
@@ -468,7 +520,309 @@ function assertNoEscapeHatch(file, job) {
   }
 }
 
+/**
+ * The trigger-scoped half of the step-level `if:` refusal (issue #123): **every workflow a pull
+ * request can start** — any file whose own `on:` block carries `pull_request` — must carry no
+ * step-level `if:` in any job, because a step on such a surface must not be conditionally skipped.
+ * `assertNoEscapeHatch` holds the eager surfaces to the same contract by job name; this scan
+ * scopes it by the trigger, re-read from the file on every run, so no exemption list can rot.
+ *
+ * That is exactly why `.github/workflows/release.yml`'s step-level `if:` sites are legal today:
+ * its trigger is a `v*` tag push plus `workflow_dispatch` (the boundary note in the header), so
+ * it is not scanned — and the moment it (or any other workflow) gains `pull_request`, its sites
+ * are refused, named with their file, line, step and value.
+ */
+function assertNoStepLevelIfOnPullRequestWorkflows() {
+  const scanned = [];
+  const refusals = [];
+  for (const file of workflowFiles()) {
+    const { triggers, jobs } = parseWorkflow(file);
+    if (!triggers.pull_request) continue;
+    scanned.push(file);
+    for (const [name, job] of jobs) {
+      for (const step of job.steps) {
+        if (!step.ifExpr) continue;
+        refusals.push(
+          `${file}:${step.ifExpr.line}: job \`${name}\`, step ${JSON.stringify(step.name ?? '(unnamed)')} `
+            + `carries a step-level \`if: ${step.ifExpr.value}\``
+        );
+      }
+    }
+  }
+  assert.deepEqual(
+    refusals,
+    [],
+    'a workflow a pull request can start carries a step-level `if:` — a step on such a surface '
+      + "must not be conditionally skipped (issue #94's contract, scoped by the trigger since "
+      + `issue #123):\n  ${refusals.join('\n  ')}`
+  );
+  // Refuse a vacuous pass: if no workflow a pull request can start was scanned at all, this check
+  // would agree with every tree.
+  assert.ok(
+    scanned.length > 0,
+    'no workflow a pull request can start was scanned — the step-level `if:` boundary check would pass vacuously'
+  );
+}
+
+/**
+ * The committed-evidence scan's file set (issue #94, part 2; extended by issue #25): run logs
+ * and stderr captures, and — because the redaction class recurred in the lane reports' own
+ * headers, where no writer runs — the archive's markdown reports and the root lane report. The
+ * report half is therefore IN the gate's reach; its pre-existing population is sealed exactly
+ * like the pre-existing logs (a byte-identical file is the only exemption), so the gate stays
+ * green on history and bites on anything new.
+ */
+const LOG_FILE = /\.log(\.gz)?$|\.err$/;
+const REPORT_FILE = /\.md$/;
+
+/**
+ * The shapes a committed log or report must not carry (issue #94, part 2; extended by issue
+ * #25). The list is measured over the committed tree at the #25 head, not guessed — a future
+ * extension repeats that measurement (scan this scan's file set for host-path-looking strings,
+ * then decide) rather than widening on a hunch. The scan re-derives every run, so these
+ * figures are the record of why the list is shaped this way, not a pin:
+ *
+ *   the machine's home path       414 logs,  22 reports   (the original #94 shape)
+ *   a lane-worktree path          357 logs,  27 reports   (the original #94 shape)
+ *   a macOS per-user temp path     75 logs,   3 reports   (added by #25 — the #114 finding)
+ *
+ * Deliberately NOT covered, each with the reason it is not this class: generic temp scratch
+ * paths under the system `/tmp` root, including the `/private/tmp` mirror (100 logs, 14
+ * reports — a standard location every Unix host carries, naming no account and no lane); the
+ * hosted CI runner's home root (14 logs — that machine is GitHub's, not this one); standard
+ * tool prefixes such as the Homebrew one (1 report); and a bare tool-directory token with no
+ * path under it (1 log, a quoted string — not a path; the lane shape this scan covers is the
+ * directory followed by its worktrees root, which IS matched).
+ *
+ * A writer must redact a home, lane-worktree or per-user temp prefix before it commits
+ * evidence, and a lane report must write its worktree line without an absolute path. Spelled
+ * so this file's own published copy does not trip the snapshot leak gate's machine-path check:
+ * a slash pair the checker reads as a machine path is written with a backslash between its
+ * parts or as a character class, which the checker's own senses do not read as the literal.
+ */
+const LOCAL_PATH_PATTERNS = [
+  { shape: 'the machine\'s home path', re: /\/Users\// },
+  { shape: 'a lane-worktree path', re: /[.]herdr\/worktrees\// },
+  { shape: 'a macOS per-user temp path', re: /\/var\/folders\// }
+];
+
+/**
+ * Scans a tree for committed evidence logs or reports that carry this machine's local paths
+ * (issue #94, part 2; the report half is issue #25), returning one line per finding. The archive
+ * call below refuses a non-empty result; the bite witness (`assertEvidenceScanBites`) scans a
+ * planted scratch tree through this same function — so a narrowed pattern list or file set reds
+ * the suite itself, not only the external probes.
+ *
+ * "Committed" is enforced, not assumed: the walk exempts every path git reports as ignored and
+ * untracked (`gitIgnoredEvidencePaths`) — an earlier round's probes left uncompressed `.log`
+ * files that `.gitignore`'s `*.log` excludes and no commit can carry, so the gate was red on a
+ * checkout whose committed archive was clean (a fresh clone — what CI and the reviewer see —
+ * has none: the defect this rule fixes). The same rule is why the exemption is not an escape
+ * hatch: `git add`ing an offending file (or committing it with `-f`) makes git report it
+ * tracked, it drops out of the exemption set, and the scan judges it again. In a tree that is
+ * not a git repository — the bite witness's scratch fixture — the exemption set is empty by
+ * design, so every planted file is judged; the witness's exact-findings assertion is what still
+ * reds the suite for a narrowed pattern list or a reverted file set.
+ *
+ * The lane archive is a record of runs at their own commits, so the files committed before the
+ * writers redacted are **sealed**: the issue #94 seal list in `evidence` records each offender's
+ * sha256, and only a byte-identical file is exempt. Everything else — a log or report added
+ * since, or a sealed file whose bytes changed — must be clean, because the writers redact before
+ * they write and the report headers are written without an absolute path. The report half exists
+ * because the class recurred twice in `Worktree:`-style headers (#107/#100, #117) with no writer
+ * anywhere in the path: those files are scanned here, and their pre-existing population is
+ * sealed the same way. The public tree carries no `evidence` directory and no lane report, so
+ * absence is not a failure.
+ */
+function scanEvidenceLocalPaths(scanRoot) {
+  const evidenceDir = join(scanRoot, 'evidence');
+  const laneReport = join(scanRoot, '.lane-report.md');
+  if (!existsSync(evidenceDir) && !existsSync(laneReport)) return [];
+  const sealFile = join(evidenceDir, 'issue-94', 'legacy-log-seals.txt');
+  const seals = new Map();
+  if (existsSync(sealFile)) {
+    for (const line of readFileSync(sealFile, 'utf8').split('\n')) {
+      const entry = line.trim();
+      if (entry === '' || entry.startsWith('#')) continue;
+      const seal = entry.match(/^([0-9a-f]{64})\s+(\S.*)$/);
+      assert.ok(seal, `${sealFile} carries a line this scan cannot read: ${entry}`);
+      seals.set(seal[2], seal[1]);
+    }
+  }
+  const ignored = gitIgnoredEvidencePaths(scanRoot);
+  const failures = [];
+  const scanFile = (path) => {
+    const relativePath = relative(scanRoot, path).split(sep).join('/');
+    const bytes = readFileSync(path);
+    let text;
+    try {
+      text = path.endsWith('.gz') ? gunzipSync(bytes).toString('utf8') : bytes.toString('utf8');
+    } catch (error) {
+      failures.push(
+        `${relativePath}: cannot be read as a gzip stream (${error.message}) — a log that cannot be read cannot be proven clean`
+      );
+      return;
+    }
+    for (const { shape, re } of LOCAL_PATH_PATTERNS) {
+      const hit = text.match(re);
+      if (!hit) continue;
+      const digest = createHash('sha256').update(bytes).digest('hex');
+      if (seals.get(relativePath) === digest) continue; // bytes-identical to its seal: the recorded legacy file
+      const line = text.slice(0, hit.index).split('\n').length;
+      const sample = hit[0].length > 80 ? `${hit[0].slice(0, 77)}…` : hit[0];
+      failures.push(
+        `${relativePath}:${line}: carries ${shape} (\`${sample}\`) — a committed log or report must not carry this machine's local paths; `
+          + 'the writers redact before they write, and a pre-existing file is exempt only through its seal (issues #94, #25)'
+      );
+    }
+  };
+  const walk = (directory) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        walk(path);
+        continue;
+      }
+      if (!entry.isFile() || (!LOG_FILE.test(entry.name) && !REPORT_FILE.test(entry.name))) continue;
+      if (ignored.has(relative(scanRoot, path).split(sep).join('/'))) continue;
+      scanFile(path);
+    }
+  };
+  if (existsSync(evidenceDir)) walk(evidenceDir);
+  if (existsSync(laneReport) && !ignored.has('.lane-report.md')) scanFile(laneReport);
+  return failures;
+}
+
+/**
+ * The paths under `scanRoot` that git ignores and does not track — files no plain commit can
+ * carry, so judging them would be a red gate on a checkout whose *committed* archive is clean.
+ * They exist because an evidence probe writes its raw log before the lane compresses the
+ * committed `.log.gz`, and `.gitignore` excludes the raw `.log`; a fresh clone (what CI checks
+ * out) carries none, which is why only a developer's checkout saw the false red.
+ *
+ * Returns scan-root-relative POSIX paths. EMPTY whenever git cannot answer for the tree — the
+ * bite witness's `mkdtemp` scratch fixture is not a repository, and judging everything there is
+ * the only safe direction: a context that cannot say what a commit would carry must not exempt
+ * anything silently. The set is derived per run and only for untracked paths git reports as
+ * ignored: `git add`ing one of them (or committing it with `-f`) makes it tracked, git then
+ * reports it not ignored, and the scan judges it again — the exemption is not an escape hatch.
+ */
+function gitIgnoredEvidencePaths(scanRoot) {
+  const ignored = new Set();
+  const result = spawnSync(
+    'git',
+    ['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--', 'evidence', '.lane-report.md'],
+    { cwd: scanRoot, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }
+  );
+  if (result.status !== 0) return ignored;
+  for (const path of (result.stdout ?? '').split('\0')) {
+    if (path !== '') ignored.add(path);
+  }
+  return ignored;
+}
+
+/**
+ * Refuses a committed evidence log or report that carries this machine's local paths (issues
+ * #94 and #25) — the archive call of `scanEvidenceLocalPaths`. Its in-suite bite witness is
+ * `assertEvidenceScanBites`.
+ */
+function assertCommittedEvidenceHasNoLocalPaths() {
+  const failures = scanEvidenceLocalPaths(root);
+  assert.deepEqual(
+    failures,
+    [],
+    `committed evidence logs and reports carry this machine's local paths (issues #94 and #25):\n  ${failures.join('\n  ')}`
+  );
+}
+
+/**
+ * The scan's in-suite bite witness (issue #25, the review's SHOULD-FIX): plants each covered
+ * shape into a scratch fixture — the per-user temp shape into a log, the `Worktree:` header
+ * shapes into an archive-style report, and the lane-worktree shape into the root lane report —
+ * then asserts the scan returns exactly the planted findings. A narrowed pattern list or file
+ * set leaves the fixture short, so this suite reds on its own; nothing outside it is scheduled.
+ * The fixture is a bare `mkdtemp` tree and never a git repository — load-bearing, now that the
+ * scan exempts what git ignores: the exemption set is empty there by design
+ * (`gitIgnoredEvidencePaths`), so the plants are judged exactly like a repository's committable
+ * files would be, and a scan that found nothing cannot pass here: the exact-count assertion
+ * below fires and names the shortfall. The archive's own files cannot testify to this: their
+ * carriers are sealed, and a narrowed scan still agrees with a sealed file (it finds nothing
+ * left to refuse). Non-vacuous by construction: the fixture is read back after writing, and a
+ * scan that finds less, more or nothing than the plant fails here, loudly.
+ *
+ * The fixture text is assembled from parts at runtime, because this file is published: a literal
+ * home, worktrees-root or per-user temp path in its own source would red the snapshot leak gate
+ * — the same reason the scan's patterns above are written with escaped slashes.
+ */
+function assertEvidenceScanBites() {
+  const slash = '/';
+  const dot = '.';
+  const plants = [
+    {
+      path: join('evidence', 'plant-25', 'log-plant.log'),
+      lines: [
+        'a committed run log, otherwise clean',
+        `the budget read ${slash}var${slash}folders${slash}ab12${slash}T${slash}budget.json before the writers redacted`
+      ],
+      expect: [{ line: 2, shape: 'a macOS per-user temp path' }]
+    },
+    {
+      path: join('evidence', 'plant-25', 'report-plant.md'),
+      lines: [
+        '# A lane report',
+        '',
+        `**Worktree:** ${slash}Users${slash}plant${slash}${dot}herdr${slash}worktrees${slash}drafthouse${slash}impl-plant`
+      ],
+      expect: [
+        { line: 3, shape: "the machine's home path" },
+        { line: 3, shape: 'a lane-worktree path' }
+      ]
+    },
+    {
+      path: '.lane-report.md',
+      lines: [`**Worktree:** ${slash}${dot}herdr${slash}worktrees${slash}drafthouse${slash}impl-plant`],
+      expect: [{ line: 1, shape: 'a lane-worktree path' }]
+    }
+  ];
+  const fixture = mkdtempSync(join(tmpdir(), 'drafthouse-evidence-scan-'));
+  try {
+    for (const plant of plants) {
+      const path = join(fixture, plant.path);
+      const text = `${plant.lines.join('\n')}\n`;
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, text);
+      assert.equal(
+        readFileSync(path, 'utf8'),
+        text,
+        `the scratch fixture ${plant.path.split(sep).join('/')} could not be planted — the bite witness must fail, not pass vacuously`
+      );
+    }
+    const findings = scanEvidenceLocalPaths(fixture);
+    const expected = plants.flatMap((plant) => plant.expect.map((one) => ({ file: plant.path.split(sep).join('/'), ...one })));
+    for (const { file, line, shape } of expected) {
+      assert.ok(
+        findings.some((found) => found.startsWith(`${file}:${line}:`) && found.includes(`carries ${shape}`)),
+        'the committed-evidence scan no longer names '
+          + `${file}:${line} carrying ${shape} in the planted fixture — a covered shape and file kind the scan must red on:\n`
+          + `  ${findings.join('\n  ') || '(no findings)'}`
+      );
+    }
+    assert.equal(
+      findings.length,
+      expected.length,
+      `the scan found ${findings.length} finding(s) in the planted fixture, expected ${expected.length} — `
+        + 'a narrowed pattern list or file set must red here, not come back short:\n  '
+        + `${findings.join('\n  ') || '(no findings)'}`
+    );
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
+}
+
 test('the job a pull request may start carries its legs and no escape hatch', () => {
+  // Issue #123: the same refusal, scoped by each workflow's own trigger — release.yml is out of
+  // reach only because it carries no `pull_request`, and this scan re-reads that on every run.
+  assertNoStepLevelIfOnPullRequestWorkflows();
   const { jobs, generated } = reads();
   if (generated) {
     const full = stripComments(jobs.get('validate').body);

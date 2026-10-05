@@ -1,6 +1,6 @@
 [package]
 name = "synergy-drafthouse"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 description = "Cooling-tower engine core in Rust. Ported slice 1: psychrometrics and counterflow Merkel demand. The JavaScript engine in ../src remains the reference until parity is proven."
 license = "PolyForm-Noncommercial-1.0.0"

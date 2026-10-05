@@ -958,6 +958,26 @@ pub fn file_commands(
     }
 }
 
+/// Issue #117: one saved project file as the comparison's own command - the native `--compare` route
+/// reads the file here (where the file system is) and hands the comparison screen
+/// `compare:open:<name>:<text>`; the web plane's page hands over the same command, built from the
+/// text its own file picker read. The native route and the parity test that pins the web route's
+/// export against it both build the command through this function, so the two cannot drift apart.
+///
+/// A `:` inside the *name* is written as `_` - the name is the column's label, not its identity
+/// (the digest is) - because the command's name field ends at the first `:`; the text keeps every
+/// colon it carries. Returns `(name, command)` so the caller can also print the name.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn compare_file_command(path: &std::path::Path) -> Result<(String, String), String> {
+    let text = native::read_text(path)?;
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path.display().to_string())
+        .replace(':', "_");
+    Ok((name.clone(), format!("compare:open:{name}:{text}")))
+}
+
 /// The native command line's file work: open / import before the run, then the save and the exports after
 /// it. This is also the **headless** path an evidence run uses - it runs the engine itself when the UI is
 /// not going to (there is no window, so no UI pass, so nothing else would produce the run the snapshot
@@ -1001,15 +1021,10 @@ pub fn file_work(
         if let Ok(mut q) = crate::app::COMMANDS.lock() {
             q.push("screen:compare".to_string());
             for path in files {
-                match native::read_text(&path) {
-                    Ok(text) => {
-                        let name = path
-                            .file_name()
-                            .map(|n| n.to_string_lossy().into_owned())
-                            .unwrap_or_else(|| path.display().to_string())
-                            .replace(':', "_");
+                match compare_file_command(&path) {
+                    Ok((name, command)) => {
                         println!("drafthouse: comparison: {name} ({})", path.display());
-                        q.push(format!("compare:open:{name}:{text}"));
+                        q.push(command);
                     }
                     Err(error) => {
                         session.refused = true;

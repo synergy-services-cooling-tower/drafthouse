@@ -1,0 +1,1322 @@
+{
+  "$schema": "regression test vectors — recorded behaviour, NOT validated truth",
+  "status": "UNVALIDATED AGAINST DOMAIN REFERENCES",
+  "warning": "These record what this software computes. They have not been checked against CTI ToolKit, published benchmarks, or measured tower data. Do not cite them as evidence of accuracy. See docs/VALIDATION.md section 8.",
+  "provenance": {
+    "expectations": "engine-generated. Every `expected` value in this file was produced by this repository's own JavaScript engine (scripts/generate-vectors.mjs) from the same code the tests replay. Replaying them proves internal consistency and locks behaviour for the Rust/wasm port; it proves nothing about accuracy. The cases whose expectation is externally anchored are in tests/, not here.",
+    "externalAnchors": "tests/psychrometrics-ashrae.test.js (ASHRAE Fundamentals tables at standard pressure, 0-50 °C); tests/psychrometrics-cold-pressure.test.js (ASHRAE over-ice table values, the IAPWS R14-08(2011) sublimation equation, PsychroLib recorded reference values, an independent first-principles wet-bulb derivation, Buck (1981) and WMO/Sonntag enhancement factors); tests/psychrometrics-range.test.js (ASHRAE over-ice table values); tests/merkel-accuracy.test.js (independently written quadrature)."
+  },
+  "prototypeVersion": "0.1.0",
+  "catalogRevision": "illustrative-catalog-v0.1",
+  "units": "SI throughout: °C, Pa, kg/s, kJ/kg dry air, m³/s, kW",
+  "families": {
+    "psychrometrics": [
+      {
+        "id": "psy-tropical",
+        "dryBulbC": 33,
+        "wetBulbC": 27,
+        "pressurePa": 101325,
+        "expected": {
+          "humidityRatio": 0.020226399,
+          "relativeHumidity": 0.631275245,
+          "enthalpyKJkgDryAir": 85.025720276,
+          "dewPointC": 25.046727675,
+          "moistAirDensityKgM3": 1.139290537,
+          "saturationVaporPressurePa": 5034.342051,
+          "saturationHumidityRatio": 0.032660949,
+          "saturatedAirEnthalpyKJkgDryAir": 116.8877626
+        }
+      },
+      {
+        "id": "psy-temperate",
+        "dryBulbC": 25,
+        "wetBulbC": 18,
+        "pressurePa": 101325,
+        "expected": {
+          "humidityRatio": 0.010072974,
+          "relativeHumidity": 0.507423101,
+          "enthalpyKJkgDryAir": 50.810900555,
+          "dewPointC": 14.09096914,
+          "moistAirDensityKgM3": 1.176824386,
+          "saturationVaporPressurePa": 3169.21647,
+          "saturationHumidityRatio": 0.02016832,
+          "saturatedAirEnthalpyKJkgDryAir": 76.528794257
+        }
+      },
+      {
+        "id": "psy-hot-dry",
+        "dryBulbC": 42,
+        "wetBulbC": 24,
+        "pressurePa": 101325,
+        "expected": {
+          "humidityRatio": 0.011399407,
+          "relativeHumidity": 0.221258819,
+          "enthalpyKJkgDryAir": 71.652438109,
+          "dewPointC": 15.979725404,
+          "moistAirDensityKgM3": 1.112470735,
+          "saturationVaporPressurePa": 8207.966796,
+          "saturationHumidityRatio": 0.055073442,
+          "saturatedAirEnthalpyKJkgDryAir": 184.293016581
+        }
+      },
+      {
+        "id": "psy-humid-near-saturation",
+        "dryBulbC": 28,
+        "wetBulbC": 27.5,
+        "pressurePa": 101325,
+        "expected": {
+          "humidityRatio": 0.023282733,
+          "relativeHumidity": 0.962652439,
+          "enthalpyKJkgDryAir": 87.610680882,
+          "dewPointC": 27.348443331,
+          "moistAirDensityKgM3": 1.156173231,
+          "saturationVaporPressurePa": 3782.206968,
+          "saturationHumidityRatio": 0.0242212,
+          "saturatedAirEnthalpyKJkgDryAir": 90.006661897
+        }
+      },
+      {
+        "id": "psy-cool",
+        "dryBulbC": 10,
+        "wetBulbC": 7,
+        "pressurePa": 101325,
+        "expected": {
+          "humidityRatio": 0.005012078,
+          "relativeHumidity": 0.656866665,
+          "enthalpyKJkgDryAir": 22.688432881,
+          "dewPointC": 3.879773919,
+          "moistAirDensityKgM3": 1.242911063,
+          "saturationVaporPressurePa": 1227.995275,
+          "saturationHumidityRatio": 0.00766254,
+          "saturatedAirEnthalpyKJkgDryAir": 29.366535518
+        }
+      },
+      {
+        "id": "psy-freezing",
+        "dryBulbC": 0,
+        "wetBulbC": -2,
+        "pressurePa": 101325,
+        "expected": {
+          "humidityRatio": 0.002493521,
+          "relativeHumidity": 0.659275265,
+          "enthalpyKJkgDryAir": 6.23629493,
+          "dewPointC": -4.966430533,
+          "moistAirDensityKgM3": 1.290368731,
+          "saturationVaporPressurePa": 611.153571,
+          "saturationHumidityRatio": 0.003790068,
+          "saturatedAirEnthalpyKJkgDryAir": 9.478959604
+        }
+      },
+      {
+        "id": "psy-sub-zero",
+        "dryBulbC": -10,
+        "wetBulbC": -12,
+        "pressurePa": 101325,
+        "expected": {
+          "humidityRatio": 0.000631393,
+          "relativeHumidity": 0.393722202,
+          "enthalpyKJkgDryAir": -8.492630049,
+          "dewPointC": -20.094323448,
+          "moistAirDensityKgM3": 1.340914993,
+          "saturationVaporPressurePa": 259.902865,
+          "saturationHumidityRatio": 0.001606162,
+          "saturatedAirEnthalpyKJkgDryAir": -6.072863954
+        }
+      },
+      {
+        "id": "psy-ice-branch-threshold",
+        "dryBulbC": 0.009,
+        "wetBulbC": -2,
+        "pressurePa": 101325,
+        "expected": {
+          "humidityRatio": 0.002490311,
+          "relativeHumidity": 0.657942356,
+          "enthalpyKJkgDryAir": 6.237364256,
+          "dewPointC": -4.981440478,
+          "moistAirDensityKgM3": 1.290328717,
+          "saturationVaporPressurePa": 611.606662,
+          "saturationHumidityRatio": 0.003792895,
+          "saturatedAirEnthalpyKJkgDryAir": 9.495147373
+        }
+      },
+      {
+        "id": "psy-sub-zero-deep",
+        "dryBulbC": -25,
+        "wetBulbC": -25.5,
+        "pressurePa": 101325,
+        "expected": {
+          "humidityRatio": 0.000193871,
+          "relativeHumidity": 0.496809754,
+          "enthalpyKJkgDryAir": -24.674143723,
+          "dewPointC": -31.810992317,
+          "moistAirDensityKgM3": 1.422347516,
+          "saturationVaporPressurePa": 63.289138,
+          "saturationHumidityRatio": 0.000390355,
+          "saturatedAirEnthalpyKJkgDryAir": -24.191873559
+        }
+      },
+      {
+        "id": "psy-altitude-1500m",
+        "dryBulbC": 30,
+        "wetBulbC": 22,
+        "pressurePa": 84556,
+        "expected": {
+          "humidityRatio": 0.016769564,
+          "relativeHumidity": 0.52096021,
+          "enthalpyKJkgDryAir": 73.056421366,
+          "dewPointC": 19.103327386,
+          "moistAirDensityKgM3": 0.962075418,
+          "saturationVaporPressurePa": 4246.030244,
+          "saturationHumidityRatio": 0.033008106,
+          "saturatedAirEnthalpyKJkgDryAir": 114.57512557
+        }
+      },
+      {
+        "id": "psy-altitude-3000m",
+        "dryBulbC": 25,
+        "wetBulbC": 18,
+        "pressurePa": 70121,
+        "expected": {
+          "humidityRatio": 0.01597736,
+          "relativeHumidity": 0.552430712,
+          "enthalpyKJkgDryAir": 65.852323687,
+          "dewPointC": 15.407923615,
+          "moistAirDensityKgM3": 0.81158878,
+          "saturationVaporPressurePa": 3169.21647,
+          "saturationHumidityRatio": 0.029536673,
+          "saturatedAirEnthalpyKJkgDryAir": 100.394674305
+        }
+      },
+      {
+        "id": "psy-altitude-4000m",
+        "dryBulbC": 25,
+        "wetBulbC": 18,
+        "pressurePa": 61660,
+        "expected": {
+          "humidityRatio": 0.018643931,
+          "relativeHumidity": 0.564651991,
+          "enthalpyKJkgDryAir": 72.645413806,
+          "dewPointC": 15.749229424,
+          "moistAirDensityKgM3": 0.712554721,
+          "saturationVaporPressurePa": 3169.21647,
+          "saturationHumidityRatio": 0.033799629,
+          "saturatedAirEnthalpyKJkgDryAir": 111.254554511
+        }
+      },
+      {
+        "id": "psy-high-pressure",
+        "dryBulbC": 30,
+        "wetBulbC": 24,
+        "pressurePa": 105000,
+        "expected": {
+          "humidityRatio": 0.015739961,
+          "relativeHumidity": 0.607751382,
+          "enthalpyKJkgDryAir": 70.423931817,
+          "dewPointC": 21.597610689,
+          "moistAirDensityKgM3": 1.1954038,
+          "saturationVaporPressurePa": 4246.030244,
+          "saturationHumidityRatio": 0.026328732,
+          "saturatedAirEnthalpyKJkgDryAir": 97.497301574
+        }
+      },
+      {
+        "id": "psy-sub-zero-altitude",
+        "dryBulbC": -10,
+        "wetBulbC": -12,
+        "pressurePa": 84556,
+        "expected": {
+          "humidityRatio": 0.000897034,
+          "relativeHumidity": 0.466866309,
+          "enthalpyKJkgDryAir": -7.833203168,
+          "dewPointC": -18.30752081,
+          "moistAirDensityKgM3": 1.118817054,
+          "saturationVaporPressurePa": 259.902865,
+          "saturationHumidityRatio": 0.001924563,
+          "saturatedAirEnthalpyKJkgDryAir": -5.282464263
+        }
+      },
+      {
+        "id": "psy-sub-zero-high-pressure",
+        "dryBulbC": -5,
+        "wetBulbC": -7,
+        "pressurePa": 105000,
+        "expected": {
+          "humidityRatio": 0.001306183,
+          "relativeHumidity": 0.545357472,
+          "enthalpyKJkgDryAir": -1.775384285,
+          "dewPointC": -11.909355322,
+          "moistAirDensityKgM3": 1.363081484,
+          "saturationVaporPressurePa": 401.764122,
+          "saturationHumidityRatio": 0.002399295,
+          "saturatedAirEnthalpyKJkgDryAir": 0.948324514
+        }
+      }
+    ],
+    "merkel": [
+      {
+        "id": "merkel-01",
+        "rangeC": 10,
+        "approachC": 5,
+        "inputs": {
+          "hotWaterC": 42,
+          "coldWaterC": 32,
+          "wetBulbC": 27,
+          "dryBulbC": 33,
+          "pressurePa": 101325,
+          "waterToDryAirRatio": 1.5
+        },
+        "expected": {
+          "bulk.simpson": 1.492684313,
+          "bulk.chebyshev4": 1.492720078,
+          "cti-saturated-wetbulb.simpson": 1.50847554,
+          "cti-saturated-wetbulb.chebyshev4": 1.508512177,
+          "inverse.coldWaterC": 32
+        }
+      },
+      {
+        "id": "merkel-02",
+        "rangeC": 10,
+        "approachC": 5,
+        "inputs": {
+          "hotWaterC": 25,
+          "coldWaterC": 15,
+          "wetBulbC": 10,
+          "dryBulbC": 15,
+          "pressurePa": 101325,
+          "waterToDryAirRatio": 1.5
+        },
+        "expected": {
+          "bulk.simpson": {
+            "error": "DomainError"
+          },
+          "bulk.chebyshev4": {
+            "error": "DomainError"
+          },
+          "cti-saturated-wetbulb.simpson": {
+            "error": "DomainError"
+          },
+          "cti-saturated-wetbulb.chebyshev4": {
+            "error": "DomainError"
+          },
+          "inverse.coldWaterC": {
+            "error": "DomainError"
+          }
+        }
+      },
+      {
+        "id": "merkel-03",
+        "rangeC": 10,
+        "approachC": 5,
+        "inputs": {
+          "hotWaterC": 35,
+          "coldWaterC": 25,
+          "wetBulbC": 20,
+          "dryBulbC": 26,
+          "pressurePa": 101325,
+          "waterToDryAirRatio": 1.5
+        },
+        "expected": {
+          "bulk.simpson": 3.588722997,
+          "bulk.chebyshev4": 3.587386963,
+          "cti-saturated-wetbulb.simpson": 3.658043112,
+          "cti-saturated-wetbulb.chebyshev4": 3.656602022,
+          "inverse.coldWaterC": 25
+        }
+      },
+      {
+        "id": "merkel-04",
+        "rangeC": 10,
+        "approachC": 5,
+        "inputs": {
+          "hotWaterC": 40,
+          "coldWaterC": 30,
+          "wetBulbC": 25,
+          "dryBulbC": 31,
+          "pressurePa": 101325,
+          "waterToDryAirRatio": 1.5
+        },
+        "expected": {
+          "bulk.simpson": 1.814940695,
+          "bulk.chebyshev4": 1.815062173,
+          "cti-saturated-wetbulb.simpson": 1.836299694,
+          "cti-saturated-wetbulb.chebyshev4": 1.836426741,
+          "inverse.coldWaterC": 30
+        }
+      },
+      {
+        "id": "merkel-05",
+        "rangeC": 10,
+        "approachC": 5,
+        "inputs": {
+          "hotWaterC": 45,
+          "coldWaterC": 35,
+          "wetBulbC": 30,
+          "dryBulbC": 35,
+          "pressurePa": 101325,
+          "waterToDryAirRatio": 1.5
+        },
+        "expected": {
+          "bulk.simpson": 1.15450036,
+          "bulk.chebyshev4": 1.154482429,
+          "cti-saturated-wetbulb.simpson": 1.163452315,
+          "cti-saturated-wetbulb.chebyshev4": 1.163433494,
+          "inverse.coldWaterC": 35
+        }
+      },
+      {
+        "id": "merkel-06",
+        "rangeC": 5,
+        "approachC": 5,
+        "inputs": {
+          "hotWaterC": 37,
+          "coldWaterC": 32,
+          "wetBulbC": 27,
+          "dryBulbC": 33,
+          "pressurePa": 101325,
+          "waterToDryAirRatio": 1.5
+        },
+        "expected": {
+          "bulk.simpson": 0.809874048,
+          "bulk.chebyshev4": 0.809874653,
+          "cti-saturated-wetbulb.simpson": 0.819083059,
+          "cti-saturated-wetbulb.chebyshev4": 0.819083692,
+          "inverse.coldWaterC": 32
+        }
+      },
+      {
+        "id": "merkel-07",
+        "rangeC": 15,
+        "approachC": 5,
+        "inputs": {
+          "hotWaterC": 47,
+          "coldWaterC": 32,
+          "wetBulbC": 27,
+          "dryBulbC": 33,
+          "pressurePa": 101325,
+          "waterToDryAirRatio": 1.5
+        },
+        "expected": {
+          "bulk.simpson": 1.956752046,
+          "bulk.chebyshev4": 1.956423925,
+          "cti-saturated-wetbulb.simpson": 1.975604484,
+          "cti-saturated-wetbulb.chebyshev4": 1.97525539,
+          "inverse.coldWaterC": 32
+        }
+      },
+      {
+        "id": "merkel-08",
+        "rangeC": 20,
+        "approachC": 5,
+        "inputs": {
+          "hotWaterC": 52,
+          "coldWaterC": 32,
+          "wetBulbC": 27,
+          "dryBulbC": 33,
+          "pressurePa": 101325,
+          "waterToDryAirRatio": 1.5
+        },
+        "expected": {
+          "bulk.simpson": 2.244979329,
+          "bulk.chebyshev4": 2.242054783,
+          "cti-saturated-wetbulb.simpson": 2.265017382,
+          "cti-saturated-wetbulb.chebyshev4": 2.261986302,
+          "inverse.coldWaterC": 32
+        }
+      },
+      {
+        "id": "merkel-09",
+        "rangeC": 10,
+        "approachC": 3,
+        "inputs": {
+          "hotWaterC": 40,
+          "coldWaterC": 30,
+          "wetBulbC": 27,
+          "dryBulbC": 33,
+          "pressurePa": 101325,
+          "waterToDryAirRatio": 1.5
+        },
+        "expected": {
+          "bulk.simpson": 2.939629054,
+          "bulk.chebyshev4": 2.940364442,
+          "cti-saturated-wetbulb.simpson": 3.001447009,
+          "cti-saturated-wetbulb.chebyshev4": 3.002239995,
+          "inverse.coldWaterC": 30
+        }
+      },
+      {
+        "id": "merkel-10",
+        "rangeC": 10,
+        "approachC": 8,
+        "inputs": {
+          "hotWaterC": 45,
+          "coldWaterC": 35,
+          "wetBulbC": 27,
+          "dryBulbC": 33,
+          "pressurePa": 101325,
+          "waterToDryAirRatio": 1.5
+        },
+        "expected": {
+          "bulk.simpson": 0.816370812,
+          "bulk.chebyshev4": 0.816370385,
+          "cti-saturated-wetbulb.simpson": 0.82108342,
+          "cti-saturated-wetbulb.chebyshev4": 0.821082911,
+          "inverse.coldWaterC": 35
+        }
+      },
+      {
+        "id": "merkel-11",
+        "rangeC": 10,
+        "approachC": 12,
+        "inputs": {
+          "hotWaterC": 49,
+          "coldWaterC": 39,
+          "wetBulbC": 27,
+          "dryBulbC": 33,
+          "pressurePa": 101325,
+          "waterToDryAirRatio": 1.5
+        },
+        "expected": {
+          "bulk.simpson": 0.475863446,
+          "bulk.chebyshev4": 0.475862642,
+          "cti-saturated-wetbulb.simpson": 0.477464049,
+          "cti-saturated-wetbulb.chebyshev4": 0.477463226,
+          "inverse.coldWaterC": 39.000001
+        }
+      },
+      {
+        "id": "merkel-12",
+        "rangeC": 10,
+        "approachC": 5,
+        "inputs": {
+          "hotWaterC": 42,
+          "coldWaterC": 32,
+          "wetBulbC": 27,
+          "dryBulbC": 33,
+          "pressurePa": 101325,
+          "waterToDryAirRatio": 0.8
+        },
+        "expected": {
+          "bulk.simpson": 1.045569906,
+          "bulk.chebyshev4": 1.045576982,
+          "cti-saturated-wetbulb.simpson": 1.053767353,
+          "cti-saturated-wetbulb.chebyshev4": 1.053774715,
+          "inverse.coldWaterC": 32
+        }
+      },
+      {
+        "id": "merkel-13",
+        "rangeC": 10,
+        "approachC": 5,
+        "inputs": {
+          "hotWaterC": 42,
+          "coldWaterC": 32,
+          "wetBulbC": 27,
+          "dryBulbC": 33,
+          "pressurePa": 101325,
+          "waterToDryAirRatio": 1
+        },
+        "expected": {
+          "bulk.simpson": 1.137161178,
+          "bulk.chebyshev4": 1.137156434,
+          "cti-saturated-wetbulb.simpson": 1.14668248,
+          "cti-saturated-wetbulb.chebyshev4": 1.146677889,
+          "inverse.coldWaterC": 32
+        }
+      },
+      {
+        "id": "merkel-14",
+        "rangeC": 10,
+        "approachC": 5,
+        "inputs": {
+          "hotWaterC": 42,
+          "coldWaterC": 32,
+          "wetBulbC": 27,
+          "dryBulbC": 33,
+          "pressurePa": 101325,
+          "waterToDryAirRatio": 2
+        },
+        "expected": {
+          "bulk.simpson": 2.411071252,
+          "bulk.chebyshev4": 2.410532544,
+          "cti-saturated-wetbulb.simpson": 2.453247001,
+          "cti-saturated-wetbulb.chebyshev4": 2.452665013,
+          "inverse.coldWaterC": 32
+        }
+      },
+      {
+        "id": "merkel-15",
+        "rangeC": 10,
+        "approachC": 5,
+        "inputs": {
+          "hotWaterC": 42,
+          "coldWaterC": 32,
+          "wetBulbC": 27,
+          "dryBulbC": 33,
+          "pressurePa": 101325,
+          "waterToDryAirRatio": 2.5
+        },
+        "expected": {
+          "bulk.simpson": {
+            "error": "DomainError"
+          },
+          "bulk.chebyshev4": {
+            "error": "DomainError"
+          },
+          "cti-saturated-wetbulb.simpson": {
+            "error": "DomainError"
+          },
+          "cti-saturated-wetbulb.chebyshev4": {
+            "error": "DomainError"
+          },
+          "inverse.coldWaterC": {
+            "error": "DomainError"
+          }
+        }
+      },
+      {
+        "id": "merkel-16",
+        "rangeC": 10,
+        "approachC": 5,
+        "inputs": {
+          "hotWaterC": 42,
+          "coldWaterC": 32,
+          "wetBulbC": 27,
+          "dryBulbC": 33,
+          "pressurePa": 84556,
+          "waterToDryAirRatio": 1.5
+        },
+        "expected": {
+          "bulk.simpson": 1.096732694,
+          "bulk.chebyshev4": 1.096710724,
+          "cti-saturated-wetbulb.simpson": 1.105471232,
+          "cti-saturated-wetbulb.chebyshev4": 1.105448286,
+          "inverse.coldWaterC": 32
+        }
+      },
+      {
+        "id": "merkel-17",
+        "rangeC": 10,
+        "approachC": 5,
+        "inputs": {
+          "hotWaterC": 42,
+          "coldWaterC": 32,
+          "wetBulbC": 27,
+          "dryBulbC": 33,
+          "pressurePa": 90000,
+          "waterToDryAirRatio": 1.5
+        },
+        "expected": {
+          "bulk.simpson": 1.214579659,
+          "bulk.chebyshev4": 1.214565241,
+          "cti-saturated-wetbulb.simpson": 1.225197788,
+          "cti-saturated-wetbulb.chebyshev4": 1.22518238,
+          "inverse.coldWaterC": 32
+        }
+      },
+      {
+        "id": "merkel-18",
+        "rangeC": 10,
+        "approachC": 5,
+        "inputs": {
+          "hotWaterC": 42,
+          "coldWaterC": 32,
+          "wetBulbC": 27,
+          "dryBulbC": 33,
+          "pressurePa": 105000,
+          "waterToDryAirRatio": 1.5
+        },
+        "expected": {
+          "bulk.simpson": 1.594705557,
+          "bulk.chebyshev4": 1.594767215,
+          "cti-saturated-wetbulb.simpson": 1.612661667,
+          "cti-saturated-wetbulb.chebyshev4": 1.612725564,
+          "inverse.coldWaterC": 32
+        }
+      },
+      {
+        "id": "merkel-19",
+        "rangeC": 20,
+        "approachC": 3,
+        "inputs": {
+          "hotWaterC": 43,
+          "coldWaterC": 23,
+          "wetBulbC": 20,
+          "dryBulbC": 30,
+          "pressurePa": 101325,
+          "waterToDryAirRatio": 1
+        },
+        "expected": {
+          "bulk.simpson": 4.782066321,
+          "bulk.chebyshev4": 4.76944568,
+          "cti-saturated-wetbulb.simpson": 4.899848926,
+          "cti-saturated-wetbulb.chebyshev4": 4.88623496,
+          "inverse.coldWaterC": 23
+        }
+      },
+      {
+        "id": "merkel-20",
+        "rangeC": 5,
+        "approachC": 10,
+        "inputs": {
+          "hotWaterC": 45,
+          "coldWaterC": 40,
+          "wetBulbC": 30,
+          "dryBulbC": 34,
+          "pressurePa": 101325,
+          "waterToDryAirRatio": 2
+        },
+        "expected": {
+          "bulk.simpson": 0.304743609,
+          "bulk.chebyshev4": 0.304743649,
+          "cti-saturated-wetbulb.simpson": 0.305713273,
+          "cti-saturated-wetbulb.chebyshev4": 0.305713314,
+          "inverse.coldWaterC": 40
+        }
+      },
+      {
+        "id": "merkel-21",
+        "rangeC": 15,
+        "approachC": 5,
+        "inputs": {
+          "hotWaterC": 35,
+          "coldWaterC": 20,
+          "wetBulbC": 15,
+          "dryBulbC": 25,
+          "pressurePa": 90000,
+          "waterToDryAirRatio": 1.2
+        },
+        "expected": {
+          "bulk.simpson": 4.335371526,
+          "bulk.chebyshev4": 4.340656834,
+          "cti-saturated-wetbulb.simpson": 4.416237194,
+          "cti-saturated-wetbulb.chebyshev4": 4.421893017,
+          "inverse.coldWaterC": 20
+        }
+      }
+    ],
+    "crossflow": [
+      {
+        "id": "xf-base",
+        "inputs": {
+          "hotWaterC": 42,
+          "dryBulbC": 33,
+          "wetBulbC": 27,
+          "waterMassFlowKgS": 200,
+          "dryAirMassFlowKgS": 150,
+          "availableMerkelNumber": 1.6
+        },
+        "expected": {
+          "coldWaterC": 32.333352,
+          "heatTransferKW": 8088.067,
+          "outletDryBulbC": 36.38799,
+          "estimatedDiscretizationErrorC": 0.098917
+        }
+      },
+      {
+        "id": "xf-low-transfer",
+        "inputs": {
+          "hotWaterC": 40,
+          "dryBulbC": 30,
+          "wetBulbC": 24,
+          "waterMassFlowKgS": 200,
+          "dryAirMassFlowKgS": 150,
+          "availableMerkelNumber": 0.8
+        },
+        "expected": {
+          "coldWaterC": 32.395153,
+          "heatTransferKW": 6362.4565,
+          "outletDryBulbC": 32.611451,
+          "estimatedDiscretizationErrorC": 0.059272
+        }
+      },
+      {
+        "id": "xf-high-transfer",
+        "inputs": {
+          "hotWaterC": 45,
+          "dryBulbC": 35,
+          "wetBulbC": 28,
+          "waterMassFlowKgS": 250,
+          "dryAirMassFlowKgS": 200,
+          "availableMerkelNumber": 2.4
+        },
+        "expected": {
+          "coldWaterC": 32.269144,
+          "heatTransferKW": 13316.4595,
+          "outletDryBulbC": 38.710359,
+          "estimatedDiscretizationErrorC": 0.154465
+        }
+      },
+      {
+        "id": "xf-temperate",
+        "inputs": {
+          "hotWaterC": 32,
+          "dryBulbC": 20,
+          "wetBulbC": 14,
+          "waterMassFlowKgS": 180,
+          "dryAirMassFlowKgS": 160,
+          "availableMerkelNumber": 1.4
+        },
+        "expected": {
+          "coldWaterC": 23.492129,
+          "heatTransferKW": 6401.6276,
+          "outletDryBulbC": 25.638455,
+          "estimatedDiscretizationErrorC": 0.066315
+        }
+      }
+    ],
+    "airside": [
+      {
+        "id": "airside-100",
+        "catalogRevision": "illustrative-catalog-v0.1",
+        "inputs": {
+          "towerId": "IDCF-064",
+          "fillId": "FILM-OF25",
+          "driftId": "DE-3P-10",
+          "fanId": "AX-500",
+          "fillDepthM": 1.5,
+          "volumetricAirFlowM3S": 100,
+          "waterMassFlowKgS": 200,
+          "dryBulbC": 33,
+          "wetBulbC": 27
+        },
+        "expected": {
+          "totalPa": 145.340817,
+          "fillPa": 72.770477,
+          "driftPa": 21.622951,
+          "inletPa": 16.688826,
+          "plenumPa": 5.614696,
+          "fanStackPa": 9.604086,
+          "availableMerkelNumber": 1.830925,
+          "fillMerkelNumber": 1.562189,
+          "sprayZoneMerkelNumber": 0.089183,
+          "rainZoneMerkelNumber": 0.179553
+        }
+      },
+      {
+        "id": "airside-130",
+        "catalogRevision": "illustrative-catalog-v0.1",
+        "inputs": {
+          "towerId": "IDCF-064",
+          "fillId": "FILM-OF25",
+          "driftId": "DE-3P-10",
+          "fanId": "AX-500",
+          "fillDepthM": 1.5,
+          "volumetricAirFlowM3S": 130,
+          "waterMassFlowKgS": 200,
+          "dryBulbC": 33,
+          "wetBulbC": 27
+        },
+        "expected": {
+          "totalPa": 229.193862,
+          "fillPa": 114.271462,
+          "driftPa": 35.721311,
+          "inletPa": 28.204116,
+          "plenumPa": 9.488837,
+          "fanStackPa": 16.230905,
+          "availableMerkelNumber": 2.058431,
+          "fillMerkelNumber": 1.753351,
+          "sprayZoneMerkelNumber": 0.100359,
+          "rainZoneMerkelNumber": 0.204722
+        }
+      },
+      {
+        "id": "airside-160",
+        "catalogRevision": "illustrative-catalog-v0.1",
+        "inputs": {
+          "towerId": "IDCF-064",
+          "fillId": "FILM-OF25",
+          "driftId": "DE-3P-10",
+          "fanId": "AX-500",
+          "fillDepthM": 1.5,
+          "volumetricAirFlowM3S": 160,
+          "waterMassFlowKgS": 200,
+          "dryBulbC": 33,
+          "wetBulbC": 27
+        },
+        "expected": {
+          "totalPa": 332.801889,
+          "fillPa": 163.320834,
+          "driftPa": 54.655738,
+          "inletPa": 42.723395,
+          "plenumPa": 14.373623,
+          "fanStackPa": 24.58646,
+          "availableMerkelNumber": 2.258391,
+          "fillMerkelNumber": 1.921084,
+          "sprayZoneMerkelNumber": 0.110188,
+          "rainZoneMerkelNumber": 0.227119
+        }
+      }
+    ],
+    "fillLayers": [
+      {
+        "id": "fillLayers-single-160",
+        "catalogRevision": "illustrative-catalog-v0.1",
+        "note": "One layer: FILM-OF25 at 1.5 m, the same inputs as the recorded `airside-160` case. Its expected values ARE that case's recorded fill terms, so a one-layer stack must reproduce the recorded single-fill vector through the layered path.",
+        "stack": "FILM-OF25@1.5",
+        "inputs": {
+          "volumetricAirFlowM3S": 160,
+          "waterMassFlowKgS": 200,
+          "dryAirDensityKgM3": 1.116703643908769,
+          "moistAirDensityKgM3": 1.1392905373780184
+        },
+        "expected": {
+          "fillPa": 163.320834,
+          "fillMerkelNumber": 1.921084,
+          "availableMerkelNumber": 2.258391,
+          "layers": [
+            {
+              "position": 1,
+              "fillId": "FILM-OF25",
+              "depthM": 1.5,
+              "pressureDropPa": 163.320834,
+              "merkelNumber": 1.921084
+            }
+          ]
+        }
+      },
+      {
+        "id": "fillLayers-split-160",
+        "catalogRevision": "illustrative-catalog-v0.1",
+        "note": "Two layers of the same fill (FILM-OF25 at 0.6 m over 0.9 m) at the recorded case's inputs. At fixed loadings the fill's transfer number and drop are both linear in depth, so each layer's expected value is the recorded `airside-160` fill term times that layer's share of the 1.5 m total (0.4 and 0.6), and the totals are that case's recorded terms.",
+        "stack": "FILM-OF25@0.6+FILM-OF25@0.9",
+        "inputs": {
+          "volumetricAirFlowM3S": 160,
+          "waterMassFlowKgS": 200,
+          "dryAirDensityKgM3": 1.116703643908769,
+          "moistAirDensityKgM3": 1.1392905373780184
+        },
+        "expected": {
+          "fillPa": 163.320834,
+          "fillMerkelNumber": 1.921084,
+          "availableMerkelNumber": 2.258391,
+          "layers": [
+            {
+              "position": 1,
+              "fillId": "FILM-OF25",
+              "depthM": 0.6,
+              "pressureDropPa": 65.3283336,
+              "merkelNumber": 0.7684336
+            },
+            {
+              "position": 2,
+              "fillId": "FILM-OF25",
+              "depthM": 0.9,
+              "pressureDropPa": 97.9925004,
+              "merkelNumber": 1.1526504
+            }
+          ]
+        }
+      }
+    ],
+    "fan": [
+      {
+        "id": "fan-0.78",
+        "inputs": {
+          "fanId": "AX-500",
+          "speedRatio": 0.78,
+          "airDensityKgM3": 1.14,
+          "systemCurve": "35 + 0.0085 Q^2"
+        },
+        "expected": {
+          "flowM3S": 129.727648,
+          "fanPressurePa": 178.048732,
+          "efficiency": 0.824671,
+          "shaftPowerKW": 28.008568
+        }
+      },
+      {
+        "id": "fan-0.9",
+        "inputs": {
+          "fanId": "AX-500",
+          "speedRatio": 0.9,
+          "airDensityKgM3": 1.14,
+          "systemCurve": "35 + 0.0085 Q^2"
+        },
+        "expected": {
+          "flowM3S": 151.814388,
+          "fanPressurePa": 230.90467,
+          "efficiency": 0.824079,
+          "shaftPowerKW": 42.537957
+        }
+      },
+      {
+        "id": "fan-1",
+        "inputs": {
+          "fanId": "AX-500",
+          "speedRatio": 1,
+          "airDensityKgM3": 1.14,
+          "systemCurve": "35 + 0.0085 Q^2"
+        },
+        "expected": {
+          "flowM3S": 170.03178,
+          "fanPressurePa": 280.741854,
+          "efficiency": 0.823742,
+          "shaftPowerKW": 57.949011
+        }
+      }
+    ],
+    "waterBalance": [
+      {
+        "id": "wb-base",
+        "inputs": {
+          "dryAirMassFlowKgS": 133.333,
+          "inletDb": 33,
+          "inletWb": 27,
+          "outletHumidityRatio": 0.0455,
+          "circulatingWaterMassFlowKgS": 200,
+          "driftPpm": 10,
+          "cyclesOfConcentration": 4
+        },
+        "expected": {
+          "evaporationKgS": 3.369805042,
+          "driftKgS": 0.002,
+          "blowdownKgS": 1.121268347,
+          "makeupKgS": 4.493073389
+        }
+      },
+      {
+        "id": "wb-high-cycles",
+        "inputs": {
+          "dryAirMassFlowKgS": 133.333,
+          "inletDb": 33,
+          "inletWb": 27,
+          "outletHumidityRatio": 0.0455,
+          "circulatingWaterMassFlowKgS": 200,
+          "driftPpm": 10,
+          "cyclesOfConcentration": 8
+        },
+        "expected": {
+          "evaporationKgS": 3.369805042,
+          "driftKgS": 0.002,
+          "blowdownKgS": 0.47940072,
+          "makeupKgS": 3.851205762
+        }
+      }
+    ],
+    "capability": [
+      {
+        "id": "cap-identical",
+        "inputs": {
+          "design": {
+            "waterMassFlowKgS": 200,
+            "dryAirMassFlowKgS": 160,
+            "hotWaterC": 42,
+            "coldWaterC": 32,
+            "wetBulbC": 27,
+            "dryBulbC": 33
+          },
+          "test": {
+            "waterMassFlowKgS": 200,
+            "dryAirMassFlowKgS": 160,
+            "hotWaterC": 42,
+            "coldWaterC": 32,
+            "wetBulbC": 27,
+            "dryBulbC": 33
+          },
+          "characteristicExponent": -0.6
+        },
+        "expected": {
+          "capabilityPct": 100,
+          "testMerkelNumber": 1.284937,
+          "testCharacteristicCoefficient": 1.46902
+        }
+      },
+      {
+        "id": "cap-worse",
+        "inputs": {
+          "design": {
+            "waterMassFlowKgS": 200,
+            "dryAirMassFlowKgS": 160,
+            "hotWaterC": 42,
+            "coldWaterC": 32,
+            "wetBulbC": 27,
+            "dryBulbC": 33
+          },
+          "test": {
+            "waterMassFlowKgS": 200,
+            "dryAirMassFlowKgS": 160,
+            "hotWaterC": 42,
+            "coldWaterC": 32.5,
+            "wetBulbC": 27,
+            "dryBulbC": 33
+          },
+          "characteristicExponent": -0.6
+        },
+        "expected": {
+          "capabilityPct": 88.7939,
+          "testMerkelNumber": 1.114293,
+          "testCharacteristicCoefficient": 1.27393
+        }
+      },
+      {
+        "id": "cap-better",
+        "inputs": {
+          "design": {
+            "waterMassFlowKgS": 200,
+            "dryAirMassFlowKgS": 160,
+            "hotWaterC": 42,
+            "coldWaterC": 32,
+            "wetBulbC": 27,
+            "dryBulbC": 33
+          },
+          "test": {
+            "waterMassFlowKgS": 200,
+            "dryAirMassFlowKgS": 160,
+            "hotWaterC": 42,
+            "coldWaterC": 31.5,
+            "wetBulbC": 27,
+            "dryBulbC": 33
+          },
+          "characteristicExponent": -0.6
+        },
+        "expected": {
+          "capabilityPct": 111.605272,
+          "testMerkelNumber": 1.490865,
+          "testCharacteristicCoefficient": 1.70445
+        }
+      },
+      {
+        "id": "cap-off-design-wetbulb",
+        "inputs": {
+          "design": {
+            "waterMassFlowKgS": 200,
+            "dryAirMassFlowKgS": 160,
+            "hotWaterC": 42,
+            "coldWaterC": 32,
+            "wetBulbC": 27,
+            "dryBulbC": 33
+          },
+          "test": {
+            "waterMassFlowKgS": 200,
+            "dryAirMassFlowKgS": 160,
+            "hotWaterC": 42,
+            "coldWaterC": 30.2,
+            "wetBulbC": 24,
+            "dryBulbC": 31
+          },
+          "characteristicExponent": -0.6
+        },
+        "expected": {
+          "capabilityPct": 107.574646,
+          "testMerkelNumber": 1.41531,
+          "testCharacteristicCoefficient": 1.618071
+        }
+      },
+      {
+        "id": "cap-cti-salinity",
+        "inputs": {
+          "design": {
+            "waterMassFlowKgS": 200,
+            "dryAirMassFlowKgS": 160,
+            "hotWaterC": 42,
+            "coldWaterC": 32,
+            "wetBulbC": 27,
+            "dryBulbC": 33
+          },
+          "test": {
+            "waterMassFlowKgS": 200,
+            "dryAirMassFlowKgS": 160,
+            "hotWaterC": 42,
+            "coldWaterC": 31,
+            "wetBulbC": 25.5,
+            "dryBulbC": 31.5
+          },
+          "characteristicExponent": -0.6,
+          "salinityGKg": 2,
+          "inletEnthalpyConvention": "cti-saturated-wetbulb"
+        },
+        "expected": {
+          "capabilityPct": 105.73667,
+          "testMerkelNumber": 1.390692,
+          "testCharacteristicCoefficient": 1.589927
+        }
+      }
+    ],
+    "naturalDraft": [
+      {
+        "id": "nd-catalog-draft-170",
+        "inputs": {
+          "towerId": "IDCF-064",
+          "fillId": "FILM-VF38",
+          "driftId": "DE-3P-10",
+          "fillDepthM": 1.5,
+          "effectiveDraftHeightM": 170,
+          "hotWaterC": 42,
+          "dryBulbC": 33,
+          "wetBulbC": 27,
+          "pressurePa": 101325,
+          "waterMassFlowKgS": 200
+        },
+        "expected": {
+          "volumetricAirFlowM3S": 75.893462779,
+          "waterToDryAirRatio": 2.359867904,
+          "plumeDensityKgM3": 1.096366184,
+          "draftPressurePa": 71.560499295,
+          "residualPa": 3.53e-7,
+          "coldWaterC": 33.777226315,
+          "outletDryBulbC": 39.940990787,
+          "evaporationKgS": 2.433322341
+        }
+      },
+      {
+        "id": "nd-catalog-multipliers",
+        "inputs": {
+          "towerId": "IDCF-064",
+          "fillId": "FILM-VF38",
+          "driftId": "DE-3P-10",
+          "fillDepthM": 1.2,
+          "effectiveDraftHeightM": 60,
+          "hotWaterC": 40,
+          "dryBulbC": 30,
+          "wetBulbC": 24,
+          "pressurePa": 101325,
+          "waterMassFlowKgS": 180,
+          "thermalMultiplier": 0.95,
+          "pressureMultiplier": 1.08,
+          "minFaceVelocityMS": 0.3,
+          "maxFaceVelocityMS": 5
+        },
+        "expected": {
+          "volumetricAirFlowM3S": 41.871809311,
+          "waterToDryAirRatio": 3.789244677,
+          "plumeDensityKgM3": 1.101751091,
+          "draftPressurePa": 30.218871694,
+          "residualPa": 3.74e-7,
+          "coldWaterC": 34.605133876,
+          "outletDryBulbC": 38.892917702,
+          "evaporationKgS": 1.408548994
+        }
+      }
+    ],
+    "performanceCurve": [
+      {
+        "id": "pc-exact-grid-point",
+        "inputs": {
+          "records": [
+            {
+              "wetBulbC": 24,
+              "rangeC": 8,
+              "waterFlowKgS": 120,
+              "coldWaterC": 28.301470735
+            },
+            {
+              "wetBulbC": 24,
+              "rangeC": 8,
+              "waterFlowKgS": 280,
+              "coldWaterC": 31.354497818
+            },
+            {
+              "wetBulbC": 24,
+              "rangeC": 12,
+              "waterFlowKgS": 120,
+              "coldWaterC": 28.741470735
+            },
+            {
+              "wetBulbC": 24,
+              "rangeC": 12,
+              "waterFlowKgS": 280,
+              "coldWaterC": 31.794497818
+            },
+            {
+              "wetBulbC": 30,
+              "rangeC": 8,
+              "waterFlowKgS": 120,
+              "coldWaterC": 34.301470735
+            },
+            {
+              "wetBulbC": 30,
+              "rangeC": 8,
+              "waterFlowKgS": 280,
+              "coldWaterC": 37.354497818
+            },
+            {
+              "wetBulbC": 30,
+              "rangeC": 12,
+              "waterFlowKgS": 120,
+              "coldWaterC": 34.741470735
+            },
+            {
+              "wetBulbC": 30,
+              "rangeC": 12,
+              "waterFlowKgS": 280,
+              "coldWaterC": 37.794497818
+            }
+          ],
+          "wetBulbC": 27,
+          "rangeC": 10,
+          "waterFlowKgS": 200
+        },
+        "expected": {
+          "coldWaterC": 33.047984277,
+          "extrapolated": false
+        }
+      },
+      {
+        "id": "pc-inverse-capability",
+        "inputs": {
+          "records": [
+            {
+              "wetBulbC": 24,
+              "rangeC": 8,
+              "waterFlowKgS": 120,
+              "coldWaterC": 28.301470735
+            },
+            {
+              "wetBulbC": 24,
+              "rangeC": 8,
+              "waterFlowKgS": 280,
+              "coldWaterC": 31.354497818
+            },
+            {
+              "wetBulbC": 24,
+              "rangeC": 12,
+              "waterFlowKgS": 120,
+              "coldWaterC": 28.741470735
+            },
+            {
+              "wetBulbC": 24,
+              "rangeC": 12,
+              "waterFlowKgS": 280,
+              "coldWaterC": 31.794497818
+            },
+            {
+              "wetBulbC": 30,
+              "rangeC": 8,
+              "waterFlowKgS": 120,
+              "coldWaterC": 34.301470735
+            },
+            {
+              "wetBulbC": 30,
+              "rangeC": 8,
+              "waterFlowKgS": 280,
+              "coldWaterC": 37.354497818
+            },
+            {
+              "wetBulbC": 30,
+              "rangeC": 12,
+              "waterFlowKgS": 120,
+              "coldWaterC": 34.741470735
+            },
+            {
+              "wetBulbC": 30,
+              "rangeC": 12,
+              "waterFlowKgS": 280,
+              "coldWaterC": 37.794497818
+            }
+          ],
+          "wetBulbC": 30,
+          "rangeC": 8,
+          "coldWaterC": 34.301470735,
+          "adjustedTestWaterFlowKgS": 150
+        },
+        "expected": {
+          "waterFlowKgS": 120,
+          "predictedColdWaterC": 34.301470735,
+          "capabilityPct": 125,
+          "predictedColdWaterAtAdjustedFlowC": 34.873913313,
+          "leavingWaterDeviationC": -0.572442578
+        }
+      }
+    ]
+  }
+}

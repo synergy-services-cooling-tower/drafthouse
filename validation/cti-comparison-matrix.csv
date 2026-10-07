@@ -1,0 +1,29 @@
+# CTI ToolKit comparison matrix — the input matrix for a comparison that has NOT been made.
+# CTI_ToolKit_result and delta_pct are EMPTY in every row: no CTI ToolKit run has been performed.
+# Fill them only from a licensed CTI ToolKit run, recording its exact version (docs/VALIDATION.md §3).
+# KaV_L_cti_convention and KaV_L_bulk_convention are THIS engine's own output under the two
+# inlet-enthalpy conventions — not CTI output. The CTI demand curve implies the
+# cti-saturated-wetbulb convention; the bulk column is the default convention, shown for contrast.
+# Lines beginning with # are comments; the row after them is the header. Regenerate: npm run vectors.
+case,wet_bulb_C,dry_bulb_C,range_K,approach_K,hot_water_C,cold_water_C,L_over_G,pressure_Pa,KaV_L_cti_convention,KaV_L_bulk_convention,CTI_ToolKit_result,delta_pct
+merkel-01,27,33,10,5,42,32,1.5,101325,1.508512177,1.492720078,,
+merkel-02,10,15,10,5,25,15,1.5,101325,INFEASIBLE_PINCH,INFEASIBLE_PINCH,,
+merkel-03,20,26,10,5,35,25,1.5,101325,3.656602022,3.587386963,,
+merkel-04,25,31,10,5,40,30,1.5,101325,1.836426741,1.815062173,,
+merkel-05,30,35,10,5,45,35,1.5,101325,1.163433494,1.154482429,,
+merkel-06,27,33,5,5,37,32,1.5,101325,0.819083692,0.809874653,,
+merkel-07,27,33,15,5,47,32,1.5,101325,1.97525539,1.956423925,,
+merkel-08,27,33,20,5,52,32,1.5,101325,2.261986302,2.242054783,,
+merkel-09,27,33,10,3,40,30,1.5,101325,3.002239995,2.940364442,,
+merkel-10,27,33,10,8,45,35,1.5,101325,0.821082911,0.816370385,,
+merkel-11,27,33,10,12,49,39,1.5,101325,0.477463226,0.475862642,,
+merkel-12,27,33,10,5,42,32,0.8,101325,1.053774715,1.045576982,,
+merkel-13,27,33,10,5,42,32,1,101325,1.146677889,1.137156434,,
+merkel-14,27,33,10,5,42,32,2,101325,2.452665013,2.410532544,,
+merkel-15,27,33,10,5,42,32,2.5,101325,INFEASIBLE_PINCH,INFEASIBLE_PINCH,,
+merkel-16,27,33,10,5,42,32,1.5,84556,1.105448286,1.096710724,,
+merkel-17,27,33,10,5,42,32,1.5,90000,1.22518238,1.214565241,,
+merkel-18,27,33,10,5,42,32,1.5,105000,1.612725564,1.594767215,,
+merkel-19,20,30,20,3,43,23,1,101325,4.88623496,4.76944568,,
+merkel-20,30,34,5,10,45,40,2,101325,0.305713314,0.304743649,,
+merkel-21,15,25,15,5,35,20,1.2,90000,4.421893017,4.340656834,,

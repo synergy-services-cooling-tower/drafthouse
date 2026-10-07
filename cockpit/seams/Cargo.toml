@@ -1,0 +1,25 @@
+[package]
+name = "drafthouse-cockpit-seams"
+version = "0.4.2"
+edition = "2021"
+description = "Visual pass: the data-seam registry, the illustrative mapping, the custom-part value model and the duty/site evidence ranges. No Bevy - so the rules the app applies are unit-testable in seconds and the app, the docs and the tests share one table."
+license = "PolyForm-Noncommercial-1.0.0"
+publish = false
+# Issue #58: a member of the cockpit's own workspace at `cockpit/` (see `cockpit/Cargo.toml` for the
+# profiles), not of the engine's at `rust/`.
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "gen-seams"
+path = "src/bin/gen-seams.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# The engine CONTRACT: round 4 needs the record types themselves, because the custom-part form has to
+# build a real `FanRecord` / `DriftRecord` / `FixtureFill` / `NozzleRecord` out of what the user typed,
+# and the parameter card has to read a record field by field. Nothing here computes physics: the only
+# engine call in this crate is none.
+cockpit = { path = "../contract" }

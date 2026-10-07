@@ -1,0 +1,151 @@
+# VISUAL_DATA_SEAMS - the Synergy Drafthouse cockpit (Bevy), visual pass
+
+Every visual effect in `cockpit/` binds to data through the table below. The table is **generated** from
+`cockpit/seams/src/lib.rs` (`cockpit/tools/gen-seams.sh`), and the running app renders the same table in its
+**Data seams** panel, so this document cannot drift from the code that draws the scene.
+
+Status legend: **engine contract** = the value already comes from `Engine::run` or the engine's own
+input record; **fixture data** = a catalog/geometry fact or a recorded requirement (data, not physics);
+**illustrative** = no engine field exists yet, so the pass invents a *look* and labels it;
+**definition** = a stated convention or standard relation (a unit conversion, the ISA pressure/altitude
+relation) that is neither an engine result nor fixture data, printed as a definition and never as a
+calculated engineering value.
+
+38 seams: 21 engine contract · 11 fixture data · 2 illustrative · 4 definition.
+
+> Illustrative visualisation — engineering values will come from the Rust engine.
+
+**This pass adds no physics.** No CFD, no bypass claim, no CTI/MRL validation or certification claim,
+no money field. The engine is reached through the contract crate in `cockpit/contract` - the
+repository's real engine by default, the approved baseline's recorded `FixtureEngine` replay behind
+the `fixture-engine` feature - one engine, two view layers.
+
+## The seams
+
+| # | seam | visual effect it drives | source today | rule | engine field that replaces it | seam in code | status |
+|---|---|---|---|---|---|---|---|
+| 1 | `fan.speed_ratio` | fan rpm read-out, blade rotation rate, tachometer needle | `EngineInput.speed_ratio x FanRecord.nominalRpm (the record's own rated speed; the range from catalog.fans[<id>].allowedSpeedRatio)` | rpm = speed_ratio x nominalRpm (the record's own datum; `-` when the record states none); blade turns/s = rpm / 60 | `FanRecord.nominal_rpm - the ratio is already the engine's input and the rated speed is the record's own field` | `drafthouse_cockpit::scene::plan (fan blades) / drafthouse_cockpit::ui::tacho / drafthouse_cockpit_seams::mapping::blade_turn_hz` | engine contract |
+| 2 | `fan.airflow` | airflow chevron speed and count in every zone, airflow read-out | `EngineOutput.airflow_m3_s (Engine::run)` | animation factor = airflow / 124.84 (the anchor run), clamped 0.15..2.2 | `same field - already engine output` | `drafthouse_cockpit::scene::plan (flow map chevrons)` | engine contract |
+| 3 | `fan.curve` | fan curve polyline on the operating-point instrument | `EngineOutput.fan_system_curve.fan (the fan record's points at the current speed ratio)` | as returned - plotted in m3/s against Pa | `same field` | `drafthouse_cockpit::ui::plot` | engine contract |
+| 4 | `fan.operating_point` | operating-point marker on the tower and on the fan/system instrument | `EngineOutput.fan_system_curve.operating_point (Engine::run)` | as returned - the marker sits at (flow_m3_s, pressure_pa) | `same field - the engine's own fan/system crossing` | `drafthouse_cockpit::scene::plan (operating-point rail) / drafthouse_cockpit::ui::plot` | engine contract |
+| 5 | `pressure.zone` | pressure rail segments, per-zone Pa labels, zone tints on the section | `EngineOutput.pressure_by_zone[] { zone, layer, pressure_pa, share_pct }` | segment height = share_pct; label = pressure_pa; air-path order bottom-up | `same field` | `drafthouse_cockpit::scene::plan (pressure rail) / drafthouse_cockpit::ui::rail (zone table)` | engine contract |
+| 6 | `fill.layer_geometry` | drawn layer bands, the depth ruler, the mixed-stack order | `EngineInput.fill_layers[].depth_m; tower.fillDepthOptionsM for the ruler` | band height = depth / sum(depths) x fill band, minimum 14 px | `fill_layers as the engine validated them (order + depths)` | `drafthouse_cockpit::scene::layout` | fixture data |
+| 7 | `fill.layer_identity` | layer tint, per-layer KaV/L, pressure and cooling share in the stack read-out | `EngineOutput.kavl_per_layer[] { fill_id, kavl, pressure_pa, cooling_share_pct, inside_envelope }` | as returned - the layer is tinted by fill_id | `same field` | `drafthouse_cockpit::ui::rail (layer rows)` | engine contract |
+| 8 | `drift.haze` | drift-eliminator haze band, its share label | `EngineOutput.pressure_by_zone[zone = Drift].share_pct` | haze alpha = 0.25 + 0.75 x share; the haze *look* is illustrative, the share is not | `drift zone pressure + DriftRecord curve at the engine's face velocity` | `drafthouse_cockpit::scene::plan (drift haze)` | engine contract |
+| 9 | `spray.cones` | spray cone count, spacing and cone geometry above each fill layer | `nozzle arrangement authored in the editor (count/spacing/pattern) + catalog.nozzles[<id>].orificeDiameterM` | half-angle = 24 deg + 0.4 deg per mm of orifice (illustrative); radius = height x tan(half-angle) | `NozzleArrangement input + the engine's spray-zone distribution model` | `drafthouse_cockpit::scene::plan (spray cones) / drafthouse_cockpit_seams::mapping::spray_half_angle_deg` | illustrative |
+| 10 | `spray.coverage` | coverage band on each fill layer and the coverage % on the label | `none - geometric construction from spacing and cone radius` | coverage = min(1, 2 x radius / spacing): the flat-area overlap of two adjacent cones | `EngineOutput.nozzle_coverage_pct + distribution uniformity (not implemented)` | `drafthouse_cockpit::scene::plan (coverage band) / drafthouse_cockpit_seams::mapping::coverage_fraction` | illustrative |
+| 11 | `water.rain` | falling-water particle density in the rain zone and the basin flow label | `EngineOutput.water_flow_m3_hr` | drop count = clamp(round(flow / 90), 3, 9); the droplet *look* is illustrative | `same field + a droplet/liquid-loading model (not implemented)` | `drafthouse_cockpit::scene::plan (rain drops) / drafthouse_cockpit_seams::mapping::rain_drop_count` | engine contract |
+| 12 | `water.temperature` | the falling water's colour, from the spray header down to the basin | `EngineOutput.cold_water_c and EngineOutput.range_c (the hot end is their recorded sum)` | tint = a three-stop walk (basin blue, sand, spray terracotta - a two-stop blue/orange blend passes through violet) from the spray down to the water surface, with how far down the hot end reaches set by the run's own spread (`mapping::water_ramp`, reference 8 C): a 1 C run shows a short hot band under the spray, the fixture's 5 C run stays warm most of the way. The endpoints are the run's temperatures; the walk between them is the pass's look | `same fields + a spray-to-basin temperature profile (not implemented)` | `drafthouse_cockpit::ui::scene_overlay (falling water) / drafthouse_cockpit::theme::water_tint / drafthouse_cockpit_seams::mapping::water_ramp` | engine contract |
+| 13 | `ambient.inlet_air` | inlet-air callout (dry bulb, wet bulb, relative humidity, humidity ratio) | `anchor.air.inlet in the fixture file (the recorded run's psychrometrics)` | printed as recorded - no rounding beyond the display format | `EngineOutput.air.inlet once psychrometrics are part of the output contract` | `drafthouse_cockpit::ui::scene_overlay (inlet-air call-out)` | fixture data |
+| 14 | `parts.slot_validity` | valid / invalid drop states, slot contents, the part detail strip | `catalog compatibility: tower.compatibleFanIds, fill.compatibleTowerTypes, fill.allowedWaterQualityClasses, drift.maxWaterTemperatureC` | catalog lookup only - a slot accepts or refuses by data, never by an estimated number | `the engine's own catalog revision + its validation envelope (EngineOutput.validation)` | `drafthouse_cockpit::state::check_drop / drafthouse_cockpit::ui::scene_overlay (bay verdict)` | fixture data |
+| 15 | `layers.mix_share` | per-layer share bar in the fill stack read-out | `EngineOutput.kavl_per_layer[].cooling_share_pct` | as returned - bar width = share of the total available transfer | `same field` | `drafthouse_cockpit::ui::rail (layer rows)` | engine contract |
+| 16 | `run.provenance` | the provenance strip: engine id, catalog revision, status, warning | `EngineOutput.provenance (Engine::run)` | printed as returned | `same field` | `drafthouse_cockpit::ui::rail (provenance line)` | engine contract |
+| 17 | `parts.custom_record` | the `+ custom` chip at the end of every rail section, the form it opens, the amber dot on the saved chip and every state that chip can reach (drag, bay verdict, picker, fitted bay) | `cockpit/assets/custom-fields.json - the recorded descriptor (the generator that produced it is not part of this import): the field names and their order are the fixture's, each range is the span the bundled catalog records for that field` | the form offers exactly those fields and no way to add one; a value outside its recorded range is refused and the range is named; the saved record is built into the engine's own FanRecord / DriftRecord / FixtureFill / NozzleRecord (drafthouse_cockpit_seams::custom) and appended to the session catalog, so it takes the SAME drop path as a catalog card - no new physics, no new field, no estimate | `ServerCommand::SaveCustomPart { class, id, values } - the future server command that would persist a custom part; it is not in the shipped ServerCommand enum yet, so today the record is session-only` | `drafthouse_cockpit_seams::custom (field list, parse, validate, to_fan/to_drift/to_fill/to_nozzle) / drafthouse_cockpit::form (the form) / drafthouse_cockpit::state::Catalog::add_custom` | fixture data |
+| 18 | `parts.parameter_card` | the hover (desktop) / long-press (phone) parameter card on a rail chip, a picker card or a fitted bay; the sparkline of a curve field | `the record itself (catalog / custom / fixture) + EngineOutput for the fitted part: kavl_per_layer, pressure_by_zone, fan_system_curve, airflow_m3_s, fan_power_kw` | one row per record field, with its unit and its source (`catalog` / `custom` / `fixture`); a curve-typed field draws a sparkline of its recorded points instead of a scalar; the card is placed on the side of the hovered rect that leaves it uncovered | `same fields - the card is a view of the record and of Engine::run, and adds no value of its own` | `drafthouse_cockpit_seams::fields (fan_rows / drift_rows / fill_rows / nozzle_rows / custom_rows) / drafthouse_cockpit::hover` | engine contract |
+| 19 | `duty.water_flow` | the editable water-flow row, the kg/s it converts to, and the engine run that follows | `provenance.duty.waterMassFlowKgS (200 kg/s) -> m3/hr at 1000 kg/m3; anchor.waterFlow.m3Hr (724.81) is the engine's own pair at its own density 993.36 kg/m3` | m3/hr = kg/s / 1000 x 3600 (mapping::m3_hr_from_kg_s, the brief's convention) - both spellings shown, and the engine's own density-quoted pair printed beside them | `Duty.water_flow_m3_hr - the engine's own input field, already consumed` | `drafthouse_cockpit::duty_panel (water flow row) / drafthouse_cockpit_seams::mapping::m3_hr_from_kg_s` | engine contract |
+| 20 | `duty.hot_water` | the editable hot-water row and, through it, the engine re-run | `provenance.duty.hotWaterC (42 C)` | typed into Duty.hot_water_c; the engine re-runs on every change and the read-out moves with it | `Duty.hot_water_c` | `drafthouse_cockpit::duty_panel (hot water row)` | engine contract |
+| 21 | `duty.target_cold_water` | the editable target-cold-water row, the demand line on the performance chart and the approach the panel derives | `provenance.duty.targetColdWaterC (32 C)` | typed into Duty.target_cold_water_c; the charts' demand series and the engine's own approach check read it | `Duty.target_cold_water_c` | `drafthouse_cockpit::duty_panel (target cold water row)` | engine contract |
+| 22 | `duty.range` | the read-only range the panel shows live while the duty is edited | `derived from the two rows above: the duty's own design pair` | range = hot water - target cold water (the engine's own worked sheet computes the same row from the same two fields; its `range_c` output uses the SOLVED cold water instead, and the read-out shows that one) | `EngineOutput.range_c (solved cold water) - a different, also-recorded reading of the same idea` | `drafthouse_cockpit::duty_panel (derived range row)` | definition |
+| 23 | `duty.approach` | the read-only approach the panel shows live, and the margin its own validation names | `derived from target cold water and entering wet bulb` | approach = target cold water - entering wet bulb; the panel's own pre-check requires >= 0.5 C (mapping::APPROACH_MARGIN_MIN_C) and names the limit when it is not met. The fixture engine's own rule is weaker (`target_cold_water_c <= wet_bulb_c` refused) and both are shown | `EngineOutput.approach_c (solved cold water - wet bulb) + EngineOutput.validation` | `drafthouse_cockpit::duty_panel (derived approach row and its validation)` | definition |
+| 24 | `duty.wet_bulb` | the editable entering-wet-bulb row; the evidence gate that decides whether a cold-water number may be printed at all | `provenance.duty.wetBulbC (27 C); the recorded sweep domain 21-27 C (anchor.sweeps.wetBulbC, the points the engine accepted)` | typed into Duty.wet_bulb_c; outside the recorded sweep the read-outs show `out of fixture range` in amber instead of a number | `Duty.wet_bulb_c` | `drafthouse_cockpit::duty_panel / drafthouse_cockpit_seams::duty::Evidence` | engine contract |
+| 25 | `duty.dry_bulb` | the editable dry-bulb row and the relative-humidity row derived from it | `provenance.duty.dryBulbC (33 C)` | typed into Duty.dry_bulb_c (the engine's own requirement field). The fixture engine's re-expression does not consume it, and the panel says so rather than pretending the read-out moves | `Duty.dry_bulb_c` | `drafthouse_cockpit::duty_panel (dry bulb row)` | engine contract |
+| 26 | `duty.relative_humidity` | the read-only relative-humidity row beside the dry bulb (the pair's derived half) and the recorded inlet RH printed next to it | `anchor.air.inlet.humidityRatio + anchor.air.saturation (the fixture's own saturation table) + anchor.air.inlet.relativeHumidity (the engine's recorded value)` | derived RH = recorded inlet humidity ratio / the fixture's saturation humidity ratio at the entered dry bulb (linear interpolation in the recorded table, no extrapolation). At the recorded inlet that reads 0.6193 against the engine's recorded 0.6313 - both are printed, because this is a defined display value and not the engine's psychrometrics | `EngineOutput.air.inlet.relative_humidity (recorded; psychrometrics are not in the output contract yet)` | `drafthouse_cockpit_seams::duty::Psychro::relative_humidity_at / drafthouse_cockpit::duty_panel` | definition |
+| 27 | `duty.barometric_pressure` | the editable barometric-pressure row and the altitude derived from it | `provenance.duty.pressurePa (101325 Pa)` | typed into Duty.pressure_pa | `Duty.pressure_pa` | `drafthouse_cockpit::duty_panel (pressure row)` | engine contract |
+| 28 | `duty.site_altitude` | the derived site-altitude row, and the same row as the editable half when the panel is switched to altitude | `derived from the barometric pressure (the fixture records no altitude at all)` | ISA standard troposphere: z = (T0/L) x (1 - (p/p0)^(1/5.2558774)) with p0 = 101325 Pa, T0 = 288.15 K, L = 0.0065 K/m (mapping::altitude_m_from_pressure_pa and its inverse). A definition, not a tower calculation; it feeds no engine field | `none - a site field the engine's requirement record does not carry yet; the panel labels it `definition`` | `drafthouse_cockpit_seams::mapping::altitude_m_from_pressure_pa / drafthouse_cockpit::duty_panel` | definition |
+| 29 | `duty.evidence_range` | the amber `out of fixture range` the read-out shows instead of a number, and the panel's own row naming which entry left the recorded domain | `anchor.sweeps.waterMassFlowKgS (feasible 140-210 kg/s -> 504-756 m3/hr at 1000 kg/m3) and anchor.sweeps.wetBulbC (feasible 21-27 C) in the bundled fixture` | inside the recorded domain the engine interpolates the recorded run and the numbers are printed; outside it the pass prints `out of fixture range` and never an extrapolated value | `the real engine's own envelope: EngineOutput.validation carries the limits it applied` | `drafthouse_cockpit_seams::duty::Evidence::verdict / drafthouse_cockpit::ui::rail (the gated read-out)` | fixture data |
+| 30 | `water.quality_class` | the water-quality-class row (the engine's own enum) and every fill drop verdict that reads it | `provenance.fixed.waterQualityClass ("moderate"); the vocabulary is catalog.waterQualityFactors' own keys (clean / moderate / dirty)` | the row offers the engine's own values only; check_drop refuses a fill whose allowedWaterQualityClasses do not list the chosen class, naming the field | `Duty.water_quality_class` | `drafthouse_cockpit::duty_panel (class row) / drafthouse_cockpit::state::check_drop` | engine contract |
+| 31 | `water.salinity` | the editable salinity row | `provenance.fixed.salinityGKg (0 g/kg)` | typed into Duty.salinity_g_kg and carried to the engine; the fixture engine's re-expression does not consume it, which the panel states | `Duty.salinity_g_kg` | `drafthouse_cockpit::duty_panel (salinity row)` | engine contract |
+| 32 | `water.cycles_of_concentration` | the editable cycles row and the makeup-water read-out that the engine derives from it | `provenance.fixed.cyclesOfConcentration (4)` | typed into Duty.cycles_of_concentration; the engine's own makeup line reads it (`n / (n - 1)` blowdown factor, clamped at 1.01) | `Duty.cycles_of_concentration -> EngineOutput.makeup_m3_hr` | `drafthouse_cockpit::duty_panel (cycles row)` | engine contract |
+| 33 | `water.tds_chloride_ph` | the display-only TDS / chloride / pH note row under the water-quality section | `none - the fixture's water-quality record carries the class, the salinity and the cycles of concentration and nothing else` | the row is printed as `not recorded` with the label `recorded, not used by the engine yet`: the pass invents no value and no effect for it (no scaling, no limit, no claim) | `the engine's water-quality record once it carries those fields` | `drafthouse_cockpit::duty_panel (display-only rows)` | fixture data |
+| 34 | `limits.max_drift` | the recorded max-drift limit row | `provenance.fixed.maxDriftPpm (30 ppm)` | printed as recorded, quoted with the drift the engine reports for the fitted eliminator where it exists; the pass adds no comparison it cannot evidence | `the engine's own limit record (EngineOutput.validation)` | `drafthouse_cockpit::duty_panel (limits rows)` | fixture data |
+| 35 | `limits.max_electrical_input` | the recorded max-electrical-input limit row | `provenance.fixed.maxElectricalInputKW (75 kW)` | printed as recorded beside the engine's own fan_power_kw for the current run; no money field, no tariff, no comparison the fixture cannot evidence | `the engine's own limit record (EngineOutput.validation)` | `drafthouse_cockpit::duty_panel (limits rows)` | fixture data |
+| 36 | `limits.max_footprint` | the recorded max-footprint limit row | `provenance.fixed.maxFootprintM2 (130 m2)` | printed as recorded beside the fitted tower's own footprintM2; the pass neither selects nor scores anything | `the engine's own limit record (EngineOutput.validation)` | `drafthouse_cockpit::duty_panel (limits rows)` | fixture data |
+| 37 | `limits.minimum_thermal_margin` | the recorded minimum-thermal-margin limit row | `provenance.fixed.minimumThermalMarginC (0 C)` | printed as recorded next to the engine's own solved cold water against the target; the pass recomputes nothing | `the engine's own limit record (EngineOutput.validation)` | `drafthouse_cockpit::duty_panel (limits rows)` | fixture data |
+| 38 | `limits.nozzle_pressure_drop` | the recorded nozzle-pressure-drop limit row | `rate.inputs.requirements.nozzlePressureDropPa (65000 Pa) - recorded only in that block of fixtures/engine-run.json` | printed as recorded with the block it came from named, because the bundled fixture's provenance block does not carry it | `the engine's own limit record (EngineOutput.validation)` | `drafthouse_cockpit::duty_panel (limits rows)` | fixture data |
+
+## The illustrative mapping (the numbers this pass invents)
+
+Everything below is a *visual* rule. None of it is an engineering result, and none of it is presented as
+one: the scene says `illustrative` next to the flow map and the spray coverage.
+
+| constant | value | what it turns (fake) into what (seen) | why it is needed |
+|---|---|---|---|
+| `ANCHOR_AIRFLOW_M3_S` | 124.84 m3/s | airflow -> chevron animation speed | the recorded run's airflow is the 1x reference for the pass |
+| `SPRAY_BASE_HALF_ANGLE_DEG` | 24 deg | nozzle orifice -> spray cone half-angle | the nozzle records carry an orifice and a discharge coefficient, no spray angle |
+| `SPRAY_HALF_ANGLE_PER_MM_DEG` | 0.40 deg/mm | orifice -> cone width | same - the cone model is not implemented |
+| `WATER_RAMP_REFERENCE_C` | 8 C | the run's hot-cold spread -> how much of the warm end the falling water shows | the walk between the engine's two temperatures is a look; 8 C is the spread at which it reads as a full warm-to-cool fall |
+| `MIN_BAND_PX` | 14 px | a 0.45 m layer -> a visible band | a 0.45 m layer is ~15 px on a 900 px screen at true scale |
+| `SPRAY_STAGGER_PITCH_FACTOR` | 1/sqrt(2) = 0.7071 | a staggered bank -> its effective nearest-neighbour pitch | a staggered grid holds more nozzles per unit area; equal-area equivalent is pitch/sqrt(2) |
+| `MIN_CHEVRONS` / `MAX_CHEVRONS` | 3, 8 | airflow -> chevron count | arrow density has to stay readable, not proportional |
+| `MIN_STREAMLINES` / `MAX_STREAMLINES` | 3, 6 | airflow -> streamlines per side (2D) and inside the 3D cut cell | same reason: density stays readable, and both views clamp identically |
+| `MIN_WATER_STREAKS` / `MAX_WATER_STREAKS` | 4, 14 | water flow -> falling streaks | the streak count is a look; the label carries the engine's own `water_flow_m3_hr` |
+| `CAM_DEFAULT` | yaw 38 deg, pitch 20 deg, dist 2.6 x row width | the 3D view's opening camera (round 4: behind the `three-d` cargo feature, off by default) | a still evidence frame needs a stated camera; the orbit control moves it from here |
+| `STACK_HEIGHT_FACTOR` | 0.55 x stack diameter | stack area -> a drawn stack height | the fan record carries a stack **area** and the tower a recovery factor, not a height |
+| `CUTAWAY_CASING_T_M`, `DRIFT_BANK_T_M`, `BASIN_DEPTH_M`, `CELL_GAP_M` | 0.12 m, 0.25 m, 1.1 m, 0.6 m | the 3D tower's wall, drift-bank, basin and service-lane dimensions | the fixture geometry stops at areas, depths and heights |
+
+### Round 4: the defined (not invented) relations
+
+A *definition* is a convention or a standard relation, not a look and not a result. The pass prints these
+with the relation that produced them and never as a calculated engineering value.
+
+| definition | value | what it turns into what | where it is stated |
+|---|---|---|---|
+| `DUTY_WATER_DENSITY_KG_M3` | 1000 kg/m3 | duty water flow: kg/s <-> m3/hr (the brief's convention; the engine itself converted at the water's own density) | `mapping::m3_hr_from_kg_s`, `mapping::kg_s_from_m3_hr`; both spellings are printed in the panel |
+| ISA standard troposphere | p0 = 101325 Pa, T0 = 288.15 K, L = 0.0065 K/m, exponent 5.2558774 | barometric pressure <-> site altitude (the fixture records no altitude) | `mapping::altitude_m_from_pressure_pa`, `mapping::pressure_pa_from_altitude_m` |
+| derived relative humidity | RH = recorded inlet humidity ratio / the fixture's saturation humidity ratio at the entered dry bulb | the dry-bulb / relative-humidity pair: one editable, the other derived | `duty::Psychro::relative_humidity_at`; the panel prints the engine's recorded RH beside it |
+| `APPROACH_MARGIN_MIN_C` | 0.5 C | the duty panel's own approach pre-check (cold water clears the wet bulb by at least this) | `mapping::APPROACH_MARGIN_MIN_C`; the fixture engine's own rule (`approach > 0`) is printed beside it |
+
+Functions: `mapping::rpm`, `mapping::rpm_text`, `mapping::ratio_from_rpm`, `mapping::blade_turn_hz`, `mapping::flow_factor`,
+`mapping::chevron_count`, `mapping::spray_half_angle_deg`, `mapping::spray_cone_radius_m`,
+`mapping::coverage_fraction`, `mapping::coverage_width_m`, `mapping::nozzle_count`,
+`mapping::rain_drop_count`, `mapping::op_marker_fraction`, `mapping::rail_segment_fraction`,
+`mapping::streamline_count`, `mapping::water_streak_count`, `mapping::cell_plan_m`,
+`mapping::stack_diameter_m`, `mapping::stack_height_m`, `mapping::cell_row_width_m`,
+`mapping::cell_center_x_m`, `mapping::m3_hr_from_kg_s`, `mapping::kg_s_from_m3_hr`,
+`mapping::altitude_m_from_pressure_pa`, `mapping::pressure_pa_from_altitude_m`.
+All are unit-tested in `seams/src/lib.rs` and `seams/src/mapping.rs` (`cargo test --manifest-path seams/Cargo.toml --lib`).
+
+## Saving: one file model, and the server commands behind it (issue #74, D26)
+
+**Owner decision.** Native and web share **one persistence model - file-based first, optional connect
+later**. A project is a `.drafthouse` file (`docs/PROJECT_FORMAT.md`); a catalog revision is an
+immutable file object whose declared `sha256` is checked on **every** read; the custom parts a user
+authors live in that file, not in a page's memory. **Nothing in `cockpit/` talks to a network.**
+
+The internal host's stub commands map onto the file model like this - each row names what the
+command would carry once a server exists, and what the cockpit already writes locally:
+
+| `ServerCommand` | what it maps to in the file model |
+|---|---|
+| `SaveRevision { project, note }` | **push the project** (`File > Save` on native, *download project* on the internal host) to the server as a new revision, with the note as its label |
+| `ExportReportPdf { project }` | the server's own **report pipeline**, taking the project file as its input (the cockpit prints no PDF) |
+| `ExportJson { project }` / `ExportCsv { project }` | the results export this cockpit writes **locally** today (`File > Export results…`), from the same snapshot the project carries |
+| `LoadCatalogRevision { revision }` | the revision **id** a project pins (`catalogRevisionId`); the file itself is imported through `Revision::read`, digest checked |
+| `CompareLater { project, against_revision }` | a project file plus that pinned revision id - enough to recompute the comparison later |
+
+Every row is a label on a stub: no request is made, and the public host neither draws these commands
+nor answers the file commands at all (it can author, and it cannot save or export).
+
+## What the pass does not claim
+
+- Animated arrows are a **flow map illustration**, not a CFD or network solution, and the scene says so on
+  the frame: `illustrative flow map`.
+- Spray coverage is a flat-area overlap of two adjacent cones - **not** a nozzle distribution model.
+  It is labelled `illustrative` in place.
+- The rpm read-out is the record's own rated speed (`nominalRpm`) times the speed ratio - **not** a
+  fan rating, and `-` when the record states no rated speed.
+- A **custom part** is the user's own data, checked only against the ranges the bundled catalog records.
+  The pass validates its *shape and range*, never its engineering adequacy; the fixture engine then
+  interpolates its tables exactly as it does for a catalog record, and refuses it by the same rules.
+- A duty outside the fixture's recorded sweep prints `out of fixture range` - **never** an extrapolated
+  number, and never a silently clamped one.
+- The relative humidity and the site altitude are **definitions** (the recorded-table ratio and the ISA
+  relation), printed with the relation and never as engine output.
+- The pass reads the same `EngineOutput` the baseline result screen reads. Nothing in `cockpit/` computes a
+  cooling-tower quantity; the scene draws whatever engine the build selected produced, with
+  no change to the view layer (that is what the seams are for).
+- **Known gap (issue #71): the HTML mirror has no native equivalent.** On the web the live text a
+  screen reader announces is written into `index.html` every frame by `cockpit/src/bridge.rs`
+  (`#mirror-*` and the `data-*` runtime markers). That module compiles on wasm32 only, so the
+  native desktop binary has **no announced-text surface yet**; the follow-up is native AccessKit.
+  Keyboard navigation is identical on both hosts - the shortcuts are the app's own.

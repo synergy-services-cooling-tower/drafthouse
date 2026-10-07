@@ -1,0 +1,54 @@
+[package]
+name = "synergy-drafthouse"
+version = "0.4.2"
+edition = "2021"
+description = "Cooling-tower engine core in Rust. Ported slice 1: psychrometrics and counterflow Merkel demand. The JavaScript engine in ../src remains the reference until parity is proven."
+license = "PolyForm-Noncommercial-1.0.0"
+publish = false
+
+# Issue #58: the cockpit is **not** a member of this workspace - it is its own workspace at
+# `cockpit/` (it carries its own `[profile]` tables, which a member's manifest cannot), so this
+# file, its lock and the pinned engine artifact are exactly what they were before the import.
+#
+# Issue #57: the cockpit adapter (`cockpit-adapter/`) is the second crate of this workspace, so
+# `cargo test` / `cargo clippy --all-targets` / `cargo fmt --check` cover both from `rust/`. The
+# engine package stays the root package, so every recorded command in this file, in
+# `scripts/bundle.mjs` and in `.github/workflows/validate.yml` — all of which pass
+# `--manifest-path rust/Cargo.toml` — keeps resolving to the same package and profile.
+[workspace]
+members = ["cockpit-adapter"]
+
+[lib]
+name = "synergy_drafthouse"
+path = "src/lib.rs"
+# The wasm build (issue #24) is a `cdylib`; the `rlib` is what the binary and the tests link
+# against. Both crate types cannot be selected per target, so the crate always offers both —
+# a native build simply also produces a shared library nobody loads.
+crate-type = ["rlib", "cdylib"]
+
+[[bin]]
+name = "ct-engine"
+path = "src/bin/ct-engine.rs"
+
+# The physics is standard library only. Nothing here.
+[dependencies]
+
+# JSON is a harness/tests concern only: the recorded vectors are JSON. Nothing in this
+# section reaches the library or the binary build.
+[dev-dependencies]
+serde_json = "1"
+
+# The published wasm artifact is built with this profile, so its bytes do not depend on the
+# host's default release settings:
+#
+#     cargo build --manifest-path rust/Cargo.toml \
+#         --target wasm32-unknown-unknown --profile wasm --lib
+#
+# `panic = "abort"` is what wasm32-unknown-unknown uses anyway; stating it here keeps a
+# future target change from silently changing the artifact's behaviour at the boundary.
+[profile.wasm]
+inherits = "release"
+opt-level = 3
+lto = true
+panic = "abort"
+strip = "debuginfo"

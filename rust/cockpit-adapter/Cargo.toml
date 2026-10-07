@@ -1,0 +1,23 @@
+[package]
+name = "cockpit-adapter"
+version = "0.4.2"
+edition = "2021"
+description = "The cockpit's Engine contract over the real cooling-tower engine (#57): the contract file is a byte copy of the cockpit's cockpit/src/engine.rs, and the implementation runs a cockpit EngineInput through the engine crate's own selection path."
+license = "PolyForm-Noncommercial-1.0.0"
+publish = false
+
+[lib]
+# `rlib` only: this crate is a library the cockpit links, never a cdylib of its own.
+crate-type = ["rlib"]
+
+[dependencies]
+# The engine. A path dependency, read-only: this crate implements the cockpit's contract over it
+# and changes nothing in it.
+synergy-drafthouse = { path = ".." }
+# Required by the copied contract itself (`src/engine.rs` derives Serialize/Deserialize on its
+# I/O types). Nothing else in this crate serializes.
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+# The parity test reads the cockpit's own recorded run, which is JSON.
+serde_json = "1"

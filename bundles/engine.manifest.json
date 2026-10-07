@@ -1,0 +1,19 @@
+{
+  "piece": "engine",
+  "version": "0.4.2+46d0e26756cca14f45b8eafe7534aa97cc5994ab",
+  "commit": "46d0e26756cca14f45b8eafe7534aa97cc5994ab",
+  "files": [
+    {
+      "path": "rust/target/wasm32-unknown-unknown/wasm/synergy_drafthouse.wasm",
+      "bytes": 624598,
+      "sha256": "965a587eed6c4e65f7381c5b9041cd060347ec5d0d0d0dc73c1b80b0b29c78c8",
+      "command": "cargo build --manifest-path rust/Cargo.toml --target wasm32-unknown-unknown --profile wasm --lib"
+    },
+    {
+      "path": "rust/wasm/binding.mjs",
+      "bytes": 8834,
+      "sha256": "6d5596d608074b43b6bd9df0b58859438301137ae4ea8d3a905f207ee3f92f89"
+    }
+  ],
+  "digest": "e3f66dbaed38a8c0e99db0901cde9cd3634956e08ff9ded0e21f70774d822576"
+}

@@ -1,0 +1,23 @@
+{
+  "what": "The public host's Content-Security-Policy, verbatim: the header the site serves today, and the header after the owner-approved change.",
+  "provenance": {
+    "repository": "synergy-services-website",
+    "checkout": "not carried in this repository (set SYNERGY_SERVICES_WEBSITE to a local checkout of synergy-services-website)",
+    "commit": "4937a1ea452bb6aaa241b6af142d442a0f4de400",
+    "commitShort": "4937a1e",
+    "file": "static/staticwebapp.config.json",
+    "blob": "020697414e2221a1862d5d82bd0a952d6793eaf3",
+    "field": "globalHeaders[\"Content-Security-Policy\"]",
+    "format": "single-line minified JSON; the policy is a JSON string value (escaped quotes in the file) and the header is that string's unescaped value, byte-for-byte",
+    "readAt": "2026-09-20",
+    "approval": "issue #24 — the owner-approved change adds 'wasm-unsafe-eval' to script-src in that file; this repository never edits the website repository",
+    "derivation": "resultingHeader is currentHeader with one token inserted into script-src: 'self' 'unsafe-inline' becomes 'self' 'unsafe-inline' 'wasm-unsafe-eval'; nothing else changes, so removing the token from the resulting header reproduces the current header byte-for-byte (asserted in tests/deployment-serving.test.js)"
+  },
+  "deployPath": "/tools/cooling-tower/",
+  "currentHeader": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-src https://www.google.com; upgrade-insecure-requests",
+  "resultingHeader": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-src https://www.google.com; upgrade-insecure-requests",
+  "digests": {
+    "currentHeaderSha256": "b5a24ac830b10710df0a3b35f621ae92e0a9f71ba8397885e45f589b1620633e",
+    "resultingHeaderSha256": "6c559a513242e45694728071381e41bffc5a2c8469c7aa0f218cc5d7a60ad896"
+  }
+}

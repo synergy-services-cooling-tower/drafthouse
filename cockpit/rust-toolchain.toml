@@ -1,0 +1,7 @@
+# Pinned to the same channel as the engine workspace (`rust/rust-toolchain.toml`, issue #6): the
+# cockpit is its own workspace, so it needs its own resolution of the same compiler. The two files
+# state the same channel deliberately - a local `cd cockpit && cargo test` and the `cockpit` CI job
+# must compile the same bytes the release publishes.
+[toolchain]
+channel = "1.97.1"
+components = ["rustfmt", "clippy"]

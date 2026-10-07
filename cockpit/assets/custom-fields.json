@@ -1,0 +1,553 @@
+{
+  "generatedBy": "tools/gen-custom-fields.mjs",
+  "fieldListSource": "../fixtures-fields.json",
+  "valueSource": "viz/assets/fixture.json",
+  "note": "The field list, its order and its names come from fixtures-fields.json; each field’s type, range and vocabulary come from the bundled catalog’s own records. The form offers these fields and no way to add one. Regenerate with `node tools/gen-custom-fields.mjs`.",
+  "classes": [
+    {
+      "class": "fan",
+      "title": "Fans",
+      "fields": [
+        {
+          "key": "id",
+          "unit": "-",
+          "required": true,
+          "min": null,
+          "max": null,
+          "monotonic": false,
+          "oneOf": [],
+          "columns": [],
+          "sub": [],
+          "companion": null,
+          "from": "fixtures-fields.json (fans)",
+          "note": "unique in this session",
+          "kind": "text"
+        },
+        {
+          "key": "stackAreaM2",
+          "unit": "m2",
+          "required": true,
+          "min": 13.854,
+          "max": 38.485,
+          "monotonic": false,
+          "oneOf": [],
+          "columns": [],
+          "sub": [],
+          "companion": null,
+          "from": "fixtures-fields.json (fans)",
+          "note": "",
+          "kind": "number"
+        },
+        {
+          "key": "pressureBasis",
+          "unit": "-",
+          "required": true,
+          "min": null,
+          "max": null,
+          "monotonic": false,
+          "oneOf": [
+            "total"
+          ],
+          "columns": [],
+          "sub": [],
+          "companion": null,
+          "from": "fixtures-fields.json (fans)",
+          "note": "the catalog’s own value",
+          "kind": "text"
+        },
+        {
+          "key": "referenceDensityKgM3",
+          "unit": "kg/m3",
+          "required": true,
+          "min": 1.2,
+          "max": 1.2,
+          "monotonic": false,
+          "oneOf": [],
+          "columns": [],
+          "sub": [],
+          "companion": null,
+          "from": "fixtures-fields.json (fans)",
+          "note": "",
+          "kind": "number"
+        },
+        {
+          "key": "stackRecoveryFactor",
+          "unit": "-",
+          "required": false,
+          "min": null,
+          "max": null,
+          "monotonic": false,
+          "oneOf": [],
+          "columns": [],
+          "sub": [],
+          "companion": null,
+          "from": "fixtures-fields.json (fans)",
+          "note": "no bundled record carries this field, so the form advertises no range for it - it may be left blank",
+          "kind": "number"
+        },
+        {
+          "key": "allowedSpeedRatio",
+          "unit": "-",
+          "required": true,
+          "min": 0.66,
+          "max": 1.15,
+          "monotonic": false,
+          "oneOf": [],
+          "columns": [],
+          "sub": [],
+          "companion": null,
+          "from": "fixtures-fields.json (fans)",
+          "note": "two numbers: lo,hi",
+          "kind": "range2"
+        },
+        {
+          "key": "driveEfficiency",
+          "unit": "-",
+          "required": true,
+          "min": 0.95,
+          "max": 0.97,
+          "monotonic": false,
+          "oneOf": [],
+          "columns": [],
+          "sub": [],
+          "companion": null,
+          "from": "fixtures-fields.json (fans)",
+          "note": "",
+          "kind": "number"
+        },
+        {
+          "key": "motorEfficiency",
+          "unit": "-",
+          "required": true,
+          "min": 0.94,
+          "max": 0.96,
+          "monotonic": false,
+          "oneOf": [],
+          "columns": [],
+          "sub": [],
+          "companion": null,
+          "from": "fixtures-fields.json (fans)",
+          "note": "",
+          "kind": "number"
+        },
+        {
+          "key": "curve",
+          "unit": "-",
+          "required": true,
+          "min": null,
+          "max": null,
+          "monotonic": true,
+          "oneOf": [],
+          "columns": [
+            {
+              "key": "flowM3S",
+              "unit": "-"
+            },
+            {
+              "key": "pressurePa",
+              "unit": "Pa"
+            },
+            {
+              "key": "efficiency",
+              "unit": "-"
+            }
+          ],
+          "sub": [],
+          "companion": null,
+          "from": "fixtures-fields.json (fans)",
+          "note": "5 point(s) in the bundled catalog",
+          "kind": "points"
+        }
+      ]
+    },
+    {
+      "class": "drift",
+      "title": "Drift eliminators",
+      "fields": [
+        {
+          "key": "id",
+          "unit": "-",
+          "required": true,
+          "min": null,
+          "max": null,
+          "monotonic": false,
+          "oneOf": [],
+          "columns": [],
+          "sub": [],
+          "companion": null,
+          "from": "fixtures-fields.json (driftEliminators)",
+          "note": "unique in this session",
+          "kind": "text"
+        },
+        {
+          "key": "maxWaterTemperatureC",
+          "unit": "C",
+          "required": true,
+          "min": 60,
+          "max": 80,
+          "monotonic": false,
+          "oneOf": [],
+          "columns": [],
+          "sub": [],
+          "companion": null,
+          "from": "fixtures-fields.json (driftEliminators)",
+          "note": "",
+          "kind": "number"
+        },
+        {
+          "key": "curve",
+          "unit": "-",
+          "required": true,
+          "min": null,
+          "max": null,
+          "monotonic": true,
+          "oneOf": [],
+          "columns": [
+            {
+              "key": "faceVelocityMS",
+              "unit": "m/s"
+            },
+            {
+              "key": "driftPpm",
+              "unit": "ppm"
+            },
+            {
+              "key": "pressureDropPa",
+              "unit": "Pa"
+            }
+          ],
+          "sub": [],
+          "companion": null,
+          "from": "fixtures-fields.json (driftEliminators)",
+          "note": "6 point(s) in the bundled catalog",
+          "kind": "points"
+        }
+      ]
+    },
+    {
+      "class": "fill",
+      "title": "Fill",
+      "fields": [
+        {
+          "key": "id",
+          "unit": "-",
+          "required": true,
+          "min": null,
+          "max": null,
+          "monotonic": false,
+          "oneOf": [],
+          "columns": [],
+          "sub": [],
+          "companion": null,
+          "from": "fixtures-fields.json (fills)",
+          "note": "unique in this session",
+          "kind": "text"
+        },
+        {
+          "key": "compatibleTowerTypes",
+          "unit": "-",
+          "required": true,
+          "min": null,
+          "max": null,
+          "monotonic": false,
+          "oneOf": [
+            "counterflow",
+            "crossflow"
+          ],
+          "columns": [],
+          "sub": [],
+          "companion": null,
+          "from": "fixtures-fields.json (fills)",
+          "note": "comma-separated",
+          "kind": "textList"
+        },
+        {
+          "key": "allowedWaterQualityClasses",
+          "unit": "-",
+          "required": true,
+          "min": null,
+          "max": null,
+          "monotonic": false,
+          "oneOf": [
+            "clean",
+            "moderate",
+            "dirty"
+          ],
+          "columns": [],
+          "sub": [],
+          "companion": null,
+          "from": "fixtures-fields.json (fills)",
+          "note": "comma-separated",
+          "kind": "textList"
+        },
+        {
+          "key": "thermal",
+          "unit": "-",
+          "required": true,
+          "min": null,
+          "max": null,
+          "monotonic": false,
+          "oneOf": [],
+          "columns": [],
+          "sub": [
+            {
+              "key": "coefficientPerM",
+              "unit": "1/m",
+              "required": true,
+              "min": 0.62,
+              "max": 1.312534
+            },
+            {
+              "key": "referenceWaterLoadingKgM2S",
+              "unit": "kg/(m2 s)",
+              "required": true,
+              "min": 3,
+              "max": 3
+            },
+            {
+              "key": "referenceDryAirLoadingKgM2S",
+              "unit": "kg/(m2 s)",
+              "required": true,
+              "min": 2,
+              "max": 2
+            },
+            {
+              "key": "waterExponent",
+              "unit": "-",
+              "required": true,
+              "min": -0.34,
+              "max": -0.18
+            },
+            {
+              "key": "airExponent",
+              "unit": "-",
+              "required": true,
+              "min": 0.31,
+              "max": 0.46
+            }
+          ],
+          "companion": null,
+          "from": "fixtures-fields.json (fills)",
+          "note": "comma-separated, in this order: coefficientPerM, referenceWaterLoadingKgM2S, referenceDryAirLoadingKgM2S, waterExponent, airExponent",
+          "kind": "object"
+        },
+        {
+          "key": "pressure",
+          "unit": "-",
+          "required": true,
+          "min": null,
+          "max": null,
+          "monotonic": false,
+          "oneOf": [],
+          "columns": [],
+          "sub": [
+            {
+              "key": "coefficientPaPerM",
+              "unit": "1/m",
+              "required": true,
+              "min": 22,
+              "max": 78
+            },
+            {
+              "key": "referenceWaterLoadingKgM2S",
+              "unit": "kg/(m2 s)",
+              "required": true,
+              "min": 3,
+              "max": 3
+            },
+            {
+              "key": "referenceDryAirLoadingKgM2S",
+              "unit": "kg/(m2 s)",
+              "required": true,
+              "min": 2,
+              "max": 2
+            },
+            {
+              "key": "waterExponent",
+              "unit": "-",
+              "required": true,
+              "min": 0.06,
+              "max": 0.18
+            },
+            {
+              "key": "airExponent",
+              "unit": "-",
+              "required": true,
+              "min": 1.52,
+              "max": 1.78
+            }
+          ],
+          "companion": null,
+          "from": "fixtures-fields.json (fills)",
+          "note": "comma-separated, in this order: coefficientPaPerM, referenceWaterLoadingKgM2S, referenceDryAirLoadingKgM2S, waterExponent, airExponent",
+          "kind": "object"
+        },
+        {
+          "key": "limits",
+          "unit": "-",
+          "required": true,
+          "min": null,
+          "max": null,
+          "monotonic": false,
+          "oneOf": [],
+          "columns": [],
+          "sub": [
+            {
+              "key": "minWaterLoadingKgM2S",
+              "unit": "kg/(m2 s)",
+              "required": true,
+              "min": 0.7,
+              "max": 1.5
+            },
+            {
+              "key": "maxWaterLoadingKgM2S",
+              "unit": "kg/(m2 s)",
+              "required": true,
+              "min": 5,
+              "max": 8
+            },
+            {
+              "key": "minDryAirLoadingKgM2S",
+              "unit": "kg/(m2 s)",
+              "required": true,
+              "min": 0.6,
+              "max": 1
+            },
+            {
+              "key": "maxDryAirLoadingKgM2S",
+              "unit": "kg/(m2 s)",
+              "required": true,
+              "min": 3.2,
+              "max": 4
+            },
+            {
+              "key": "maxWaterTemperatureC",
+              "unit": "C",
+              "required": true,
+              "min": 55,
+              "max": 90
+            }
+          ],
+          "companion": null,
+          "from": "fixtures-fields.json (fills)",
+          "note": "comma-separated, in this order: minWaterLoadingKgM2S, maxWaterLoadingKgM2S, minDryAirLoadingKgM2S, maxDryAirLoadingKgM2S, maxWaterTemperatureC",
+          "kind": "object"
+        },
+        {
+          "key": "characteristic",
+          "unit": "-",
+          "kind": "points",
+          "required": true,
+          "min": null,
+          "max": null,
+          "monotonic": true,
+          "oneOf": [],
+          "columns": [
+            {
+              "key": "waterLoadingKgM2S",
+              "unit": "kg/(m2 s)"
+            },
+            {
+              "key": "kavlPerM",
+              "unit": "1/m"
+            },
+            {
+              "key": "paPerM",
+              "unit": "1/m"
+            }
+          ],
+          "sub": [],
+          "companion": {
+            "key": "atDryAirLoadingKgM2S",
+            "unit": "kg/(m2 s)",
+            "min": 2.1783,
+            "max": 2.1783
+          },
+          "from": "the fixture’s own FixtureFill schema (characteristic), not the record’s field list",
+          "note": "34 point(s) in the bundled catalog"
+        }
+      ]
+    },
+    {
+      "class": "nozzle",
+      "title": "Nozzle bank",
+      "fields": [
+        {
+          "key": "id",
+          "unit": "-",
+          "required": true,
+          "min": null,
+          "max": null,
+          "monotonic": false,
+          "oneOf": [],
+          "columns": [],
+          "sub": [],
+          "companion": null,
+          "from": "fixtures-fields.json (nozzles)",
+          "note": "unique in this session",
+          "kind": "text"
+        },
+        {
+          "key": "name",
+          "unit": "-",
+          "required": true,
+          "min": null,
+          "max": null,
+          "monotonic": false,
+          "oneOf": [],
+          "columns": [],
+          "sub": [],
+          "companion": null,
+          "from": "fixtures-fields.json (nozzles)",
+          "note": "",
+          "kind": "text"
+        },
+        {
+          "key": "dischargeCoefficient",
+          "unit": "-",
+          "required": true,
+          "min": 0.72,
+          "max": 0.77,
+          "monotonic": false,
+          "oneOf": [],
+          "columns": [],
+          "sub": [],
+          "companion": null,
+          "from": "fixtures-fields.json (nozzles)",
+          "note": "",
+          "kind": "number"
+        },
+        {
+          "key": "orificeDiameterM",
+          "unit": "m",
+          "required": true,
+          "min": 0.02,
+          "max": 0.04,
+          "monotonic": false,
+          "oneOf": [],
+          "columns": [],
+          "sub": [],
+          "companion": null,
+          "from": "fixtures-fields.json (nozzles)",
+          "note": "",
+          "kind": "number"
+        },
+        {
+          "key": "referenceWaterDensityKgM3",
+          "unit": "kg/m3",
+          "required": false,
+          "min": null,
+          "max": null,
+          "monotonic": false,
+          "oneOf": [],
+          "columns": [],
+          "sub": [],
+          "companion": null,
+          "from": "fixtures-fields.json (nozzles)",
+          "note": "no bundled record carries this field, so the form advertises no range for it - it may be left blank",
+          "kind": "number"
+        }
+      ]
+    }
+  ]
+}

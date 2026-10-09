@@ -1,0 +1,70 @@
+{
+  "formatVersion": 1,
+  "kind": "drafthouse.project",
+  "savedBy": {
+    "host": "native",
+    "app": "drafthouse",
+    "version": "0.3.0"
+  },
+  "catalogRevisionId": "illustrative-catalog-v0.1",
+  "engine": {
+    "name": "RealEngine (the Rust engine crate, over the ordered fill stack)",
+    "version": "0.3.0",
+    "adapterContractSha256": "7a7cd24f9c78423eac1302e19f25839f02a1d79cf4610d3333554c7a24da366a"
+  },
+  "duty": {
+    "waterFlowM3Hr": 724.8125039515579,
+    "hotWaterC": 42.0,
+    "targetColdWaterC": 32.0,
+    "wetBulbC": 27.0,
+    "dryBulbC": 33.0,
+    "pressurePa": 101325.0,
+    "salinityGKg": 0.0,
+    "waterQualityClass": "moderate",
+    "cyclesOfConcentration": 4.0
+  },
+  "site": {
+    "altitudeM": 0.0,
+    "altitudeFrom": "derived from duty.pressurePa through the ISA standard atmosphere - a definition, not a measurement",
+    "waterQualityRecorded": {
+      "chloride": null,
+      "ph": null,
+      "tds": null
+    },
+    "limitsRecorded": {
+      "maxDriftPpm": 30.0,
+      "maxElectricalInputKW": 75.0,
+      "maxFootprintM2": 130.0,
+      "minimumThermalMarginC": 0.0,
+      "nozzlePressureDropPa": 65000.0
+    }
+  },
+  "tower": "IDCF-064",
+  "fillLayers": [
+    {
+      "fillId": "FILM-MF20",
+      "depthM": 0.45,
+      "thermalMultiplier": 0.92,
+      "pressureMultiplier": 1.12
+    },
+    {
+      "fillId": "FILM-WF25",
+      "depthM": 0.9,
+      "thermalMultiplier": 0.92,
+      "pressureMultiplier": 1.12
+    }
+  ],
+  "fitted": {
+    "fan": "AX-500",
+    "drift": "DE-3P-10",
+    "nozzle": "NZ-20"
+  },
+  "speedRatio": 0.81,
+  "customParts": [],
+  "results": {
+    "note": "as calculated on save - recomputed on open",
+    "engine": "",
+    "headlines": [],
+    "layers": []
+  }
+}

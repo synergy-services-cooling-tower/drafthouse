@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store
+.env
+.env.*
+reports/
+exports/
+
+# Issue #58: the cockpit's wasm build. `pkg/` is what `cockpit/tools/build-web.sh` writes (the
+# release workflow publishes it from a fresh build), `target/` is its cargo cache.
+cockpit/pkg/
+cockpit/target/

@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Synergy Drafthouse — cooling-tower engineering</title>
+<meta name="description" content="Synergy Drafthouse — the cooling-tower engineering cockpit: an illustrative instrument drawn by Bevy on WebGL2, on the real engine by default.">
+<style>
+  /* The shell is a canvas host, a control bar and an accessibility mirror. The interface is the Bevy/egui app. */
+  :root {
+    --ink: #0f171c;
+    --panel: #151f26;
+    --raised: #1b2730;
+    --line: #2a3a45;
+    --line-soft: #202d36;
+    --fg: #e8eef1;
+    --fg-2: #b4c2cb;
+    --muted: #7f919c;
+    --primary: #2fb3c9;
+    --amber: #e09a3a;
+    --danger: #e06363;
+    --ok: #4fb887;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; background: var(--ink); color: var(--fg);
+    font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  #viz-root { height: 100%; display: flex; flex-direction: column; }
+  #stage-host { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+  #boot-shell {
+    position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 6px; text-align: center; padding: 24px; z-index: 0;
+  }
+  #boot-shell .boot-title { margin: 0; color: var(--fg); font-size: 15px; font-weight: 600; }
+  #boot-shell .boot-note { margin: 0; max-width: 460px; color: var(--muted); font-size: 12px; }
+  #viz-canvas { position: relative; z-index: 1; display: block; width: 100%; height: 100%; touch-action: none; }
+  #viz-canvas:focus { outline: none; }
+  #viz-canvas:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+
+  #viz-nav {
+    flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+    min-height: 44px; padding: 3px 12px; background: var(--panel);
+    border-top: 1px solid var(--line-soft); /* wrap, never hide a control off the edge */
+    flex-wrap: wrap; row-gap: 2px; overflow-x: auto;
+    -webkit-overflow-scrolling: touch; scrollbar-width: thin;
+  }
+  #viz-nav .nav-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
+  #viz-nav button, #viz-nav select {
+    font: inherit; font-size: 12px; color: var(--fg); background: var(--raised);
+    border: 1px solid var(--line); border-radius: 4px; padding: 7px 11px; min-height: 32px; cursor: pointer;
+  }
+  #viz-nav button:hover { border-color: var(--primary); }
+  #viz-nav button[aria-pressed="true"] { background: #143a45; border-color: var(--primary); color: #fff; }
+  #viz-nav button#nav-freeze { background: var(--amber); color: var(--ink); border-color: var(--amber); font-weight: 600; }
+  #viz-nav button#nav-freeze[aria-pressed="false"] { background: var(--raised); color: var(--fg); border-color: var(--line); font-weight: 400; }
+  #viz-nav :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+  /* Issue #91: picker row controls only while a picker is open; one less row of buttons the rest of the time. */
+  #viz-nav .picker-only { display: contents; }
+  #viz-root:not([data-picker]) #viz-nav .picker-only, #viz-root[data-picker=""] #viz-nav .picker-only { display: none; }
+  #viz-nav button[aria-pressed="true"]#nav-motion, #viz-nav button[aria-pressed="true"]#nav-notes { background: #143a45; border-color: var(--primary); color: #fff; }
+  #viz-nav .spacer { flex: 1 1 auto; }
+  #viz-nav .hint { color: var(--muted); font-size: 11px; white-space: nowrap; }
+  #viz-nav .sep { width: 1px; height: 22px; background: var(--line); }
+  @media (max-width: 760px) {
+    #viz-nav { gap: 6px; padding: 4px 6px; min-height: 52px; }
+    #viz-nav button, #viz-nav select { min-height: 44px; padding: 10px 12px; }
+    #viz-nav .hint { display: none; }
+    #viz-nav .nav-label { display: none; }
+    /* #91 round 2: one row on a phone. The bays are tapped on the tower itself and a part is swapped
+       from the bay's own detail, so the picker group and the streamline emphasis fold away here; the
+       picker's own row controls still appear while one is open. */
+    #viz-nav .pick-open, #viz-nav .focus-only, #viz-nav .sep { display: none; }
+  }
+
+  /* Accessibility mirror: real live text for screen readers and keyboard users, visually out of the way. */
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: normal; border: 0;
+  }
+  #mirror-error:not(:empty) { color: var(--danger); }
+</style>
+</head>
+<body>
+<div id="viz-root" data-view="cockpit" data-load="loading" aria-busy="true">
+
+  <div id="stage-host">
+    <!-- The shell is real HTML and paints before the application is requested; the canvas covers it on the
+         first Rust frame. -->
+    <div id="boot-shell" aria-hidden="true">
+      <p class="boot-title">Synergy Drafthouse</p>
+      <p class="boot-note">Loading the instrument.</p>
+    </div>
+    <canvas id="viz-canvas" aria-label="Cooling tower visual instrument — tower section, flow map, spray coverage and operating point"></canvas>
+  </div>
+
+  <!-- Round 4, item 5: ONE view bar. The VIEW group that used to live here is gone - the header's tabs are
+       the only view switcher, on a phone too. Round 4, item 1 removed the CELLS group, the cutaway and the
+       camera reset with the 3D view. #91 round 2 removed the RPM and NOZZLES groups: fan speed is the fan
+       bay's own control and the nozzle bank's pitch/pattern are the nozzle bay's, both inside their bay's
+       detail card (one implementation, one home per surface - the Curves view carries the same fan row
+       under its chart). What is left is what lives nowhere else. -->
+  <nav id="viz-nav" aria-label="Instrument controls">
+    <span class="nav-label">Bay picker</span>
+    <span class="pick-open">
+    <button id="nav-pick-fan" type="button" title="Open the fan bay's picker">fan</button>
+    <button id="nav-pick-drift" type="button" title="Open the drift bay's picker">drift</button>
+    <button id="nav-pick-fill" type="button" title="Open the fill bay's picker">fill</button>
+    <button id="nav-pick-nozzle" type="button" title="Open the nozzle bay's picker">nozzle</button>
+    </span>
+    <!-- Issue #91: the picker's row controls exist only while a picker is open (data-picker on #viz-root). -->
+    <span class="picker-only">
+    <button id="nav-pick-prev" type="button" title="Picker row up (arrow up)">row ↑</button>
+    <button id="nav-pick-next" type="button" title="Picker row down (arrow down)">row ↓</button>
+    <button id="nav-pick-pick" type="button" title="Pick the highlighted row (enter)">pick</button>
+    <button id="nav-pick-close" type="button" title="Close the picker (esc)">close</button>
+    </span>
+    <span class="sep"></span>
+    <span class="nav-label">Overlay</span>
+    <button id="nav-focus" type="button" class="focus-only" title="Cycle the overlay emphasis (tab)">streamlines</button>
+    <button id="nav-freeze" type="button" aria-pressed="false" title="Hold the animation clock for a reproducible frame (F)">freeze</button>
+    <button id="nav-motion" type="button" aria-pressed="false" title="Reduced motion: hold the flow, droplets and fan still (M)">motion</button>
+    <!-- Issue #74: the internal host's file group. The PUBLIC host gets none of this - the rule is
+         unchanged: public can author, and public cannot save or export. The script removes this group
+         outright on the public host, so the buttons are not merely hidden. -->
+    <span class="sep" id="nav-files-sep"></span>
+    <span class="nav-label" id="nav-files-label">Project</span>
+    <span id="nav-files">
+      <button id="nav-project-new" type="button" title="Start a new project (the recorded default)">new</button>
+      <button id="nav-project-download" type="button" title="Download the project file (.drafthouse)">download project</button>
+      <button id="nav-project-upload" type="button" title="Upload a project file">upload project</button>
+      <!-- Issue #117: the web plane's route into the comparison - the counterpart of the desktop
+           binary's `--compare a.drafthouse b.drafthouse`. Two or three saved files open side by side. -->
+      <button id="nav-compare-open" type="button" title="Open two or three saved project files in the comparison">compare files</button>
+      <button id="nav-revision-import" type="button" title="Import a catalog revision file (its sha256 is checked)">import revision</button>
+    </span>
+    <input id="nav-project-file" type="file" accept=".drafthouse,.json,application/json" hidden>
+    <input id="nav-compare-file" type="file" accept=".drafthouse,.json,application/json" multiple hidden>
+    <input id="nav-revision-file" type="file" accept=".json,application/json" hidden>
+    <span class="spacer"></span>
+    <!-- Issue #91: the key list moved into the notes drawer (I), with every sentence the screen used to paint. -->
+    <button id="nav-notes" type="button" aria-pressed="false" title="Notes, validation and keyboard (I)">notes</button>
+  </nav>
+
+  <!-- Live text mirror: the instrument's own numbers, as text. -->
+  <div id="a11y-mirror" class="sr-only" role="status" aria-live="polite">
+    <p>View: <span id="mirror-view">Instrument</span> · overlay: <span id="mirror-focus">all overlays</span></p>
+    <p id="mirror-label">Comparable engineering metrics - not CTI/MRL certified</p>
+    <p>Fan: <span id="mirror-rpm">−</span></p>
+    <p>Nozzle pitch: <span id="mirror-spacing">−</span></p>
+    <p>Airflow: <span id="mirror-airflow">−</span></p>
+    <p>Total pressure: <span id="mirror-pressure">−</span></p>
+    <p>Fan power: <span id="mirror-fanpower">−</span></p>
+    <p><span id="mirror-op">no run yet</span></p>
+    <p>Fill stack: <span id="mirror-stack">−</span></p>
+    <p>Pressure by zone: <span id="mirror-zones">no run yet</span></p>
+    <p>Drag: <span id="mirror-drag">no drag</span></p>
+    <p>Picker: <span id="mirror-picker">no picker open</span></p>
+    <p>Duty and site: <span id="mirror-duty">-</span></p>
+    <p>Parameter card: <span id="mirror-hover">no parameter card</span></p>
+    <p>Custom parts: <span id="mirror-custom">no custom parts</span></p>
+    <!-- Issue #137 item 5: the staged log echoes URL keys (`duty waterMassFlowKgS=180`) - a test hook, not
+         words for a reader. It stays a span here (the capture harness reads `#a11y-mirror span` by id) but
+         out of the accessibility tree. -->
+    <p hidden aria-hidden="true">Staged from the URL: <span id="mirror-staged">nothing staged</span></p>
+    <p>Provenance: <span id="mirror-provenance">−</span></p>
+    <p>Project: <span id="mirror-project-status">nothing loaded from a file yet</span></p>
+    <p>Error: <span id="mirror-error"></span></p>
+  </div>
+  <!-- Round 5: the clip probe. One JSON object per frame: the container every text unit of the right column
+       is checked against, and one entry per text unit (id, text, drawn rect, available width, natural width,
+       lines, overflow). Written by the Rust app; read by tools/clip-check.mjs; never shown. -->
+  <pre id="mirror-clip" hidden></pre>
+  <!-- Issue #74: the project file's text, as the app published it for *Download project*. Written by the
+       Rust app; read by the page (and by the capture harness); never shown. -->
+  <pre id="mirror-project" hidden></pre>
+  <!-- Issue #91: every text shape the frame painted (JSON), for the on-screen word count. Never shown. -->
+  <pre id="mirror-words" hidden></pre>
+</div>
+
+<script type="module">
+// The host page injects the host configuration and the staging; nothing about either is hard-coded in the app.
+const root = document.getElementById('viz-root');
+const params = new URLSearchParams(location.search);
+const internal = params.get('host') === 'internal';
+
+const host = internal
+  ? {
+      public: false,
+      branding: {
+        name: 'Synergy Services',
+        site_url: 'https://synergyservices.co.th',
+        notice: 'Engine and source under PolyForm Noncommercial 1.0.0',
+        mark: 'SS',
+        accent: '#2fb3c9'
+      },
+      catalog_label: 'illustrative-catalog-v0.1'
+    }
+  : { public: true, branding: null, catalog_label: 'illustrative-catalog-v0.1' };
+
+const num = (k) => (params.get(k) === null ? null : Number(params.get(k)));
+const options = {
+  host,
+  view: params.get('view') || null,
+  focus: params.get('focus') || null,
+  rpm: num('rpm'),
+  spacing: num('spacing'),
+  pattern: params.get('pattern') || null,
+  drag: params.get('drag') || null,
+  over: params.get('over') || null,
+  drop: params.get('drop') || null,
+  move: params.get('move') || null,
+  remove: num('remove'),
+  add: params.get('add') || null,
+  layer: num('layer'),
+  grid: params.get('grid') === null ? null : params.get('grid') !== '0',
+  engine: params.get('engine') || null,
+  frozen: params.get('frozen') === '1',
+  // Issue #91: `?t=<seconds>` - freeze the animations at that clock value (a recorder walks the animation
+  // in steps with it; `?frozen=1` is the same thing at the default 2.5 s).
+  t: num('t'),
+  // Issue #91: the URL wins; without one, the OS setting decides.
+  reduced_motion: params.get('reduced_motion') === null
+    ? !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+    : params.get('reduced_motion') === '1',
+  // Round 2: the bay focus / picker / 3D configuration, all staged the same way round 1 staged the rest.
+  bay: params.get('bay') || null,
+  picker: params.get('picker') || null,
+  picker_row: num('picker-row'),
+  cells: num('cells'),
+  cutaway: params.get('cutaway') === null ? null : params.get('cutaway') === '1',
+  cell: num('cell'),
+  cam: params.get('cam') || null,
+  // Round 3: the parts rail and the honesty legend, staged the same way as everything else.
+  rail: params.get('rail') === null ? null : params.get('rail') !== '0',
+  legend: params.get('legend') === null ? null : params.get('legend') !== '0',
+  // Issue #91: the notes drawer and the setup drawer, staged the same way.
+  notes: params.get('notes') === null ? null : params.get('notes') === '1',
+  panel: params.get('panel') === null ? null : params.get('panel') === '1',
+  // #91 round 2: the tap-detail card over the tower (?detail=fan|drift|fill|nozzle|op|rain|inlet|fixed).
+  detail: params.get('detail'),
+  // Round 4: the custom-part form, the duty & site edits and the parameter card, staged the same way.
+  form: params.get('form') || null,
+  form_fields: params.get('form-fields') || null,
+  form_rows: params.get('form-rows') || null,
+  form_companion: params.get('form-companion') || null,
+  form_save: params.get('form-save') === null ? null : params.get('form-save') === '1',
+  duty: params.get('duty') || null,
+  hover: params.get('hover') || null,
+  hover_long: params.get('hover-long') === null ? null : params.get('hover-long') === '1',
+  hover_bay: params.get('hover-bay') === null ? null : params.get('hover-bay') === '1',
+  // Round 5: the duty & site panel's three collapsible sections (DUTY is open by default, WATER QUALITY
+  // and LIMITS are collapsed), staged the same way as everything else.
+  duty_open: params.get('duty-open') === null ? null : params.get('duty-open') !== '0',
+  water_open: params.get('water-open') === null ? null : params.get('water-open') !== '0',
+  limits_open: params.get('limits-open') === null ? null : params.get('limits-open') !== '0'
+};
+
+let dispatch = null;
+window.__viz = {
+  dispatch: (command) => dispatch && dispatch(String(command)),
+  options,
+  // The staging the page injected, echoed for the harness (the app publishes what it *reached*).
+  staged: Object.fromEntries(Object.entries(options).filter(([, v]) => v !== null && typeof v !== 'object'))
+};
+
+document.title = `Synergy Drafthouse (${internal ? 'internal' : 'public'} host)`;
+
+const setPressed = (id, on) => { const el = document.getElementById(id); if (el) el.setAttribute('aria-pressed', on ? 'true' : 'false'); };
+// Round 4, item 5: no VIEW group here - the header's tabs own the view, so there is nothing to wire.
+document.getElementById('nav-focus').addEventListener('click', () => window.__viz.dispatch('focus-next'));
+document.getElementById('nav-freeze').addEventListener('click', () => window.__viz.dispatch('freeze-toggle'));
+document.getElementById('nav-motion').addEventListener('click', () => window.__viz.dispatch('motion'));
+document.getElementById('nav-notes').addEventListener('click', () => window.__viz.dispatch('notes'));
+for (const bay of ['fan', 'drift', 'fill', 'nozzle']) {
+  document.getElementById('nav-pick-' + bay).addEventListener('click', () => window.__viz.dispatch('picker:open:' + bay));
+}
+document.getElementById('nav-pick-prev').addEventListener('click', () => window.__viz.dispatch('picker:prev'));
+document.getElementById('nav-pick-next').addEventListener('click', () => window.__viz.dispatch('picker:next'));
+document.getElementById('nav-pick-pick').addEventListener('click', () => window.__viz.dispatch('picker:pick'));
+document.getElementById('nav-pick-close').addEventListener('click', () => window.__viz.dispatch('picker:close'));
+
+// Keyboard: the HTML side reaches the view, the knob and the freeze even when the canvas has no focus
+// (the canvas keeps its own shortcuts as well).
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return;
+  const key = e.key;
+  if (key === '[') { window.__viz.dispatch('nudge:-1'); e.preventDefault(); }
+  else if (key === ']') { window.__viz.dispatch('nudge:1'); e.preventDefault(); }
+  else if (key === 'r' || key === 'R') { window.__viz.dispatch('reset'); e.preventDefault(); }
+  else if (key === 'g' || key === 'G') { window.__viz.dispatch('grid-toggle'); e.preventDefault(); }
+  else if (key === 'f' || key === 'F') { window.__viz.dispatch('freeze-toggle'); e.preventDefault(); }
+  else if (key === 'Tab') { window.__viz.dispatch('focus-next'); e.preventDefault(); }
+  else if (key === '1' || key === '2') { window.__viz.dispatch('view:' + ['cockpit', 'curves'][Number(key) - 1]); e.preventDefault(); }
+  // One path per key: the picker's Esc / arrows / Enter are the canvas app's own keyboard (below), so the
+  // page only drives the keys the app does not read itself. Round 4 removed `4` (the 3D view) and `C` (the
+  // cutaway) along with the view itself.
+  else if (key === 'b' || key === 'B') { window.__viz.dispatch('bay:next'); e.preventDefault(); }
+  else if (key === 'e' || key === 'E') { window.__viz.dispatch('picker:toggle'); e.preventDefault(); }
+});
+
+// Issue #74: the internal host's file buttons. The Rust side does every byte of the work - these handlers
+// only read a file the user picked and dispatch its text through the existing bridge (`viz_dispatch`), and
+// hand back the text the app published for download. The public host removes the group above, so there is
+// no save or export path there at all.
+if (!internal) {
+  for (const id of ['nav-files', 'nav-files-sep', 'nav-files-label', 'nav-project-file', 'nav-revision-file', 'nav-compare-file']) {
+    const el = document.getElementById(id);
+    if (el) el.remove();
+  }
+} else {
+  const projectFile = document.getElementById('nav-project-file');
+  const revisionFile = document.getElementById('nav-revision-file');
+  const readAnd = (input, command) => {
+    input.addEventListener('change', async () => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      window.__viz.dispatch(command + ':' + (await file.text()));
+    });
+  };
+  document.getElementById('nav-project-new').addEventListener('click', () => window.__viz.dispatch('project:new'));
+  document.getElementById('nav-project-upload').addEventListener('click', () => { projectFile.value = ''; projectFile.click(); });
+  document.getElementById('nav-revision-import').addEventListener('click', () => { revisionFile.value = ''; revisionFile.click(); });
+  readAnd(projectFile, 'project:upload');
+  readAnd(revisionFile, 'revision:import');
+  // Issue #117: "compare files" takes the same route into the comparison that the desktop binary's
+  // `--compare a.drafthouse b.drafthouse` takes - a `screen:compare`, then one
+  // `compare:open:<name>:<text>` per picked file, exactly the commands the native file work queues.
+  // The page only reads the picked files (the picker is where the bytes are); the command channel,
+  // the reader and the engine are all Rust. The name rule matches the native route's: `:` -> `_`,
+  // because the command's name field ends at its first `:`; the text is the file, verbatim.
+  const compareFile = document.getElementById('nav-compare-file');
+  document.getElementById('nav-compare-open').addEventListener('click', () => { compareFile.value = ''; compareFile.click(); });
+  compareFile.addEventListener('change', async () => {
+    const picked = [...(compareFile.files || [])];
+    if (!picked.length) return;
+    const files = await Promise.all(picked.map(async (file) => [file.name.replaceAll(':', '_'), await file.text()]));
+    window.__viz.dispatch('screen:compare');
+    for (const [name, text] of files) window.__viz.dispatch('compare:open:' + name + ':' + text);
+  });
+  document.getElementById('nav-project-download').addEventListener('click', () => {
+    window.__viz.dispatch('project:download');
+    // The app publishes the file's text into #mirror-project; give the frame a moment, then hand it over.
+    setTimeout(() => {
+      const text = document.getElementById('mirror-project').textContent;
+      if (!text || !text.trim()) return;
+      const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = root.dataset.projectName || 'untitled.drafthouse';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }, 300);
+  });
+}
+
+// Mirror the app's published state back onto the control bar (one-way: the app is the source of truth).
+let lastFrozen = null, lastFocus = null;
+setInterval(() => {
+  const frozen = root.dataset.frozen === '1';
+  if (frozen !== lastFrozen) { lastFrozen = frozen; setPressed('nav-freeze', frozen); }
+  setPressed('nav-motion', root.dataset.motion === 'reduced');
+  setPressed('nav-notes', root.dataset.notes === 'open');
+  const focus = root.dataset.focus;
+  if (focus && focus !== lastFocus) {
+    lastFocus = focus;
+    const btn = document.getElementById('nav-focus');
+    if (btn) btn.textContent = (root.dataset.focusName || focus).replace(' overlays', '');
+  }
+}, 250);
+
+root.dataset.boot = 'starting';
+root.dataset.shellMs = String(Math.round(performance.now()));
+
+async function boot() {
+  try {
+    const module = await import('./pkg/drafthouse_cockpit.js');
+    dispatch = module.viz_dispatch;
+    window.__viz.dispatch = (command) => module.viz_dispatch(String(command));
+    await module.default();
+    // Issue #148: `assets` is where bevy's asset server reads from (relative to this document).
+    // The release packer rewrites this one anchor to the payload's content address
+    // (`assets/<digest>`), so a new build's assets can never be fetched from an old cached name;
+    // a from-source tree (this one, the dev server) keeps the flat `assets`.
+    module.viz_start('#viz-canvas', JSON.stringify({ ...options, assets: 'assets' }));
+    root.dataset.boot = 'ready';
+  } catch (error) {
+    root.dataset.boot = 'failed';
+    const message = String((error && error.message) || error);
+    const el = document.getElementById('mirror-error');
+    el.textContent = 'startup failed: ' + message;
+    console.error(error);
+  }
+}
+
+if (internal) {
+  boot();
+} else {
+  // Public host: let the shell paint before the application module is requested.
+  requestAnimationFrame(() => requestAnimationFrame(boot));
+}
+</script>
+
+  <script>
+    // #91 round 2: the real-GPU frame-rate probe. Armed only by `?perf=<tag>`; it counts animation frames
+    // for six seconds and reports the result, with the WebGL renderer string, to the page's own origin -
+    // so a phone on the tailnet can be measured by opening one URL, with no device-side harness, and the
+    // number lands in the serving log. Nothing runs without the parameter, and nothing is painted.
+    (() => {
+      const params = new URLSearchParams(location.search);
+      const tag = params.get('perf');
+      if (!tag) return;
+      // the probe publishes its own progress, so a measurement that never reports can be diagnosed from
+      // the page itself (`window.__perfProbe`) instead of guessed at.
+      const log = (state, extra = {}) => {
+        window.__perfProbe = { tag, state, at: new Date().toISOString(), ...extra };
+      };
+      log('armed');
+      // `&warm=<seconds>` waits before counting, so the number is a *steady state* and not an
+      // average that includes the wasm download, instantiation and first uploads. Default: wait
+      // for the app's own ready marker (`#viz-root[data-load=ready]`), because an 18.8 MB module
+      // takes seconds to compile on a phone and a fixed delay can land inside that block - the
+      // first phone run counted 3.1 fps while the main thread was still compiling.
+      const warmMs = 1000 * Number(params.get('warm') ?? 0);
+      const waitReady = () => new Promise((resolve) => {
+        const started = performance.now();
+        const poll = () => {
+          const root = document.getElementById('viz-root');
+          const state = root?.getAttribute('data-load') ?? 'missing';
+          if (state === 'ready' || performance.now() - started > 60000) {
+            log('ready-wait-over', { state, waited_s: ((performance.now() - started) / 1000).toFixed(1) });
+            resolve();
+          } else setTimeout(poll, 120);
+        };
+        poll();
+      });
+      const phase = 'warm';
+      const start = () => {
+        const t0 = performance.now();
+        let frames = 0;
+        log('counting', { warm_ms: warmMs });
+        let done = false;
+        const report = () => {
+          if (done) return;
+          done = true;
+          const elapsed = (performance.now() - t0) / 1000;
+          const fps = frames / elapsed;
+          let renderer = 'unknown';
+          try {
+            const gl = document.createElement('canvas').getContext('webgl2');
+            const dbg = gl && gl.getExtension('WEBGL_debug_renderer_info');
+            renderer = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : 'no-debug-info';
+          } catch (e) {
+            renderer = 'probe-failed';
+          }
+          const q = new URLSearchParams({
+            tag, phase, fps: fps.toFixed(1), renderer, frames: String(frames),
+            elapsed_s: elapsed.toFixed(1),
+            w: innerWidth, h: innerHeight, dpr: devicePixelRatio,
+          });
+          log('reported', { fps: fps.toFixed(1), renderer, frames, elapsed_s: elapsed.toFixed(1) });
+          fetch('/__fps?' + q).catch(() => {});
+        };
+        const tick = () => {
+          frames += 1;
+          if (performance.now() - t0 < 6000) requestAnimationFrame(tick);
+          else report();
+        };
+        requestAnimationFrame(tick);
+        // a page whose animation frames stop - iOS suspends them when the screen sleeps - still reports
+        // what it counted, with `frames` and `elapsed_s`, instead of losing the sample entirely.
+        setTimeout(report, 6500);
+      };
+      if (warmMs > 0) setTimeout(start, warmMs);
+      else waitReady().then(start);
+    })();
+  </script>
+</body>
+</html>

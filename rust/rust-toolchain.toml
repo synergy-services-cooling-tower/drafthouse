@@ -1,0 +1,7 @@
+# Pinned by issue #6 so a local run and a CI run use the same compiler. The CI job reads the
+# `channel` below and installs it as the runner's default toolchain, so commands run from the
+# repository root - the parity harness's `cargo build --manifest-path rust/Cargo.toml` - use it
+# too, while `cargo fmt`/`clippy`/`test` run in `rust/` resolve this file directly.
+[toolchain]
+channel = "1.97.1"
+components = ["rustfmt", "clippy"]

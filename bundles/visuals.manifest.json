@@ -1,0 +1,53 @@
+{
+  "piece": "visuals",
+  "version": "0.4.3+fad7a7ea96862830ebbdeb784bfc42cf7e420a48",
+  "commit": "fad7a7ea96862830ebbdeb784bfc42cf7e420a48",
+  "files": [
+    {
+      "path": "web/geometry.js",
+      "bytes": 29451,
+      "sha256": "e69f322ee8755e3e91783897b1a985331456bc1e475fd1b32bfe7796de6d0434"
+    },
+    {
+      "path": "web/numbers.js",
+      "bytes": 37223,
+      "sha256": "e917da7d02f8611d27bf3655010a3af1b4763a7b28e55673552578a769f5f69a"
+    },
+    {
+      "path": "web/panel-ui.js",
+      "bytes": 6240,
+      "sha256": "49c3c2dad04ed2eea520fe1f5b4e51583a55fa344a6a5b2d3a0ca80e0efc121d"
+    },
+    {
+      "path": "web/panel.css",
+      "bytes": 17218,
+      "sha256": "9e4d0ab8db9f2c886422d7351b9829ba00645753c9d60acb3b5d47450a03b8cc"
+    },
+    {
+      "path": "web/panel.js",
+      "bytes": 44923,
+      "sha256": "f6e0736f93bae0f254367cc0af9104ec336ef33e149957a882fcfeda856fb8b3"
+    },
+    {
+      "path": "web/vendor/three-LICENSE.txt",
+      "bytes": 1081,
+      "sha256": "8b378ebe60e2fe500158cb0ac71cb5e8b7d92953c2abcc63a0eb90499653b5bc"
+    },
+    {
+      "path": "web/vendor/three.core.js",
+      "bytes": 1458113,
+      "sha256": "9edde002b066a9a05676a6127f67735b62baf399bdea529f2f7e31657da769e6"
+    },
+    {
+      "path": "web/vendor/three.module.js",
+      "bytes": 662772,
+      "sha256": "9052042d676cb0fdc1ddfefe193053f34b7ac0513a616fdac4535d49987812ea"
+    },
+    {
+      "path": "web/viewer.js",
+      "bytes": 32916,
+      "sha256": "85ad008518d8a62735d9e26a26a4abe85e62095f22542e345cca2a29432bca76"
+    }
+  ],
+  "digest": "9a4e0eaf243e4cbd95136820ae54854e2686818a4db5a5a24a0eb602c7249e95"
+}

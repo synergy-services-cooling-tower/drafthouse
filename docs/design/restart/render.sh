@@ -1,22 +1,20 @@
 #!/bin/sh
-# Renders each page at 1440 and 390 wide, full height, reduced motion, with Playwright's cached headless Chromium (WebGL by SwiftShader).
+# Renders each cockpit state at 1440x900 and 390x844 with Playwright's cached headless Chromium (WebGL by SwiftShader).
 set -eu
 cd "$(dirname "$0")"
 shell=$(ls -d "$HOME"/Library/Caches/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-*/chrome-headless-shell | tail -1)
 shot() {
-  set -- "$1" "$2" "$3" --headless --allow-file-access-from-files --force-prefers-reduced-motion \
-    --use-angle=swiftshader --enable-unsafe-swiftshader --force-device-scale-factor=1 --virtual-time-budget=5000
-  page=$1 out=$2 w=$3; shift 3
-  h=$("$shell" "$@" --window-size="$w",900 --dump-dom "file://$PWD/$page" 2>/dev/null | sed -n 's/.*data-h="\([0-9]*\)".*/\1/p' | head -1)
-  "$shell" "$@" --hide-scrollbars --window-size="$w,${h:-2000}" --screenshot="$PWD/$out" "file://$PWD/$page" >/dev/null 2>&1
-  echo "$out ${w}x${h:-2000}"
+  w=$2; h=900; [ "$w" = 390 ] && h=844
+  "$shell" --headless --allow-file-access-from-files --force-prefers-reduced-motion --use-angle=swiftshader --enable-unsafe-swiftshader \
+    --force-device-scale-factor=1 --virtual-time-budget=6000 --hide-scrollbars --window-size="$w,$h" \
+    --screenshot="$PWD/$3" "file://$PWD/cockpit.html$1" >/dev/null 2>&1
+  echo "$3 ${w}x$h"
 }
-pages=${*:-landing wizard-duty wizard-site wizard-priority results design tower embed}
-for p in $pages; do
-  for w in 1440 390; do shot "$p.html" "$p-$w.png" "$w"; done
-done
-if [ -z "$*" ]; then
-  for w in 1440 390; do shot "landing.html?light" "landing-light-$w.png" "$w"; done
-  shot "landing.html?poster" landing-poster-390.png 390
-fi
-true
+both() { shot "$1" 1440 "$2-1440.png"; shot "$1" 390 "$2-390.png"; }
+both "" cockpit
+both "?ga" cockpit-ga
+both "?refused" cockpit-refused
+both "?light" cockpit-light
+both "?poster" cockpit-poster
+for s in inputs ranking calc; do shot "?sheet=$s" 390 "cockpit-$s-390.png"; done
+shot "?refused&sheet=inputs" 390 cockpit-refused-inputs-390.png

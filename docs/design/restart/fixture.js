@@ -1,7 +1,7 @@
 // Preview-only fixture: the rank-1 design at the default duty, numbers from validation/regression-baseline.json
 // (the "documented default duty" select step). The geometry follows shapes.md section 3; impl gets it from the engine.
 window.DUTY = {
-  flowM3H: 720, hotC: 42.0, coldC: 32.0, wetBulbC: 27.0, dryBulbC: 33.0, altitudeM: 0,
+  flowM3H: 725, hotC: 42.0, coldC: 32.0, wetBulbC: 27.0, dryBulbC: 33.0, altitudeM: 0,
   rangeK: 10.0, approachK: 5.0, heatMW: 8.37,
 };
 window.RANKED = [

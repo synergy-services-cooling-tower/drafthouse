@@ -1,0 +1,167 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Drafthouse: design and calc steps</title>
+<link rel="stylesheet" href="site.css"><link rel="stylesheet" href="wizard.css">
+<script type="importmap">{"imports":{"three":"../../../web/vendor/three.module.js"}}</script>
+<script src="chrome.js"></script><script src="fixture.js"></script>
+<style>
+.nav2{display:flex;gap:var(--s-2);align-items:center;flex-wrap:wrap;font-size:var(--t-sm)}
+.nav2 .sp{flex:1}
+.ttl{margin-top:var(--s-3)}
+.ttl h1{font-size:var(--t-xl)}
+.ttl p{color:var(--fg-quiet);margin-top:var(--s-1)}
+.heads{display:grid;grid-template-columns:repeat(6,1fr);padding:0}
+.heads .stat{padding:20px var(--s-3);border-left:1px solid var(--rule);border-top:1px solid var(--rule)}
+.heads .stat:nth-child(6n+1){border-left:0}.heads .stat:nth-child(-n+6){border-top:0}
+.heads .stat span{font-size:var(--t-xs);text-transform:uppercase;letter-spacing:.1em;color:var(--fg-quiet);font-weight:600}
+.heads .stat b{font-size:var(--t-lg)}
+.body{display:grid;grid-template-columns:8fr 4fr;gap:var(--s-3);margin-top:var(--s-3);align-items:start}
+.body>*{min-width:0}
+.tabs{display:flex;gap:var(--s-2);flex-wrap:wrap;margin-bottom:var(--s-3)}
+.secn{padding:0;margin-bottom:var(--s-3)}
+.secn>header{display:flex;align-items:center;gap:var(--s-3);padding:20px var(--s-4);border-bottom:1px solid var(--rule)}
+.secn>header h2{font-size:var(--t-lg)}
+.secn>header .n{font-size:var(--t-xs);color:var(--accent);font-weight:600;letter-spacing:.12em}
+.secn>header .sp{flex:1}
+.secn>header .chev{color:var(--fg-quiet);font-size:var(--t-sm)}
+.secn.shut>header{border-bottom:0}
+.stp{display:grid;grid-template-columns:200px 1fr;gap:var(--s-1) var(--s-4);padding:20px var(--s-4);border-top:1px solid var(--rule)}
+.stp:first-of-type{border-top:0}
+.stp .lb b{display:block;font-weight:600;font-size:var(--t-md);line-height:1.3}
+.stp .lb .ref{display:block;font-size:var(--t-xs);color:var(--fg-quiet);text-transform:uppercase;letter-spacing:.1em;margin-top:6px}
+.stp .why{font-size:var(--t-sm);color:var(--fg-quiet);margin-bottom:var(--s-2)}
+.stp .calc .ref{display:none}
+.stp.hl{background:color-mix(in srgb,var(--accent) 6%,transparent)}
+.chart{padding:var(--s-3) var(--s-4) var(--s-4);border-top:1px solid var(--rule)}
+.chart h3{font-size:var(--t-sm);font-weight:600;margin-bottom:var(--s-2)}
+.zb{display:grid;grid-template-columns:150px 1fr 64px;gap:8px var(--s-3);align-items:center;font-size:var(--t-sm)}
+.zb .b{height:10px;background:var(--surface-2);border-radius:0 4px 4px 0;position:relative}
+.zb .b i{position:absolute;left:0;top:0;bottom:0;background:var(--accent);border-radius:0 4px 4px 0}
+.zb .v{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+.zb .tot{grid-column:1/-1;display:flex;justify-content:space-between;border-top:1px solid var(--rule);padding-top:var(--s-2);font-weight:600}
+svg.fc{width:100%;height:auto;display:block;font-family:Montserrat,sans-serif}
+.summ{padding:20px var(--s-4);font-size:var(--t-sm);color:var(--fg-quiet)}
+.aside{display:grid;gap:var(--s-3);position:sticky;top:var(--s-3)}
+.island.d{height:440px}
+.parts{display:flex;flex-wrap:wrap;gap:var(--s-2)}
+@media (max-width:700px){
+  .nav2 .wide{display:none}
+  .ttl h1{font-size:var(--t-lg)}
+  .heads{grid-template-columns:repeat(2,1fr)}
+  .heads .stat:nth-child(n){border-left:1px solid var(--rule);border-top:1px solid var(--rule)}
+  .heads .stat:nth-child(2n+1){border-left:0}.heads .stat:nth-child(-n+2){border-top:0}
+  .heads .stat b{font-size:var(--t-md)}
+  .body{grid-template-columns:1fr}
+  .aside{order:-1;position:static}
+  .island.d{height:260px}
+  .aside .parts-card,.aside .statecard{display:none}
+  .tabs{flex-wrap:nowrap;overflow:hidden;position:sticky;top:0;background:var(--bg);padding:var(--s-2) 0;margin:0}
+  .secn>header{padding:var(--s-3)}
+  .stp{grid-template-columns:1fr;padding:var(--s-3)}
+  .chart{padding:var(--s-3)}
+  .zb{grid-template-columns:110px 1fr 52px}
+  .summ{padding:var(--s-3)}
+}
+</style></head>
+<body>
+<div class="dots"><header data-chrome></header>
+<div class="wrap band">
+  <div class="nav2"><a href="#">← Ranking</a><span class="sp"></span><button class="btn sm">‹ Previous</button><span class="q">1 of 202</span><button class="btn sm">Next ›</button><button class="btn sm"><span>⧉<span class="wide"> Copy link</span></span></button></div>
+  <div class="ttl"><span class="eyebrow">Design · rank 1 · least over-capacity</span><h1 style="margin-top:var(--s-2)">IDCF-064 · FILM-VF38 1.2 m · DE-4P-ULTRA · AX-500 at 88 %</h1><p>Counterflow, rated by Merkel at the default duty. <span class="live" style="display:inline-flex;margin-left:var(--s-2)">Holds the duty</span></p></div>
+</div></div>
+<main class="wrap">
+  <section class="card heads">
+    <div class="stat"><span>Cold water</span><b class="num">31.70<small>°C</small></b></div>
+    <div class="stat"><span>Margin</span><b class="num">+0.30<small>K</small></b></div>
+    <div class="stat"><span>Capability</span><b class="num">1.093</b></div>
+    <div class="stat"><span>Heat rejected</span><b class="num">8,619<small>kW</small></b></div>
+    <div class="stat"><span>Electrical input</span><b class="num">44.9<small>kW</small></b></div>
+    <div class="stat"><span>Air flow</span><b class="num">142.4<small>m³/s</small></b></div>
+    <div class="stat"><span>Air-side pressure</span><b class="num">237.6<small>Pa</small></b></div>
+    <div class="stat"><span>Merkel, available</span><b class="num">1.410</b></div>
+    <div class="stat"><span>Make-up water</span><b class="num">15.0<small>m³/h</small></b></div>
+    <div class="stat"><span>Drift</span><b class="num">4.14<small>ppm</small></b></div>
+    <div class="stat"><span>Footprint</span><b class="num">78<small>m²</small></b></div>
+    <div class="stat"><span>Nozzles</span><b class="num">78<small>NZ-20</small></b></div>
+  </section>
+
+  <div class="body">
+    <div>
+      <nav class="tabs"><span class="chip on">Duty</span><span class="chip">Air side</span><span class="chip">Fan</span><span class="chip">Heat transfer</span><span class="chip">Fill layers</span><span class="chip">Water</span></nav>
+
+      <section class="card secn"><header><span class="n">01</span><h2>Duty</h2><span class="sp"></span><span class="q">4 steps</span><span class="chev">▾</span></header>
+        <div class="stp"><div class="lb"><b>Water volume flow</b><span class="ref">Inputs</span></div><div><p class="why">Why: the catalog rates cells by mass flow; the flow you typed is a volume.</p><div class="calc"><div class="fx">V̇<sub>w</sub> = ṁ<sub>w</sub> / ρ<sub>w</sub></div><div class="s">200.0 kg/s ÷ 993.4 kg/m³</div><div class="r">0.2013 m³/s</div></div></div></div>
+        <div class="stp"><div class="lb"><b>Range</b><span class="ref">Definition</span></div><div><p class="why">Why: how far the tower must cool the water.</p><div class="calc"><div class="fx">R = t<sub>hot</sub> − t<sub>cold</sub></div><div class="s">42.00 − 31.70 °C</div><div class="r">10.30 K</div></div></div></div>
+        <div class="stp"><div class="lb"><b>Approach</b><span class="ref">Definition</span></div><div><p class="why">Why: how close the cold water gets to the wet bulb, the limit no tower can pass.</p><div class="calc"><div class="fx">A = t<sub>cold</sub> − t<sub>wb</sub></div><div class="s">31.70 − 27.00 °C</div><div class="r">4.70 K</div></div></div></div>
+        <div class="stp hl"><div class="lb"><b>Heat rejected</b><span class="ref">Energy balance, water side</span></div><div><p class="why">Why: the heat the water gives up is what the air must carry away.</p><div class="calc"><div class="fx">Q = ṁ<sub>w</sub> · c<sub>p</sub> · R</div><div class="s">200.0 kg/s × 4.183 kJ/(kg·K) × 10.30 K</div><div class="r">8,619 kW</div></div></div></div>
+      </section>
+
+      <section class="card secn"><header><span class="n">02</span><h2>Air side</h2><span class="sp"></span><span class="q">3 steps</span><span class="chev">▾</span></header>
+        <div class="stp"><div class="lb"><b>Inlet air enthalpy</b><span class="ref">Psychrometrics · 33.0 / 27.0 °C, 101.3 kPa</span></div><div><p class="why">Why: the air's heat content on entry sets how much more it can take up.</p><div class="calc"><div class="fx">h = 1.006·t + W·(2501 + 1.86·t)</div><div class="s">1.006 × 33.0 + 0.02023 × (2501 + 1.86 × 33.0)</div><div class="r">85.03 kJ/kg dry air</div></div></div></div>
+        <div class="stp"><div class="lb"><b>Dry-air mass flow</b><span class="ref">Fan operating point</span></div><div><p class="why">Why: the Merkel balance counts dry air, not the moist volume the fan moves.</p><div class="calc"><div class="fx">ṁ<sub>a</sub> = V̇<sub>fan</sub> · ρ<sub>dry</sub></div><div class="s">142.43 m³/s × 1.1167 kg/m³</div><div class="r">159.06 kg/s</div></div></div></div>
+        <div class="stp"><div class="lb"><b>Air-side pressure</b><span class="ref">Sum of zone losses</span></div><div><p class="why">Why: the fan must overcome every zone the air passes through.</p><div class="calc"><div class="fx">Δp = Σ Δp<sub>zone</sub></div><div class="s">83.4 + 61.1 + 33.9 + 19.5 + 12.4 + 11.4 + 10.0 + 5.9 Pa</div><div class="r">237.6 Pa</div></div></div></div>
+        <div class="chart"><h3>Pressure by zone</h3><div class="zb" id="zones"></div></div>
+      </section>
+
+      <section class="card secn"><header><span class="n">03</span><h2>Fan</h2><span class="sp"></span><span class="q">3 steps</span><span class="chev">▾</span></header>
+        <div class="stp"><div class="lb"><b>Operating point</b><span class="ref">AX-500 curve at 88 %</span></div><div><p class="why">Why: the fan settles where its curve meets the tower's system curve.</p><div class="calc"><div class="fx">p<sub>fan</sub>(V̇) = p<sub>system</sub>(V̇) = k · V̇²</div><div class="s">k = 237.6 Pa ÷ (142.43 m³/s)² = 0.01171</div><div class="r">142.4 m³/s at 237.6 Pa</div></div></div></div>
+        <div class="chart"><h3>Fan and system curves</h3><svg class="fc" id="fc" viewBox="0 0 640 260" role="img" aria-label="Fan curve and system curve meet at 142.4 cubic metres a second and 237.6 pascals"></svg><p class="q" style="margin-top:var(--s-2)">Mockup: the fan curve's shape is drawn for layout; impl plots the engine's curve points. Table view: one click.</p></div>
+        <div class="stp"><div class="lb"><b>Shaft power</b><span class="ref">Fan efficiency 82.6 %</span></div><div><p class="why">Why: the air power, grossed up by the fan's own losses.</p><div class="calc"><div class="fx">P<sub>shaft</sub> = V̇ · Δp / η<sub>fan</sub></div><div class="s">142.43 × 237.6 ÷ 0.826 ÷ 1000</div><div class="r">40.97 kW</div></div></div></div>
+        <div class="stp"><div class="lb"><b>Electrical input</b><span class="ref">Drive and motor</span></div><div><p class="why">Why: what the site pays for, after gearbox and motor losses.</p><div class="calc"><div class="fx">P<sub>el</sub> = P<sub>shaft</sub> / (η<sub>drive</sub> · η<sub>motor</sub>)</div><div class="s">40.97 ÷ (0.96 × 0.95)</div><div class="r">44.93 kW</div></div></div></div>
+      </section>
+
+      <section class="card secn"><header><span class="n">04</span><h2>Heat transfer</h2><span class="sp"></span><span class="q">2 steps</span><span class="chev">▾</span></header>
+        <div class="stp"><div class="lb"><b>Available Merkel number</b><span class="ref">Fill, spray and rain zones</span></div><div><p class="why">Why: the transfer the tower can give, zone by zone.</p><div class="calc"><div class="fx">KaV/L = Me<sub>fill</sub> + Me<sub>spray</sub> + Me<sub>rain</sub></div><div class="s">1.117 + 0.096 + 0.197</div><div class="r">1.410</div></div></div></div>
+        <div class="stp"><div class="lb"><b>Cold water reached</b><span class="ref">Merkel integral</span></div><div><p class="why">Why: the cold water at which the needed transfer equals the available 1.410.</p><div class="calc"><div class="fx">margin = t<sub>target</sub> − t<sub>cold</sub></div><div class="s">32.00 − 31.70 °C</div><div class="r">+0.30 K · holds the duty</div></div></div></div>
+      </section>
+
+      <section class="card secn shut"><header><span class="n">05</span><h2>Fill layers</h2><span class="sp"></span><span class="q">FILM-VF38 · 2 × 0.6 m · within its envelope</span><span class="chev">▸</span></header></section>
+
+      <section class="card secn"><header><span class="n">06</span><h2>Water</h2><span class="sp"></span><span class="q">4 steps</span><span class="chev">▾</span></header>
+        <div class="stp"><div class="lb"><b>Evaporation</b><span class="ref">Moisture balance, air side</span></div><div><p class="why">Why: the water the air carries off as vapour.</p><div class="calc"><div class="fx">E = ṁ<sub>a</sub> · (W<sub>out</sub> − W<sub>in</sub>)</div><div class="s">159.06 × (0.03994 − 0.02023)</div><div class="r">3.134 kg/s</div></div></div></div>
+        <div class="stp"><div class="lb"><b>Blowdown</b><span class="ref">4 cycles of concentration</span></div><div><p class="why">Why: water bled off to keep dissolved solids at the chosen cycles.</p><div class="calc"><div class="fx">B = E / (C − 1) − D</div><div class="s">3.134 ÷ (4 − 1) − 0.0008</div><div class="r">1.044 kg/s</div></div></div></div>
+        <div class="stp"><div class="lb"><b>Make-up water</b><span class="ref">Water balance</span></div><div><p class="why">Why: everything lost must be replaced.</p><div class="calc"><div class="fx">M = E + D + B</div><div class="s">3.134 + 0.0008 + 1.044 kg/s</div><div class="r">4.179 kg/s · 15.0 m³/h</div></div></div></div>
+        <div class="stp"><div class="lb"><b>Drift</b><span class="ref">DE-4P-ULTRA</span></div><div><p class="why">Why: droplets the eliminator lets through, as a share of the flow.</p><div class="calc"><div class="fx">drift = D / ṁ<sub>w</sub> · 10⁶</div><div class="s">0.000828 ÷ 200.0 × 10⁶</div><div class="r">4.14 ppm</div></div></div></div>
+      </section>
+    </div>
+
+    <aside class="aside">
+      <section class="island d" id="tw">
+        <div class="cap"><b>Pick a part</b><span>· jumps to its steps</span></div>
+        <div class="bar"><span class="chip on">◧ Cutaway</span><span style="flex:1"></span><a class="btn sm" href="#">⤢ Full view</a></div>
+      </section>
+      <section class="card parts-card"><span class="eyebrow">Parts</span>
+        <div class="parts" style="margin-top:var(--s-3)"><span class="chip">IDCF-064 cell</span><span class="chip">FILM-VF38 fill</span><span class="chip">DE-4P-ULTRA eliminator</span><span class="chip on">AX-500 fan</span><span class="chip">78 × NZ-20 nozzles</span><span class="chip">45 kW drive</span></div>
+        <div class="notice" style="margin-top:var(--s-3)"><b>Synthetic catalog.</b> Not CTI certified.</div>
+      </section>
+      <section class="card statecard"><span class="eyebrow">State: cannot hold the duty</span>
+        <p style="margin-top:var(--s-2);font-size:var(--t-sm)"><span class="err">Cold water 32.42 °C misses the 32.0 °C target by 0.42 K.</span></p>
+        <p class="q" style="margin-top:var(--s-2)">The headline turns red at Margin; the step that fails is marked, and the limits it hit are listed above the sheet.</p></section>
+    </aside>
+  </div>
+</main>
+<footer data-chrome></footer>
+<script>chrome("size", false)</script>
+<script type="module">
+import { mountTower } from "./tower.js";
+const zones = [["Fill", 83.4], ["Drift eliminator", 61.1], ["Air inlet", 33.9], ["Fan stack", 19.5], ["Water distribution", 12.4], ["Plenum", 11.4], ["Fixed allowance", 10.0], ["Supports", 5.9]];
+document.getElementById("zones").innerHTML = zones.map(([t, v]) => `<span>${t}</span><div class="b"><i style="width:${(v / 83.4) * 100}%"></i></div><span class="v">${v.toFixed(1)} Pa</span>`).join("") + `<div class="tot"><span>Total</span><span class="num">237.6 Pa</span></div>`;
+const W = 640, H = 260, L = 52, R = 20, T = 16, B = 40, X = (q) => L + (q / 200) * (W - L - R), Y = (p) => T + (1 - p / 400) * (H - T - B);
+const path = (f) => Array.from({ length: 41 }, (_, i) => i * 5).map((q, i) => `${i ? "L" : "M"}${X(q).toFixed(1)},${Y(f(q)).toFixed(1)}`).join("");
+const fan = (q) => Math.max(0, 380.6 - 0.00705 * q * q), sys = (q) => Math.min(400, 0.01171 * q * q);
+const grid = [0, 100, 200, 300, 400].map((p) => `<line x1="${L}" x2="${W - R}" y1="${Y(p)}" y2="${Y(p)}" stroke="var(--rule)"/><text x="${L - 8}" y="${Y(p) + 4}" text-anchor="end" font-size="11" fill="var(--fg-quiet)">${p}</text>`).join("")
+  + [0, 50, 100, 150, 200].map((q) => `<text x="${X(q)}" y="${H - B + 18}" text-anchor="middle" font-size="11" fill="var(--fg-quiet)">${q}</text>`).join("");
+document.getElementById("fc").innerHTML = grid
+  + `<text x="${W - R}" y="${H - 4}" text-anchor="end" font-size="11" fill="var(--fg-quiet)">air flow, m³/s</text><text x="${L}" y="${T - 4}" font-size="11" fill="var(--fg-quiet)" dx="-44">Pa</text>`
+  + `<path d="${path(sys)}" fill="none" stroke="var(--fg-quiet)" stroke-width="2" stroke-dasharray="5 4"/>`
+  + `<path d="${path(fan)}" fill="none" stroke="var(--accent)" stroke-width="2"/>`
+  + `<text x="${X(40)}" y="${Y(fan(40)) - 10}" font-size="12" fill="var(--fg)">Fan, AX-500 at 88 %</text>`
+  + `<text x="${X(158)}" y="${Y(sys(158)) - 8}" font-size="12" fill="var(--fg)" text-anchor="end">System, this tower</text>`
+  + `<circle cx="${X(142.43)}" cy="${Y(237.6)}" r="6" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/>`
+  + `<text x="${X(142.43) + 12}" y="${Y(237.6) - 8}" font-size="12" font-weight="600" fill="var(--fg)">142.4 m³/s · 237.6 Pa</text>`;
+const narrow = innerWidth < 700, fanY = GEOMETRY.cells[0].fan.centre[1];
+mountTower(document.getElementById("tw"), GEOMETRY, narrow
+  ? { cutaway: 0.55, tier: 1, pick: "fan", span: 15.5, target: [0, 4.3, 0] }
+  : { cutaway: 0.55, pick: "fan", labels: true, labelSet: [["Fan · AX-500", [0, fanY + 0.3, 1.6], true], ["Fill", [1.0, 2.7, 1.2]], ["Eliminator", [2.6, 4.25, 0.8]]], span: 14, target: [0, 4.4, 0] });
+settle();
+</script>
+</body></html>

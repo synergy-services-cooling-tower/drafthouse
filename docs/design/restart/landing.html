@@ -2,98 +2,109 @@
 <title>Drafthouse: size a cooling tower</title>
 <link rel="stylesheet" href="site.css">
 <script type="importmap">{"imports":{"three":"../../../web/vendor/three.module.js"}}</script>
-<script src="fixture.js"></script><script src="poster.js"></script>
+<script src="chrome.js"></script><script src="fixture.js"></script><script src="poster.js"></script>
 <style>
-.hero{display:flex;flex-direction:column;justify-content:center;gap:var(--s4);padding:var(--s7) var(--s6)}
-.hero h1{font-size:46px;line-height:1.04;font-weight:750;letter-spacing:-.035em}
-.hero p.lede{font-size:17px;color:var(--mute);max-width:460px;margin:0}
-.hero .acts{display:flex;gap:var(--s2);flex-wrap:wrap;margin-top:var(--s2)}
-.duty{display:flex;flex-wrap:wrap;gap:6px;margin-top:var(--s3)}
-.island.hero-t{height:600px;padding:0}
-.island .poster{position:absolute;inset:10% 8% 14%;width:84%;height:76%}
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--s5)}
-.step h3{font-size:16px;margin:var(--s2) 0 var(--s1)}
-.step p{margin:0;color:var(--mute);font-size:13px}
-.step .n{font-size:12px;font-weight:700;width:24px;height:24px;display:grid;place-items:center;border:1.5px solid var(--fg)}
-.mini{width:100%;border-collapse:collapse;font-size:12px;margin-top:var(--s3)}
-.mini td{padding:5px 0;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
-.mini td:last-child{text-align:right}
-.field{display:grid;grid-template-columns:1fr auto;align-items:center;font-size:12px;margin-top:var(--s3);gap:4px 8px}
-.track{grid-column:1/-1;height:4px;background:var(--line);position:relative}
-.track i{position:absolute;left:0;top:0;bottom:0;background:var(--fg)}
-.track b{position:absolute;top:-6px;width:16px;height:16px;background:var(--card);border:2px solid var(--fg)}
-.engine ul{margin:var(--s3) 0 0;padding:0;list-style:none;display:grid;gap:var(--s2);font-size:13px}
-.engine li{display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:var(--s2)}
-.engine li span{color:var(--mute)}
+.hero{display:grid;grid-template-columns:5fr 7fr;gap:var(--s-4);align-items:center;padding-top:var(--s-5);padding-bottom:var(--s-4)}
+.hero h1{font-size:48px;line-height:1.08;font-weight:600;letter-spacing:-.03em}
+.hero h1 em{font-style:normal;color:var(--accent)}
+.hero .lede{font-size:var(--t-lg);color:var(--fg-quiet);margin-top:var(--s-3);max-width:30ch;line-height:1.5}
+.hero .acts{display:flex;gap:var(--s-2);flex-wrap:wrap;margin-top:var(--s-4)}
+.duty{display:flex;flex-wrap:wrap;gap:var(--s-2);margin-top:var(--s-3)}
+.hero .notice{margin-top:var(--s-3)}
+.island.hero-t{height:620px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:0;padding:0}
+.stats .stat{padding:var(--s-4);border-left:1px solid var(--rule)}.stats .stat:first-child{border-left:0}
+.stats .stat span{font-size:var(--t-xs);text-transform:uppercase;letter-spacing:.12em;color:var(--fg-quiet);font-weight:600}
+.sec{margin-top:var(--s-5)}
+.sec>h2{font-size:var(--t-xl);margin:var(--s-2) 0 var(--s-4)}
+.step{display:grid;gap:var(--s-2);align-content:start}
+.step .n{font-size:var(--t-xs);color:var(--accent);font-weight:600;letter-spacing:.12em}
+.step h3{font-size:var(--t-lg)}
+.step p{color:var(--fg-quiet);font-size:var(--t-sm)}
+.mini{width:100%;border-collapse:collapse;font-size:var(--t-sm);margin-top:var(--s-2)}
+.mini td{padding:8px 0;border-top:1px solid var(--rule);font-variant-numeric:tabular-nums}
+.mini td:first-child{color:var(--accent);width:28px;font-weight:600}
+.mini td:last-child{text-align:right;color:var(--fg-quiet)}
+.engine ul{margin:var(--s-3) 0 0;padding:0;list-style:none;display:grid;font-size:var(--t-sm)}
+.engine li{display:flex;justify-content:space-between;gap:var(--s-3);border-top:1px solid var(--rule);padding:10px 0}
+.engine li span{color:var(--fg-quiet)}
+.cta{display:flex;align-items:center;gap:var(--s-4);margin-top:var(--s-5)}
+.cta h2{font-size:var(--t-xl)}
+.cta .btn{margin-left:auto}
 @media (max-width:700px){
-  .hero{padding:var(--s5) var(--s4) var(--s4)}
-  .hero h1{font-size:34px}.hero p.lede{font-size:15px}
-  .island.hero-t{height:380px}
-  .stats{grid-template-columns:1fr 1fr;gap:var(--s4)}
-  .hero .acts .btn{flex:1;justify-content:center}
+  .hero{grid-template-columns:1fr;padding-top:var(--s-4);padding-bottom:var(--s-3);gap:var(--s-3)}
+  .hero h1{font-size:36px}.hero .lede{font-size:var(--t-md)}
+  .hero .acts .btn{flex:1}
+  .island.hero-t{height:400px}
+  .stats{grid-template-columns:1fr 1fr}
+  .stats .stat{padding:20px var(--s-3)}.stats .stat:nth-child(3){border-left:0}.stats .stat:nth-child(n+3){border-top:1px solid var(--rule)}
+  .stat b{font-size:var(--t-lg)}
+  .sec{margin-top:var(--s-4)}.sec>h2{font-size:var(--t-lg);margin-bottom:var(--s-3)}
+  .cta{flex-direction:column;align-items:stretch;gap:var(--s-3)}.cta .btn{margin-left:0}
 }
 </style></head>
 <body>
-<header class="top">
-  <a class="brand" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 21h16M6 21V10h12v11M5 10h14M8 10l1-4h6l1 4M9 14h6M9 17h6"/></svg>Drafthouse</a>
-  <nav><a href="#" class="on">Overview</a><a href="#">Method</a><a href="#">Limitations</a><a href="#">Source</a><a class="btn sm pri keep" href="#" style="color:var(--card);text-decoration:none">Start sizing</a></nav>
-</header>
-<main>
-  <section class="tile c5 hero">
+<div class="dots"><header data-chrome></header>
+<div class="wrap hero">
+  <div>
     <span class="eyebrow">Open cooling-tower engineering</span>
-    <h1>Size a cooling tower. See every step.</h1>
-    <p class="lede">Enter the duty. Drafthouse rates every cell, fill, eliminator and fan in the catalog, ranks the towers that hold it, and shows each calculation with its formula and numbers.</p>
+    <h1 style="margin-top:var(--s-3)">Size a cooling tower. <em>See every step.</em></h1>
+    <p class="lede">Enter the duty. Drafthouse rates every cell, fill, eliminator and fan, ranks the towers that hold it, and shows each calculation with its numbers.</p>
     <div class="acts"><a class="btn pri" href="#">Start sizing →</a><a class="btn" href="#">Open the tower</a></div>
     <div class="duty"><span class="chip num">720 m³/h</span><span class="chip num">42 → 32 °C</span><span class="chip num">wet bulb 27 °C</span><span class="chip num">sea level</span></div>
     <div class="notice"><b>Synthetic catalog.</b> Not CTI certified. <a href="#">Limitations</a></div>
+  </div>
+  <section class="island hero-t" id="hero">
+    <div class="cap"><b>Rank 1 at this duty</b><span>· IDCF-064 · FILM-VF38 · AX-500</span></div>
+    <div class="bar"><span class="chip on">◧ Cutaway</span><span class="legend"><span><i></i>Water, hot to cold</span><span><i class="air"></i>Air</span></span><span style="flex:1"></span><a class="btn sm" href="#">⤢ Full view</a></div>
   </section>
-  <section class="tile c7 island hero-t" id="hero">
-    <div class="cap"><b>Rank 1 at this duty</b> · IDCF-064 · FILM-VF38 · AX-500</div>
-    <div class="bar"><span class="chip on">◧ Cutaway</span><span class="chip on"><i class="dot c"></i>Water</span><span class="chip on"><i class="dot" style="background:#6d8fa6"></i>Air</span><span style="flex:1"></span><a class="btn sm" href="#">⤢ Full view</a></div>
-  </section>
-
-  <section class="tile stats">
-    <div class="stat"><span class="m">Feasible designs</span><b class="num">202<small>at this duty</small></b></div>
-    <div class="stat"><span class="m">Cold water, rank 1</span><b class="num">31.70<small>°C · target 32.0</small></b></div>
-    <div class="stat"><span class="m">Electrical input</span><b class="num">44.9<small>kW</small></b></div>
-    <div class="stat"><span class="m">Make-up water</span><b class="num">15.0<small>m³/h</small></b></div>
-  </section>
-
-  <section class="tile c4 step"><span class="n">1</span><h3>Enter the duty</h3><p>Flow, hot and cold water, wet and dry bulb, site altitude. Range, approach and heat load update as you type.</p>
-    <div class="field"><span>Wet bulb</span><b class="num">27.0 °C</b><div class="track"><i style="width:56%"></i><b style="left:calc(56% - 8px)"></b></div></div>
-    <div class="field"><span>Cold water wanted</span><b class="num">32.0 °C</b><div class="track"><i style="width:48%"></i><b style="left:calc(48% - 8px)"></b></div></div>
-  </section>
-  <section class="tile c4 step"><span class="n">2</span><h3>See ranked towers</h3><p>Every feasible design, ranked by the goal you pick. The tower reshapes as you move down the list.</p>
-    <table class="mini"><tr><td>1</td><td>IDCF-064 · FILM-VF38 · AX-500</td><td>+0.30 K</td></tr><tr><td>2</td><td>IDCF-064 · TRICKLE-50 · AX-500</td><td>+0.31 K</td></tr><tr><td>3</td><td>IDXF-080 · SPLASH-GRID · AX-600</td><td>+0.32 K</td></tr></table>
-  </section>
-  <section class="tile c4 step"><span class="n">3</span><h3>Read every calc step</h3><p>Duty, air side, fan, heat transfer, fill layers and water balance: each step with why, formula, numbers and reference.</p>
-    <table class="mini"><tr><td>Air side</td><td></td><td>pressure by zone</td></tr><tr><td>Heat transfer</td><td></td><td>Merkel number</td></tr><tr><td>Water balance</td><td></td><td>make-up, blowdown</td></tr></table>
+</div></div>
+<main class="wrap">
+  <section class="card stats">
+    <div class="stat"><span>Feasible designs</span><b class="num">202<small>at this duty</small></b></div>
+    <div class="stat"><span>Cold water, rank 1</span><b class="num">31.70<small>°C · target 32.0</small></b></div>
+    <div class="stat"><span>Electrical input</span><b class="num">44.9<small>kW</small></b></div>
+    <div class="stat"><span>Make-up water</span><b class="num">15.0<small>m³/h</small></b></div>
   </section>
 
-  <section class="tile c8">
-    <span class="eyebrow">A calc step, as the sheet shows it</span>
-    <h3 style="margin:var(--s2) 0 var(--s3);font-size:18px">Heat rejected by the tower</h3>
-    <p class="m" style="margin:0 0 var(--s3);font-size:13px">Why: the heat the water gives up between the hot and cold basins is what the air must carry away.</p>
-    <div class="calc">
-      <div class="f">Q = ṁ<sub>w</sub> · c<sub>p</sub> · (t<sub>hot</sub> − t<sub>cold</sub>)</div>
-      <div class="s">Q = 200.0 kg/s × 4.183 kJ/(kg·K) × (42.00 − 31.70) K</div>
-      <div class="r">8,619 kW</div>
-      <div class="ref">Energy balance on the water side · rank 1 design at the default duty</div>
+  <section class="sec"><span class="eyebrow">How it works</span><h2>Three steps, every number shown</h2>
+  <div class="grid">
+    <div class="card c4 step"><span class="n">01</span><h3>Enter the duty</h3><p>Flow, hot and cold water, wet and dry bulb, site altitude. Range, approach and heat load follow as you type.</p>
+      <table class="mini"><tr><td></td><td>Water flow</td><td>720 m³/h</td></tr><tr><td></td><td>Hot → cold</td><td>42.0 → 32.0 °C</td></tr><tr><td></td><td>Wet bulb</td><td>27.0 °C</td></tr></table></div>
+    <div class="card c4 step"><span class="n">02</span><h3>See ranked towers</h3><p>Every feasible design, ranked by the goal you pick. The tower reshapes as you move down the list.</p>
+      <table class="mini"><tr><td>1</td><td>IDCF-064 · FILM-VF38 · AX-500</td><td>+0.30 K</td></tr><tr><td>2</td><td>IDCF-064 · SPLASH-GRID · AX-600</td><td>+0.33 K</td></tr><tr><td>3</td><td>IDCF-064 · TRICKLE-50 · AX-600</td><td>+0.33 K</td></tr></table></div>
+    <div class="card c4 step"><span class="n">03</span><h3>Read every calc step</h3><p>Duty, air side, fan, heat transfer, fill and water balance: each step with why, formula, numbers and reference.</p>
+      <table class="mini"><tr><td></td><td>Air side</td><td>pressure by zone</td></tr><tr><td></td><td>Heat transfer</td><td>Merkel number</td></tr><tr><td></td><td>Water balance</td><td>make-up, blowdown</td></tr></table></div>
+  </div></section>
+
+  <section class="sec grid">
+    <div class="card c8">
+      <span class="eyebrow">A calc step, as the sheet shows it</span>
+      <h3 style="margin:var(--s-2) 0 var(--s-2);font-size:var(--t-lg)">Heat rejected by the tower</h3>
+      <p class="q" style="margin-bottom:var(--s-3)">Why: the heat the water gives up between the hot and cold basins is what the air must carry away.</p>
+      <div class="calc">
+        <div class="fx">Q = ṁ<sub>w</sub> · c<sub>p</sub> · (t<sub>hot</sub> − t<sub>cold</sub>)</div>
+        <div class="s">Q = 200.0 kg/s × 4.183 kJ/(kg·K) × (42.00 − 31.70) K</div>
+        <div class="r">8,619 kW</div>
+        <div class="ref">Energy balance, water side · rank 1 at the default duty</div>
+      </div>
+    </div>
+    <div class="card c4 engine">
+      <span class="eyebrow">The engine</span>
+      <h3 style="margin-top:var(--s-2);font-size:var(--t-lg)">The Rust engine, in your browser</h3>
+      <ul><li><span>Method</span>Merkel, counterflow and crossflow</li><li><span>Recorded steps replayed</span><b class="num">299</b></li><li><span>Download</span>on first input</li><li><span>Model files</span>none: drawn from geometry</li></ul>
     </div>
   </section>
-  <section class="tile c4 engine">
-    <span class="eyebrow">The engine</span>
-    <h3 style="margin:var(--s2) 0 0;font-size:16px">The Rust engine, in your browser</h3>
-    <ul><li><span>Method</span>Merkel, counterflow and crossflow</li><li><span>Recorded steps replayed</span><b class="num">299</b></li><li><span>Download</span>on first input</li><li><span>Model files</span>none: drawn from geometry</li></ul>
-  </section>
+
+  <section class="cta"><div><h2>Your duty, your tower.</h2><p class="q" style="margin-top:var(--s-1)">Start from the default duty and change what you need. Nothing to install.</p></div><a class="btn on-brand" href="#">Start sizing →</a></section>
 </main>
-<footer><span>PolyForm Noncommercial 1.0.0</span><a href="#">Source</a><a href="#">Method</a><span>Synthetic catalog. Not CTI certified.</span><span class="num">v1.0.0</span></footer>
+<footer data-chrome></footer>
+<script>chrome("landing")</script>
 <script type="module">
 import { mountTower } from "./tower.js";
-const el = document.getElementById("hero");
-const narrow = innerWidth < 700;
+const el = document.getElementById("hero"), narrow = innerWidth < 700;
 if (new URLSearchParams(location.search).has("poster")) el.insertAdjacentHTML("afterbegin", poster(GEOMETRY));
-else mountTower(el, GEOMETRY, { cutaway: 0.55, camera: narrow ? [17, 10, 22] : [15, 8.5, 18.5], target: narrow ? [0, 3.6, 0] : [0, 3.6, 0], fov: narrow ? 34 : 30 });
-document.body.dataset.h = Math.ceil(document.documentElement.scrollHeight);
+else mountTower(el, GEOMETRY, { cutaway: 0.55, span: narrow ? 19 : 16, target: [0, 3.9, 0] });
+settle();
 </script>
 </body></html>

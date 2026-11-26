@@ -1,0 +1,56 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Drafthouse: size, step 1, duty</title>
+<link rel="stylesheet" href="site.css"><link rel="stylesheet" href="wizard.css">
+<script type="importmap">{"imports":{"three":"../../../web/vendor/three.module.js"}}</script>
+<script src="chrome.js"></script><script src="fixture.js"></script>
+</head>
+<body>
+<div class="dots"><header data-chrome></header>
+<div class="wrap band"><div data-rail></div><h1>What must the tower do?</h1><p>The default duty is filled in. Drag or type; the tower and the read-outs follow each change.</p></div></div>
+<main class="wrap">
+  <div class="wz">
+    <section class="card form">
+      <div class="f"><label>Water flow<small>through the tower</small></label>
+        <div class="sl"><div class="t"><i style="width:44%"></i></div><b class="k" style="left:44%"></b><span class="lo">100</span><span class="hi">1,500</span></div>
+        <div class="in"><input value="720"><span>m³/h</span></div></div>
+      <div class="f"><label>Hot water<small>into the tower</small></label>
+        <div class="sl"><div class="t"><i style="width:49%"></i></div><b class="k" style="left:49%"></b><span class="lo">25</span><span class="hi">60 °C</span></div>
+        <div class="in"><input value="42.0"><span>°C</span></div></div>
+      <div class="f"><label>Cold water wanted<small>out of the basin</small></label>
+        <div class="sl"><div class="t"><i style="width:48%"></i></div><b class="k" style="left:48%"></b><span class="lo">20</span><span class="hi">45 °C</span></div>
+        <div class="in"><input value="32.0"><span>°C</span></div></div>
+      <div class="f"><label>Wet bulb<small>design air, the one that limits</small></label>
+        <div class="sl drag"><div class="t"><i style="width:68%"></i></div><b class="k" style="left:68%"></b><span class="lo">10</span><span class="hi">35 °C</span></div>
+        <div class="in focus"><input value="27.0"><span>°C</span></div></div>
+      <div class="f"><label>Dry bulb<small>for air density and evaporation</small></label>
+        <div class="sl"><div class="t"><i style="width:57%"></i></div><b class="k" style="left:57%"></b><span class="lo">10</span><span class="hi">50 °C</span></div>
+        <div class="in"><input value="33.0"><span>°C</span></div></div>
+      <div class="f"><label>Site<small style="margin-top:6px"><span class="seg"><span class="on">Altitude</span><span>Pressure</span></span></small></label>
+        <div class="sl"><div class="t"><i style="width:0%"></i></div><b class="k" style="left:0%"></b><span class="lo">0</span><span class="hi">3,000 m</span></div>
+        <div class="in"><input value="0"><span>m</span></div></div>
+      <div class="acts"><button class="btn ghost"><span>↺ Reset<span class="wide"> to the default duty</span></span></button><button class="btn pri"><span>Next<span class="wide">: site and water</span> →</span></button></div>
+    </section>
+    <div data-side></div>
+  </div>
+
+  <section class="card" style="margin-top:var(--s-3)">
+    <span class="eyebrow">Field states, drawn for impl</span>
+    <div class="states" style="margin-top:var(--s-3)">
+      <div class="field"><label>Water flow</label><div class="in bad"><input value="2,400"><span>m³/h</span></div>
+        <div class="err">More than any cell in the catalog takes. The largest takes 1,476 m³/h.</div></div>
+      <div class="field"><label>Cold water wanted</label><div class="in bad"><input value="26.0"><span>°C</span></div>
+        <div class="err">Cold water must be warmer than the wet bulb, 27.0 °C. Raise it, or lower the wet bulb.</div></div>
+      <div class="field"><label>First edit, engine loading</label>
+        <div class="load" style="height:44px"><span class="q">Engine</span><div class="bar2"><i></i></div><span class="q">once, under 150 KB</span></div>
+        <div class="q">The poster stays; read-outs show the duty's own numbers until the first rating.</div></div>
+    </div>
+  </section>
+</main>
+<footer data-chrome></footer>
+<script>chrome("size", false)</script>
+<script type="module">
+import { wizard } from "./wizard.js";
+wizard(1, { updating: true });
+settle();
+</script>
+</body></html>

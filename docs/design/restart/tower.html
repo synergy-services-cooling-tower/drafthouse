@@ -1,0 +1,94 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Drafthouse: the tower, full view</title>
+<link rel="stylesheet" href="site.css">
+<script type="importmap">{"imports":{"three":"../../../web/vendor/three.module.js"}}</script>
+<script src="fixture.js"></script>
+<style>
+html,body{height:100%;overflow:hidden}
+.view{position:fixed;inset:0;background:linear-gradient(180deg,#fbfbfa 0%,#efeeea 100%)}
+.view canvas{position:absolute;inset:0}
+.hud{position:absolute;z-index:2;background:var(--card);border:1px solid var(--line)}
+.tb{top:var(--s4);left:var(--s4);right:var(--s4);display:flex;align-items:center;gap:var(--s3);padding:var(--s2) var(--s2) var(--s2) var(--s4)}
+.tb h1{font-size:15px}.tb .m{font-size:13px}
+.tb .sp{flex:1}
+.ctl{top:84px;left:var(--s4);width:280px;padding:var(--s4);display:grid;gap:var(--s4)}
+.rng{display:grid;gap:6px}
+.rng .h{display:flex;justify-content:space-between;font-size:13px;font-weight:600}
+.rng .t{position:relative;height:18px}
+.rng .t::before{content:"";position:absolute;left:0;right:0;top:8px;height:3px;background:var(--line)}
+.rng .t i{position:absolute;left:0;top:8px;height:3px;background:var(--fg)}
+.rng .t b{position:absolute;top:0;width:18px;height:18px;margin-left:-9px;background:var(--card);border:2px solid var(--fg)}
+.rng .lb{display:flex;justify-content:space-between;font-size:11px;color:var(--mute)}
+.sw{display:flex;align-items:center;justify-content:space-between;font-size:13px}
+.sw span{display:flex;align-items:center;gap:var(--s2)}
+.tog{width:34px;height:18px;border:1.5px solid var(--fg);position:relative;background:var(--fg)}
+.tog::after{content:"";position:absolute;top:2px;right:2px;width:11px;height:11px;background:var(--card)}
+.tog.off{background:var(--card)}.tog.off::after{right:auto;left:2px;background:var(--fg)}
+.sz{border-top:1px solid var(--line);padding-top:var(--s3)}
+.card{top:84px;right:var(--s4);width:380px;padding:var(--s4)}
+.card h2{font-size:17px;margin:2px 0 2px}
+.dims{width:100%;border-collapse:collapse;margin-top:var(--s3);font-size:12px}
+.dims td{border-top:1px solid var(--line);padding:7px 0;vertical-align:top}
+.dims td:last-child{text-align:right;font-weight:650;font-variant-numeric:tabular-nums;white-space:nowrap;padding-left:var(--s2)}
+.dims .fx{display:block;color:var(--mute);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;margin-top:2px}
+.card .acts{display:flex;gap:var(--s2);margin-top:var(--s3)}
+.hint{left:var(--s4);bottom:var(--s4);padding:var(--s2) var(--s3);font-size:12px;color:var(--mute);display:flex;gap:var(--s3)}
+.hint kbd{font:inherit;color:var(--fg);font-weight:600}
+.foot{right:var(--s4);bottom:var(--s4);padding:var(--s2) var(--s3)}
+.sheet{display:none}
+@media (max-width:700px){
+  .tb{top:var(--s2);left:var(--s2);right:var(--s2);padding:6px 6px 6px var(--s3)}.tb .m,.tb .wide{display:none}.tb h1{font-size:14px}
+  .ctl,.card,.hint,.foot{display:none}
+  .sheet{display:grid;gap:var(--s3);left:0;right:0;bottom:0;padding:var(--s3) var(--s4) var(--s4);border-width:1px 0 0}
+  .sheet .grab{justify-self:center;width:36px;height:4px;background:var(--edge)}
+  .sheet .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .sheet .pick{display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:var(--s3)}
+}
+</style></head>
+<body>
+<div class="view" id="v">
+  <div class="hud tb">
+    <h1>IDCF-064</h1><span class="m">counterflow · rank 1 · 8.0 × 8.0 × 8.2 m</span><span class="sp"></span>
+    <button class="btn sm ghost wide">⟲ Reset view</button><button class="btn sm ghost wide">❚❚ Pause motion</button><button class="btn sm" aria-label="Close">✕<span class="wide">&nbsp;Close</span></button>
+  </div>
+  <div class="hud ctl">
+    <div class="rng"><div class="h"><span>Cutaway</span><span class="num">55 %</span></div><div class="t"><i style="width:55%"></i><b style="left:55%"></b></div><div class="lb"><span>closed</span><span>half open</span></div></div>
+    <div class="sw"><span><i class="dot" style="background:#6d8fa6"></i>Air</span><b class="tog"></b></div>
+    <div class="sw"><span><i class="dot c"></i>Water, hot to cold</span><b class="tog"></b></div>
+    <div class="sw"><span><i class="dot" style="background:var(--fg)"></i>Labels</span><b class="tog"></b></div>
+    <dl class="kv sz"><dt>Plan</dt><dd>8.0 × 8.0 m</dd><dt>Height</dt><dd>8.2 m</dd><dt>Fill</dt><dd>2 × 0.6 m</dd><dt>Nozzles</dt><dd>78</dd></dl>
+  </div>
+  <aside class="hud card">
+    <span class="eyebrow">Picked part</span>
+    <h2>Fan</h2>
+    <div class="m">AX-500 · Illustrative 5.0 m Axial Fan · 8 blades</div>
+    <table class="dims">
+      <tr><td>Fan diameter<span class="fx">d = √(4·A_stack / π) = √(4 × 19.635 / π)</span></td><td>5.00 m</td></tr>
+      <tr><td>Fan speed<span class="fx">chosen by the sizing, within 0.70 to 1.13</span></td><td>88 %</td></tr>
+      <tr><td>Air flow<span class="fx">fan curve ∩ system curve at 238 Pa</span></td><td>142.4 m³/s</td></tr>
+      <tr><td>Electrical input<span class="fx">P_el = P_shaft / (η_drive · η_motor) = 41.0 / (0.96 × 0.95)</span></td><td>44.9 kW</td></tr>
+      <tr><td>Stack height<span class="fx">top − bottom = 8.2 − 6.0</span></td><td>2.20 m</td></tr>
+    </table>
+    <div class="acts"><a class="btn sm" href="#">Fan steps in the calc sheet →</a></div>
+  </aside>
+  <div class="hud hint"><span><kbd>Drag</kbd> orbit</span><span><kbd>Scroll</kbd> zoom</span><span><kbd>Right-drag</kbd> pan</span><span><kbd>Tap</kbd> a part</span></div>
+  <div class="hud foot notice"><b>Synthetic catalog.</b> Not CTI certified.</div>
+  <div class="hud sheet">
+    <i class="grab"></i>
+    <div class="rng"><div class="h"><span>Cutaway</span><span class="num">55 %</span></div><div class="t"><i style="width:55%"></i><b style="left:55%"></b></div></div>
+    <div class="chips"><span class="chip on"><i class="dot" style="background:#6d8fa6"></i>Air</span><span class="chip on"><i class="dot c"></i>Water</span><span class="chip on">Labels</span><span class="chip">⟲ Reset</span><span class="chip">❚❚ Pause</span></div>
+    <div class="pick"><div><b>Fan · AX-500</b><div class="m">5.00 m · 88 % · 142.4 m³/s · 44.9 kW</div></div><span class="btn sm">Details ↑</span></div>
+  </div>
+</div>
+<script type="module">
+import { mountTower } from "./tower.js";
+const narrow = innerWidth < 700, fan = GEOMETRY.cells[0].fan;
+const labels = narrow
+  ? [["Fan", [0, fan.centre[1] + 0.3, 1.6], true], ["Drift eliminator", [2.4, 4.25, 0.6]], ["Nozzles", [-2.6, 3.95, 0.6]], ["Fill", [1.4, 2.7, 1.1]], ["Air inlet", [-1.2, 1.35, 4.0]]]
+  : [["Fan · AX-500", [0, fan.centre[1] + 0.3, 1.6], true], ["Drift eliminator · DE-4P-ULTRA", [2.6, 4.25, 0.8]], ["Spray nozzles · 78 × NZ-32", [-2.4, 3.95, 1.0]], ["Fill · FILM-VF38 · 2 × 0.6 m", [1.0, 2.7, 1.2]], ["Air inlet · 1.5 m", [-3.0, 1.35, 4.0]], ["Basin · 0.4 m water", [3.0, 0.4, 4.5]], ["Motor · 45 kW", [5.0, 5.75, 0]]];
+mountTower(document.getElementById("v"), GEOMETRY, narrow
+  ? { cutaway: 0.55, tier: 1, labels: true, labelSet: labels, camera: [17, 11, 22], target: [0, 2.4, 0], fov: 42 }
+  : { cutaway: 0.55, labels: true, labelSet: labels, camera: [13, 8.5, 16], target: [0.4, 3.9, 0], fov: 38 });
+document.body.dataset.h = innerHeight;
+</script>
+</body></html>

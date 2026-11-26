@@ -36,27 +36,35 @@ One geometry field, one file in `packages/tower3d/src/parts/`, one scene object.
 sequenceDiagram
   participant U as User
   participant W as Wizard (Blocks local source)
-  participant E as Engine session (worker)
+  participant R as Rate worker
+  participant S as Size worker
   participant T as drafthouse-tower (island)
   U->>W: edits a duty input
-  W->>E: rate(duty, current design)
-  E-->>W: Rating (tens of ms)
+  W->>S: abort the running size, if any
+  W->>R: rate(duty, current design)
+  R-->>W: Rating (tens of ms)
   W->>T: props.geometry
   T->>T: update each part, tween 300 ms
-  W->>E: size(duty), 250 ms after the last edit
-  Note over E: seconds today. A newer size replaces this one.
-  E-->>W: Sizing
-  W->>E: rate(duty, kept design or rank 1)
-  E-->>W: Rating
+  Note over U,T: every further edit repeats these steps. The size worker is never in their way.
+  W->>S: size(duty), 250 ms after the last edit
+  Note over S: seconds today, under one after R2
+  S-->>W: Sizing
+  W->>R: rate(duty, kept design or rank 1)
+  R-->>W: Rating
   W->>T: props.geometry
   T->>T: morph to the new design
 ```
 
-- A change of inputs that keeps the design moves only numbers, particles and fan speed: one `rate` call.
-- A change of design (the user picks another row, or the ranking changes) reshapes the tower: each part's
-  `update` moves and resizes the objects it already has. A part is rebuilt only when a count changes (blades,
-  nozzles, layers, panels).
-- While `size` runs, the tower shows the last rating and the wizard marks the ranking as updating.
+- **Every edit reaches the tower through the rate worker alone.** Fan speed, air and water particles, the
+  numbers and any dimension that follows the duty move within tens of milliseconds, whether a sizing is
+  running, cancelled or not started.
+- **An edit cancels the running sizing at once**, not after the pause, so no stale ranking can land and the
+  size worker is free when the pause ends.
+- A change of design (the user picks another row, or a new ranking puts another design first) reshapes the
+  tower: each part's `update` moves and resizes the objects it already has. A part is rebuilt only when a count
+  changes (blades, nozzles, layers, panels). Picking a row is one `rate` call, so it is as fast as an edit.
+- While `size` runs, the tower shows the current design at the new duty and the wizard marks the ranking as
+  updating.
 - The tower never calls the engine. It draws what its props say.
 
 ## 3. States of the tower view
@@ -80,7 +88,11 @@ stateDiagram-v2
 
 ## 4. Speed of the update
 
-`rate` is fast enough today. `size` is not: 2.5 s natively for the default duty, more in WASM. The design
-absorbs that (the worker, newest call wins, the two-beat update) and issue R2 brings it under one second. Two
-routes are open without a change to the API: split the catalog by tower across workers, and remove repeated work
-inside the capacity solve. Neither may move a recorded number.
+| Step | Today | Target | Held by |
+|---|---|---|---|
+| An edit to the tower following it | one `rate`: about 12 ms natively | under 100 ms in the browser, with or without a sizing running | `local/live`, from P1 |
+| An edit to a new ranking | one `size`: 2.5 s natively, more in WASM | under 1 s | R2, with a baseline; it starts when P1 is merged |
+
+The first row is the design's: two workers and the cancel. The second is R2's. Two routes are open for it
+without a change to the API: split the catalog by tower across workers, and remove repeated work inside the
+capacity solve. Neither may move a recorded number.

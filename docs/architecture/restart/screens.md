@@ -1,14 +1,15 @@
 # Screens and actions, for the design lane
 
-Every screen is drawn at 1440 and 390, light and dark. Screens are Blocks screens; the tower is an island. The
-design lane decides the look and the layout. This list fixes what each screen holds, what the user can do, and
-which states need a mockup. Numbers shown are the engine's; a mockup uses the default duty on the synthetic catalog.
+Every screen is drawn at two sizes, 1440 and 390, in one light theme. There is no dark theme and no theme
+switch. Screens are Blocks screens; the tower is an island. The design lane decides the look and the layout.
+This list fixes what each screen holds, what the user can do, and which states need a mockup. Numbers shown are
+the engine's; a mockup uses the default duty on the synthetic catalog.
 
 ## Shared
 
 | Element | Holds | Actions |
 |---|---|---|
-| Header | product name, link to the wizard, theme switch | go home, start sizing, switch theme |
+| Header | product name, link to the wizard | go home, start sizing |
 | Notice | "Synthetic catalog. Not CTI certified." on every screen that shows a number | open the limitations page |
 | Tower island | the 3D tower, or its poster | open full view, toggle cutaway |
 | Refusal | the engine's message in plain words, and the field it names | fix the field |
@@ -19,7 +20,7 @@ which states need a mockup. Numbers shown are the engine's; a mockup uses the de
 - **Holds:** a headline and one line of what the tool does; the tower; a start button; three short blocks (enter
   the duty, see ranked towers, read every calc step); one sample calc step with its formula, numbers and result;
   the notice; a footer with the licence, the source link and the version.
-- **Actions:** start sizing; open the tower; toggle cutaway; switch theme.
+- **Actions:** start sizing; open the tower; toggle cutaway.
 - **States:** tower as poster (first paint); tower live; tower fallback (no WebGL); reduced motion.
 - **Constraint:** the first paint is text and the poster. It must look finished without the live tower.
 
@@ -29,7 +30,7 @@ which states need a mockup. Numbers shown are the engine's; a mockup uses the de
   live read-outs of range, approach and heat load; the tower beside the form at 1440 and as a strip above it at 390.
 - **Actions:** edit a field (slider or typed); next; reset to the default duty.
 - **States:** valid; a field out of range; temperatures in the wrong order (hot, cold, wet bulb); engine loading
-  on the first edit; tower updating.
+  on the first edit; tower following a dragged slider.
 
 ## 3. Wizard step 2: site and water (`/size/site/`)
 
@@ -52,8 +53,9 @@ which states need a mockup. Numbers shown are the engine's; a mockup uses the de
   the tower of the selected row.
 - **Actions:** select a row (the tower reshapes); open a design; change the objective (the list re-ranks); edit
   the duty; show more rows.
-- **States:** sizing in progress with the last ranking kept and marked as updating; ranked; no feasible design,
-  with the rejection reasons and what to relax; refused duty.
+- **States:** sizing in progress with the last ranking kept and marked as updating, while the tower and the
+  numbers of the selected design already show the new duty; ranked; no feasible design, with the rejection
+  reasons and what to relax; refused duty.
 
 ## 6. Design and calc steps (`/size/design/?d=<design>`)
 
@@ -81,11 +83,11 @@ The wizard is one state value and one reducer in `packages/wizard`. The step is 
 ```mermaid
 stateDiagram-v2
   [*] --> Editing: default duty, no engine yet
-  Editing --> Editing: edit a field / rate the current design
+  Editing --> Editing: edit a field / rate the current design at once
   Editing --> Refused: the engine refuses the duty
   Refused --> Editing: the field is fixed
   Editing --> Sizing: size is asked for, or 250 ms pass after an edit with a ranking on screen
-  Sizing --> Sizing: a newer edit / the newest call wins
+  Sizing --> Sizing: an edit / cancel the sizing, rate the current design at once, size again after 250 ms
   Sizing --> Ranked: at least one feasible design
   Sizing --> Empty: none feasible / show the rejection reasons
   Sizing --> Refused: the engine refuses the duty
@@ -95,8 +97,9 @@ stateDiagram-v2
   Empty --> Editing: relax an input
 ```
 
-A ranking on screen while `Sizing` is kept and marked as updating. The selected design is kept across a new
-ranking when it is still in it; otherwise rank 1 is selected.
+Rating runs beside this chart, in its own worker: in every state an edit or a picked row is rated at once and
+the tower follows. A ranking on screen while `Sizing` is kept and marked as updating. The selected design is
+kept across a new ranking when it is still in it; otherwise rank 1 is selected.
 
 ## Embedded in a host app
 

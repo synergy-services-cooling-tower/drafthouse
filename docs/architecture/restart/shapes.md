@@ -6,16 +6,22 @@ Every number is SI and its name carries the unit (`KgS`, `C`, `Pa`, `M`, `M2`, `
 
 ## 1. The WASM boundary
 
-The three exports of today's `rust/src/wasm.rs` stay: `ct_alloc(len)`, `ct_call(ptr)`, `ct_free(ptr)`, over
-length-prefixed buffers, with no binding generator and no JavaScript glue. The payload changes from a command
-line to JSON:
+The three exports of today's `rust/src/wasm.rs` stay, in `crates/wasm`: `ct_alloc(len)`, `ct_call(ptr)`,
+`ct_free(ptr)`, over length-prefixed buffers, with no binding generator and no JavaScript glue. In `engine.wasm`
+the payload changes from a command line to JSON:
 
 ```ts
 type Call = { op: "open"; input: Catalog } | { op: "size"; input: SizeRequest } | { op: "rate"; input: RateRequest };
 type Reply<T> = { ok: true; value: T } | { ok: false; error: Refusal };
 ```
 
-One WASM instance holds one opened catalog. `size` or `rate` before `open` is a `usage` refusal.
+One WASM instance holds one opened catalog. `size` or `rate` before `open` is a `usage` refusal. The client runs
+two instances of the one compiled module, one for `rate` and one for `size`, and opens the catalog in both.
+
+`replay.wasm` is the same crate built with the feature `replay`, under the same build profile. Its payload is a
+recorded command line and its reply is today's envelope, so the parity harness replays all 299 recorded steps
+through it unchanged. It is built in CI, tested and discarded. `engine.wasm` answers a command line with a
+`usage` refusal.
 
 ## 2. The operations
 
@@ -44,6 +50,7 @@ type Design = {
 };
 
 type SizeRequest = { duty: Duty; limits?: Limits; objective?: Objective; limit?: number };
+type SizeOptions = Omit<SizeRequest, "duty"> & { signal?: AbortSignal };    // the client's: abort ends the sizing
 type Sizing = {
   objective: Objective; feasibleCount: number; warning: string;
   candidates: Candidate[];             // ranked, at most `limit`
@@ -85,7 +92,8 @@ type Refusal =
   | { kind: "catalog"; message: string; violations: { list: string; recordId: string; field: string; why: string }[] }
   | { kind: "domain"; message: string }                                 // the physics refuses the duty
   | { kind: "infeasible"; message: string; limits: { field: string; message: string; value: number; unit: string; min: number | null; max: number | null }[] }
-  | { kind: "superseded" } | { kind: "unavailable"; message: string };  // made by the client, never by the WASM
+  | { kind: "superseded" }                                              // the client's: a newer call replaced this one, or it was aborted
+  | { kind: "unavailable"; message: string };                           // the client's: the engine could not load
 ```
 
 How the issue's four words map: **rating** is `rate`; **sizing and ranking** is `size`; **calc steps** is
@@ -93,7 +101,8 @@ How the issue's four words map: **rating** is `rate`; **sizing and ranking** is 
 `catalog` refusal, as today: a money field can never ride along.
 
 `size` returns ranked rows, not whole ratings. That cuts the reply from 753 KB to about 60 KB. `rate` reruns one
-design, about 12 ms natively.
+design, about 12 ms natively. A `rate` call never waits for a `size` call: each has its own worker
+([loading.md](loading.md) section 3).
 
 ## 3. The geometry contract
 
@@ -143,7 +152,7 @@ type Dimension = { key: string; label: string; value: number; unit: string; form
 ```ts
 export function loadEngine(assets?: EngineAssets): Promise<Engine>;
 export function mountWizard(element: HTMLElement, options: {
-  catalog: Catalog; duty?: Partial<Duty>; assets?: EngineAssets;
+  catalog: Catalog; duty?: Partial<Duty>; assets?: EngineAssets;       // one light theme; no theme option
   onRated?: (rating: Rating) => void; onRefused?: (refusal: Refusal) => void;
 }): { setCatalog(catalog: Catalog): void; destroy(): void };
 export function mountTower(element: HTMLElement, options: { geometry: TowerGeometry }):
@@ -158,6 +167,9 @@ Files in the tarball: `index.js`, `index.d.ts`, a hashed tower chunk (Three.js i
 `engine.wasm`, `embed.css` (Blocks' scoped stylesheet plus the tower's), `package.json`, `LICENSE`,
 `THIRD_PARTY_NOTICES.md`. It has no `dependencies`.
 
+What the embed needs of its host: a bundler that resolves ES modules and asset URLs (or `EngineAssets`), and a
+page that may compile WebAssembly and start same-origin workers.
+
 ## 5. Release assets and the pin
 
 | Asset of release `v<version>` | What it is |
@@ -168,9 +180,5 @@ Files in the tarball: `index.js`, `index.d.ts`, a hashed tower chunk (Three.js i
 | `drafthouse-embed-<version>.tgz` | The embed package, as `npm pack` writes it |
 | `drafthouse-embed-<version>.tgz.sha256` | Its digest |
 
-The pin in synergy-apps keeps its four fields and gains one:
-
-```json
-{ "ref": "refs/heads/staging", "repo": "<owner>/drafthouse", "tag": "v1.0.0",
-  "sha256": "<digest of the site archive>", "embedSha256": "<digest of the embed package>" }
-```
+The pin in synergy-apps names a tag and the sha256 of the site archive, as today, and gains the sha256 of the
+embed package. Its file and its other fields are the host repo's own.

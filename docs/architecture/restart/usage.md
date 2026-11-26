@@ -11,7 +11,7 @@ physics. A refusal is a value, never an exception.
 ```ts
 import { loadEngine, type Catalog, type Duty } from "@drafthouse/engine";
 
-const engine = await loadEngine();                    // starts the worker, fetches engine.wasm
+const engine = await loadEngine();                    // fetches engine.wasm once, starts the rate worker
 const opened = await engine.open(catalog);            // checks every record against the engine's schema
 if (!opened.ok) return showViolations(opened.error.violations);
 const session = opened.value;
@@ -23,7 +23,9 @@ const best = sizing.value.candidates[0];
 const rating = await session.rate(duty, best.design); // numbers, calc steps and geometry of one design
 ```
 
-A newer `size` call replaces a running one. The older call resolves `{ ok: false, error: { kind: "superseded" } }`.
+`rate` and `size` run in separate workers, so a rating never waits for a sizing. A `size` call takes an
+`AbortSignal`; an aborted call, or one replaced by a newer `size`, resolves
+`{ ok: false, error: { kind: "superseded" } }`.
 
 ## 2. The public site (`apps/web`)
 
@@ -69,37 +71,45 @@ export const step: Step = {
 };
 ```
 
-A duty edit updates the tower in two beats: the current design is rated at once, then the ranking follows.
+A duty edit does three things: it cancels the running sizing, rates the current design at once, and asks for a
+new ranking when the edits pause.
 
 ```ts
 // packages/wizard/src/run.ts
-async function dutyChanged(duty: Duty) {
-  const quick = await session.rate(duty, state.design);          // tens of ms: tower and numbers follow the input
-  if (quick.ok) show(quick.value);
-  const sizing = await session.size(duty, { objective });        // seconds today, in the worker, newest call wins
+function dutyChanged(duty: Duty) {
+  ranking.abort();                                                // the size worker stops now
+  ranking = new AbortController();
+  void follow(duty);                                              // rate worker: the tower follows this edit
+  afterPause(250, () => rank(duty, ranking.signal));
+}
+
+async function follow(duty: Duty) {
+  const rating = await session.rate(duty, state.design);          // tens of ms, never behind a sizing
+  if (rating.ok) show(rating.value);
+}
+
+async function rank(duty: Duty, signal: AbortSignal) {
+  const sizing = await session.size(duty, { objective, signal }); // seconds today, in its own worker
   if (!sizing.ok) return sizing.error.kind === "superseded" ? undefined : refuse(sizing.error);
   const design = keepOrFirst(state.design, sizing.value.candidates);
-  show(await session.rate(duty, design));
+  const rating = await session.rate(duty, design);
+  if (rating.ok) show(rating.value, sizing.value);
 }
 ```
 
-## 3. A host app (synergy-apps admin)
+## 3. A host app
 
-The embed package has no React and no runtime dependency. It mounts on an element the host gives it. The host
-owns the wrapper and passes its own catalog, already mapped to the engine's record fields.
+The embed package has no framework and no runtime dependency. It mounts on an element the host gives it. The
+host passes its own catalog, already mapped to the engine's record fields. In a component framework the two
+calls go in the mount and unmount hooks.
 
-```tsx
+```ts
 import { mountWizard, type Catalog } from "@drafthouse/embed";
 import "@drafthouse/embed/embed.css";
 
-export function DrafthouseSizing({ catalog }: { catalog: Catalog }) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const wizard = mountWizard(ref.current!, { catalog, onRefused: report });
-    return () => wizard.destroy();
-  }, [catalog]);
-  return <div ref={ref} />;
-}
+const wizard = mountWizard(element, { catalog, onRefused: report });
+wizard.setCatalog(nextCatalog);                       // the host's catalog changed
+wizard.destroy();
 ```
 
 The tower alone, for a host that has a rating already:
@@ -150,11 +160,31 @@ pub fn rate(catalog: &OpenCatalog, request: &RateRequest) -> Result<Rating, Refu
 }
 ```
 
-## 6. The recorded evidence
+## 6. The ABI (`crates/wasm`)
 
-The replay of the recorded baseline reads the same as today, from the new paths:
+The one file with `unsafe`. A build feature picks who answers; the shipped build has no text command in it.
+
+```rust
+#[cfg(not(feature = "replay"))]
+fn answer(payload: &str) -> String {
+    drafthouse_api::call(payload)
+}
+
+#[cfg(feature = "replay")]
+fn answer(payload: &str) -> String {
+    drafthouse_cli::reply(payload)
+}
+```
+
+## 7. The recorded evidence
+
+Three legs, on every PR:
 
 ```sh
-node tools/parity/run.mjs                 # 299 recorded steps against the native ct-engine
-node tools/parity/run.mjs --engine wasm   # every open, size and rate case: WASM against native, to 1e-12
+node tools/parity/run.mjs                 # the 299 recorded steps against the native ct-engine
+node tools/parity/run.mjs --engine wasm   # the same 299 through replay.wasm, each within 1e-12 of native
+node tools/parity/run.mjs --engine api    # engine.wasm: every recorded select and validate-catalog step as size
+                                          # and open, and the recorded rating as rate, against native
 ```
+
+The first two read the same as today, from the new paths.

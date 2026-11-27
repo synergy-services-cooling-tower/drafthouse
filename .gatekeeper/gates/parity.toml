@@ -1,5 +1,5 @@
-about = "validation/ is byte-identical, then the 299 recorded steps (11,524 quantities) replay through ct-engine natively and, where the wasm32 target is installed (always in CI), through the WASM build cross-checked against native"
-fix = "never edit validation/; a quantity out of tolerance is an engine change: find what moved it in rust/src and undo it"
+about = "validation/ is byte-identical, then the 299 recorded steps (11,524 quantities) replay through ct-engine (crates/cli) natively and, where the wasm32 target is installed (always in CI), through the WASM build (crates/wasm) within 1e-12 of native"
+fix = "never edit validation/; a quantity out of tolerance is an engine change: find what moved it in crates/engine/src and undo it"
 budget_secs = 900
 setup = ["rust", "node"]
 run = """
@@ -10,13 +10,19 @@ shasum -a 256 -c <<'PIN'
 05fa937f0bee8e2a15befdc07f860eb3eda400725be5954dc36eff2943bda92e  validation/test-vectors.json
 PIN
 [ "$(ls validation | wc -l | tr -d ' ')" = 3 ] || { echo "validation/ holds a file the pin does not name"; exit 1; }
-export CARGO_TARGET_DIR="$PWD/rust/target"
-if [ -n "${CI:-}" ]; then (cd rust && rustup toolchain install && rustup target add wasm32-unknown-unknown); fi
-(cd rust && cargo build --locked --bin ct-engine)
-node scripts/parity/run.mjs --no-build
-if (cd rust && rustup target list --installed | grep -qx wasm32-unknown-unknown); then
-  (cd rust && cargo build --locked --target wasm32-unknown-unknown --profile wasm --lib)
-  node scripts/parity/run.mjs --engine wasm --no-build
+export CARGO_TARGET_DIR="$PWD/target"
+if [ -n "${CI:-}" ]; then rustup toolchain install && rustup target add wasm32-unknown-unknown; fi
+cargo build --locked -p drafthouse-cli --bin ct-engine
+mkdir -p target
+replay() {
+  node tools/parity/run.mjs "$@" > target/parity.log || { tail -40 target/parity.log; exit 1; }
+  tail -4 target/parity.log
+  grep -qx "replayed 299 of 299 recorded steps" target/parity.log || { echo "parity: 299 steps did not run"; exit 1; }
+}
+replay --no-build
+if rustup target list --installed | grep -qx wasm32-unknown-unknown; then
+  cargo build --locked -p drafthouse-wasm --target wasm32-unknown-unknown --profile wasm
+  replay --engine wasm --no-build
 elif [ -n "${CI:-}" ]; then
   echo "parity: the wasm32 target is missing in CI"; exit 1
 else

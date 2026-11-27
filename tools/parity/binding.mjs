@@ -2,7 +2,7 @@
  * The engine's thin JS binding (issue #24): data in, data out.
  *
  * This module is the JavaScript half of the publishable `engine` piece — the wasm module
- * (`rust/src/wasm.rs`, built from `rust/`) plus this file. It runs the engine and returns
+ * (`crates/wasm/src/lib.rs`, built from `crates/wasm`) plus this file. It runs the engine and returns
  * what the engine computed:
  *
  *     inputs      the values the run used, catalog dimensions included
@@ -19,8 +19,8 @@
  * Usage — Node:
  *
  *     import { readFileSync } from 'node:fs';
- *     import { createEngine } from './rust/wasm/binding.mjs';
- *     const engine = createEngine(readFileSync('rust/target/wasm32-unknown-unknown/wasm/synergy_drafthouse.wasm'));
+ *     import { createEngine } from './tools/parity/binding.mjs';
+ *     const engine = createEngine(readFileSync('target/wasm32-unknown-unknown/wasm/drafthouse_wasm.wasm'));
  *     const run = engine.select({ catalog, requirements: { waterMassFlowKgS: 200 } });
  *
  * Browser: fetch the pinned `.wasm`, `createEngine(await response.arrayBuffer())`.

@@ -13,9 +13,9 @@
  *
  * Usage (from the repository root, one command):
  *
- *     node scripts/parity/run.mjs                      # the recorded regression baseline
- *     node scripts/parity/run.mjs --engine wasm        # the wasm build of the same engine
- *     node scripts/parity/run.mjs --reference frozen   # the same (kept for existing callers)
+ *     node tools/parity/run.mjs                      # the recorded regression baseline
+ *     node tools/parity/run.mjs --engine wasm        # the wasm build of the same engine
+ *     node tools/parity/run.mjs --reference frozen   # the same (kept for existing callers)
  *
  * `--reference live` is refused (exit 2): this tree no longer holds the JavaScript reference,
  * so a live comparison cannot run — and asking for one is an error, never a silent skip, so
@@ -40,16 +40,16 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { createEngine } from '../../rust/wasm/binding.mjs';
+import { createEngine } from './binding.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const CRATE_MANIFEST = join(root, 'rust', 'Cargo.toml');
-const ENGINE = join(root, 'rust', 'target', 'debug', 'ct-engine');
+const TARGET = resolve(root, process.env.CARGO_TARGET_DIR ?? 'target');
+const ENGINE = join(TARGET, 'debug', 'ct-engine');
 const NO_BUILD = process.argv.includes('--no-build');
 
 /*
  * `--engine native` (the default) drives the binary. `--engine wasm` drives the wasm build
- * of the same engine through the thin JS binding (`rust/wasm/binding.mjs`) — the shape the
+ * of the same engine through the thin JS binding (`tools/parity/binding.mjs`) — the shape the
  * publishable `engine` piece has — and cross-checks every answer against the native binary,
  * so the two builds of one engine are diffed against each other rather than both merely
  * plausible.
@@ -61,7 +61,7 @@ if (!['native', 'wasm'].includes(ENGINE_KIND)) {
   process.exit(2);
 }
 const WASM_ENGINE = ENGINE_KIND === 'wasm';
-const WASM_ARTIFACT = join(root, 'rust', 'target', 'wasm32-unknown-unknown', 'wasm', 'synergy_drafthouse.wasm');
+const WASM_ARTIFACT = join(TARGET, 'wasm32-unknown-unknown', 'wasm', 'drafthouse_wasm.wasm');
 
 /* ---------------- the comparison partner (issue #40 slices 2 and 4) ----------------
  *
@@ -789,6 +789,8 @@ const BASELINE_PREDICATES = {
 /* ---- replay: the recorded-baseline mode ---- */
 
 /** `--reference frozen`: check the engine under test against the recorded regression baseline alone. */
+let stepsReplayed = 0;
+
 function baselineParity() {
   if (!existsSync(BASELINE_PATH)) {
     console.error(`${BASELINE_PATH} does not exist; it is the recorded regression baseline this mode checks against.`);
@@ -817,6 +819,7 @@ function baselineParity() {
   }
   let currentTitle = null;
   for (const step of baseline.steps) {
+    stepsReplayed += 1;
     if (step.section !== currentTitle) {
       section(step.section);
       currentTitle = step.section;
@@ -973,11 +976,9 @@ function build() {
     }
     return;
   }
-  cargo(['build', '--manifest-path', CRATE_MANIFEST]);
+  cargo(['build', '--locked', '-p', 'drafthouse-cli', '--bin', 'ct-engine']);
   if (WASM_ENGINE) {
-    // The recorded wasm build command (`rust/README.md`), the same
-    // one local/parity runs.
-    cargo(['build', '--manifest-path', CRATE_MANIFEST, '--target', 'wasm32-unknown-unknown', '--profile', 'wasm', '--lib']);
+    cargo(['build', '--locked', '-p', 'drafthouse-wasm', '--target', 'wasm32-unknown-unknown', '--profile', 'wasm']);
   }
 }
 function main() {
@@ -990,7 +991,7 @@ function main() {
   if (WASM_ENGINE) {
     wasmEngine = createEngine(readFileSync(WASM_ARTIFACT));
     console.log(`  engine:   wasm — ${WASM_ARTIFACT}`);
-    console.log('  binding:  rust/wasm/binding.mjs (data only)');
+    console.log('  binding:  tools/parity/binding.mjs (data only)');
     console.log(`  cross-check: ${existsSync(ENGINE) ? ENGINE : 'native binary absent — wasm answers are not cross-checked'}`);
   } else {
     console.log(`  engine:   ${ENGINE}`);
@@ -1011,7 +1012,7 @@ function main() {
   if (WASM_ENGINE) {
     console.log('');
     console.log('='.repeat(100));
-    console.log('WASM BINDING SECTION: NOT COMPARED — its rows diffed rust/wasm/binding.mjs\'s data-only');
+    console.log('WASM BINDING SECTION: NOT COMPARED — its rows diffed tools/parity/binding.mjs\'s data-only');
     console.log('surface against the JavaScript reference, a JavaScript surface with no engine reply, so');
     console.log('they have no recorded counterpart. The binding itself is exercised by the wasm leg above');
     console.log('(every reply it produces is cross-checked against the native binary).');
@@ -1031,6 +1032,7 @@ function main() {
   }
 
   console.log('');
+  console.log(`replayed ${stepsReplayed} of ${baseline.steps.length} recorded steps`);
   console.log(`compared ${totals.passed + totals.failed} quantities: ${totals.passed} pass, ${totals.failed} fail`);
   console.log('baseline: the recorded regression baseline (validation/regression-baseline.json) — the only comparison partner; the live JavaScript leg is RETIRED');
   if (WASM_ENGINE) {

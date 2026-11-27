@@ -1,30 +1,9 @@
-//! Natural-draft coupling — the JavaScript suite's expectations for `src/core/naturalDraft.js`,
-//! ported test for test.
-//!
-//! Sources, quoted per test:
-//!
-//! * `tests/crossflow-natural.test.js` — the two natural-draft expectations: the documented
-//!   balance on the 4200 m² shell, and the taller shell drawing more air. The tower there is a
-//!   literal, quoted verbatim below.
-//! * `validation/test-vectors.json` (family `naturalDraft`) — the two recorded catalog-cell
-//!   cases are replayed in `rust/tests/vectors.rs`.
-//! * `src/core/naturalDraft.js` — the draft-height guard and its message, the
-//!   `airFreeAreaM2 ?? fillAreaM2` face area, the 480-sample scan (`prefer: 'first'`, 1e-6 Pa
-//!   residual), the `chebyshev4` cold-water solve and the bare `catch` that lets a refusing
-//!   sample fall out of the scan.
-//! * The bundled sample catalog (`src/data/sampleCatalog.js`) — `FILM-VF38` and `DE-3P-10`,
-//!   quoted below verbatim.
-//!
-//! The JavaScript engine is the specification; nothing here re-derives a value.
-
 use drafthouse_engine::{
     natural_draft_pressure_pa, solve_natural_draft_counterflow, DriftCurvePoint,
     DriftEliminatorRecord, FillLimits, FillPressureCorrelation, FillRecord, NaturalDraftInput,
     TowerRecord, ZoneCorrelation,
 };
 
-/// The tower of `tests/crossflow-natural.test.js` (the draft height travels beside the record
-/// in this port: see `rust/src/natural_draft.rs`).
 fn documented_tower() -> TowerRecord {
     TowerRecord {
         fill_area_m2: 4200.0,
@@ -46,7 +25,6 @@ fn documented_tower() -> TowerRecord {
     }
 }
 
-/// `sampleCatalog.fills` / `FILM-VF38`.
 fn film_vf38() -> FillRecord {
     FillRecord {
         id: "FILM-VF38".to_string(),
@@ -79,7 +57,6 @@ fn film_vf38() -> FillRecord {
     }
 }
 
-/// `sampleCatalog.driftEliminators` / `DE-3P-10`.
 fn de_3p_10() -> DriftEliminatorRecord {
     DriftEliminatorRecord {
         id: "DE-3P-10".to_string(),
@@ -118,7 +95,6 @@ fn de_3p_10() -> DriftEliminatorRecord {
     }
 }
 
-/// The documented case of `tests/crossflow-natural.test.js`.
 fn documented_input(
     _effective_draft_height_m: f64,
 ) -> (TowerRecord, FillRecord, DriftEliminatorRecord) {
@@ -127,8 +103,6 @@ fn documented_input(
 
 #[test]
 fn the_documented_case_balances_buoyancy_against_the_system_resistance() {
-    // tests/crossflow-natural.test.js asserts: a positive flow, a balance within 0.01 Pa, a
-    // plume genuinely lighter than the ambient air, and a positive draft.
     let (tower, fill, drift_eliminator) = documented_input(170.0);
     let result = solve_natural_draft_counterflow(&NaturalDraftInput {
         tower: &tower,
@@ -158,11 +132,9 @@ fn the_documented_case_balances_buoyancy_against_the_system_resistance() {
     );
     assert!(result.plume_density_kg_m3 < result.inlet_air_state.moist_air_density_kg_m3);
     assert!(result.draft_pressure_pa > 0.0);
-    // The flow the scan returns sits inside the face-velocity window the call declares.
     let area_m2 = tower.air_free_area_m2.unwrap_or(tower.fill_area_m2);
     assert!(result.volumetric_air_flow_m3_s >= area_m2 * 0.4);
     assert!(result.volumetric_air_flow_m3_s <= area_m2 * 4.5);
-    // `evaporationFromAirMassBalance` floors at zero and is a mass balance of the dry air.
     let expected_evaporation = result.airside.dry_air_mass_flow_kg_s
         * (result.outlet.humidity_ratio - result.inlet_air_state.humidity_ratio);
     assert!((result.evaporation_kg_s - expected_evaporation).abs() < 1e-9);
@@ -170,7 +142,6 @@ fn the_documented_case_balances_buoyancy_against_the_system_resistance() {
 
 #[test]
 fn a_taller_shell_draws_more_air() {
-    // tests/crossflow-natural.test.js: `run(200) > run(140)`.
     let flow = |height_m: f64| {
         let (tower, fill, drift_eliminator) = documented_input(height_m);
         solve_natural_draft_counterflow(&NaturalDraftInput {
@@ -198,9 +169,6 @@ fn a_taller_shell_draws_more_air() {
 
 #[test]
 fn the_default_arguments_match_the_reference_declarations() {
-    // `pressurePa` 101 325, `salinityGKg` 0, both multipliers 1, face velocities 0.2–6: a
-    // `NaturalDraftInput::new` leaves every one of them at the reference's default, and the
-    // solve still lands on a balanced point.
     let (tower, fill, drift_eliminator) = documented_input(170.0);
     let input = NaturalDraftInput::new(
         &tower,
@@ -228,8 +196,6 @@ fn the_default_arguments_match_the_reference_declarations() {
     let area_m2 = tower.air_free_area_m2.unwrap_or(tower.fill_area_m2);
     assert!(result.volumetric_air_flow_m3_s >= area_m2 * 0.2);
     assert!(result.volumetric_air_flow_m3_s <= area_m2 * 6.0);
-    // The `??` fallbacks: with no `airFreeAreaM2` the face area is the fill area, so the
-    // solve runs over the same window the fill area defines and still lands on a flow.
     let mut no_air_free = documented_tower();
     no_air_free.air_free_area_m2 = None;
     let fallback = solve_natural_draft_counterflow(&NaturalDraftInput::new(
@@ -249,7 +215,6 @@ fn the_default_arguments_match_the_reference_declarations() {
 
 #[test]
 fn a_tower_without_a_draft_height_is_refused_before_any_physics() {
-    // src/core/naturalDraft.js: `if (!(tower.effectiveDraftHeightM > 0)) throw …`.
     let (tower, fill, drift_eliminator) = documented_input(0.0);
     let error = solve_natural_draft_counterflow(&NaturalDraftInput::new(
         &tower,
@@ -271,8 +236,6 @@ fn a_tower_without_a_draft_height_is_refused_before_any_physics() {
 
 #[test]
 fn the_draft_term_is_the_reference_buoyancy_product() {
-    // `naturalDraftPressurePa` = G * height * (ambient - plume), with G = 9.80665. The two
-    // literals are the reference's own output for these inputs (measured in the engine).
     assert_eq!(
         natural_draft_pressure_pa(170.0, 1.15, 1.13),
         33.34261000000003
@@ -283,8 +246,6 @@ fn the_draft_term_is_the_reference_buoyancy_product() {
 
 #[test]
 fn the_salinity_reaches_the_cold_water_solve() {
-    // `solveColdWaterTemperature(… salinityGKg …)`: the salinity moves the water heat capacity,
-    // so two runs that differ only in salinity must not report the same cold water.
     let (tower, fill, drift_eliminator) = documented_input(170.0);
     let cold_water = |salinity_g_kg: f64| {
         solve_natural_draft_counterflow(
@@ -312,7 +273,6 @@ fn the_salinity_reaches_the_cold_water_solve() {
         (fresh - saline).abs() > 1e-9,
         "fresh {fresh} saline {saline}"
     );
-    // A fresh-water solve is unchanged by the default argument being left at zero.
     let (tower, fill, drift_eliminator) = documented_input(170.0);
     let defaulted = solve_natural_draft_counterflow(&NaturalDraftInput::new(
         &tower,

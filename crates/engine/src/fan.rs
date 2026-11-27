@@ -1,46 +1,21 @@
-//! Fan operating limits, curve evaluation, the fan/system balance and motor selection —
-//! port of `src/core/fan.js`.
-//!
-//! The fan curve is the reference for every quantity here: pressures and efficiencies are
-//! interpolated from it (`clampEnds: false` for pressure, so the curve is continued linearly
-//! outside its tabulated range; `clampEnds: true` for efficiency), then corrected for the
-//! air density and the affinity laws at the operating speed ratio. The recorded curve **is** the
-//! ratio-1.0 curve; the affinity exponents this module applies are named constants
-//! ([`FLOW_AFFINITY_EXPONENT`], [`PRESSURE_AFFINITY_EXPONENT`], and the shaft power they imply,
-//! [`SHAFT_POWER_AFFINITY_EXPONENT`]), and the engineering statement with its source is recorded
-//! in `docs/CTI_MRL_MAPPING.md`.
-//!
-//! Out-of-domain input returns a [`DomainError`] rather than a clamped value: a curve with
-//! fewer than two points, a non-positive reference density, speed ratio or air density, and a
-//! non-positive interpolated efficiency are all refused.
-
 use crate::numeric::{
     assert_positive, find_root_by_scan, interpolate_1d, DomainError, RootPreference,
     RootScanOptions,
 };
 
 /// Flow ∝ n: the fan-affinity exponent of the recorded curve's **flow** leg.
-///
-/// One turn of the same curve at speed ratio `n` carries `n` times the flow. Source: the AMCA
-/// references in `docs/REFERENCES.md`, recorded against the engine in `docs/CTI_MRL_MAPPING.md`.
 pub const FLOW_AFFINITY_EXPONENT: f64 = 1.0;
 
 /// Pressure ∝ n²: the fan-affinity exponent of the recorded curve's **pressure** leg.
 pub const PRESSURE_AFFINITY_EXPONENT: f64 = 2.0;
 
-/// Shaft power ∝ n³: the exponent the two legs above imply for the **power** leg —
-/// `Q(n)·p(n) = n³·Q·p`, and the efficiency is read off the same recorded point.
+/// Shaft power ∝ n³: the exponent the two legs above imply for the **power** leg — `Q(n)·p(n) = n³·Q·p`, and the efficiency is read off the same recorded point.
 pub const SHAFT_POWER_AFFINITY_EXPONENT: f64 = 3.0;
 
-/// How a fan curve is published, mirroring the JavaScript `pressureBasis` string. Rust models
-/// it as an enum, so an unknown spelling cannot be constructed at the library seam; the CLI
-/// reports an unrecognised spelling as a usage error (see the crate README).
+/// How a fan curve is published, mirroring the JavaScript `pressureBasis` string.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FanPressureBasis {
-    /// The curve includes the outlet velocity pressure; the fan-stack discharge term must be
-    /// charged against it (the default).
     Total,
-    /// The outlet velocity pressure is already netted out of the curve.
     Static,
 }
 
@@ -73,7 +48,6 @@ pub struct FanRecord {
     pub curve: Vec<FanCurvePoint>,
 }
 
-/// Port of the module-private `validateFan`.
 fn validate_fan(fan: &FanRecord) -> Result<(), DomainError> {
     if fan.curve.len() < 2 {
         return Err(DomainError::new(
@@ -87,8 +61,6 @@ fn validate_fan(fan: &FanRecord) -> Result<(), DomainError> {
     Ok(())
 }
 
-/// Port of `Math.max`, including its NaN behaviour: `Math.max(NaN, x)` is `NaN`, where Rust's
-/// `f64::max` would return `x`.
 fn js_max(a: f64, b: f64) -> f64 {
     if a.is_nan() || b.is_nan() {
         f64::NAN
@@ -97,7 +69,6 @@ fn js_max(a: f64, b: f64) -> f64 {
     }
 }
 
-/// Port of `Math.min`, including its NaN behaviour.
 fn js_min(a: f64, b: f64) -> f64 {
     if a.is_nan() || b.is_nan() {
         f64::NAN
@@ -133,9 +104,7 @@ pub fn fan_operating_limits(
     })
 }
 
-/// Port of `fanPressurePaAtFlow`: the curve is read at the speed-corrected reference flow and
-/// scaled by the density ratio and the affinity law's pressure exponent
-/// ([`PRESSURE_AFFINITY_EXPONENT`], the square of the speed ratio).
+/// Port of `fanPressurePaAtFlow`: the curve is read at the speed-corrected reference flow and scaled by the density ratio and the affinity law's pressure exponent ([`PRESSURE_AFFINITY_EXPONENT`], the square of the speed ratio).
 pub fn fan_pressure_pa_at_flow(
     fan: &FanRecord,
     flow_m3_s: f64,
@@ -158,8 +127,7 @@ pub fn fan_pressure_pa_at_flow(
         * speed_ratio.powf(PRESSURE_AFFINITY_EXPONENT))
 }
 
-/// Port of `fanEfficiencyAtFlow`: the curve is read at the speed-corrected reference flow and
-/// clamped at the ends (an efficiency curve outside its range is not extrapolated).
+/// Port of `fanEfficiencyAtFlow`: the curve is read at the speed-corrected reference flow and clamped at the ends (an efficiency curve outside its range is not extrapolated).
 pub fn fan_efficiency_at_flow(
     fan: &FanRecord,
     flow_m3_s: f64,
@@ -177,12 +145,6 @@ pub fn fan_efficiency_at_flow(
 }
 
 /// Port of `fanShaftPowerKW`.
-///
-/// The power leg is the recorded curve's own airflow and pressure at the same operating point,
-/// divided by the recorded efficiency there: flow carries [`FLOW_AFFINITY_EXPONENT`] and pressure
-/// [`PRESSURE_AFFINITY_EXPONENT`], so the power this returns carries their sum,
-/// [`SHAFT_POWER_AFFINITY_EXPONENT`], along the affinity family (an engine computation from the
-/// recorded curve — no power value is stored in the record).
 pub fn fan_shaft_power_kw(
     fan: &FanRecord,
     flow_m3_s: f64,
@@ -196,8 +158,7 @@ pub fn fan_shaft_power_kw(
     Ok(flow_m3_s * pressure_pa / efficiency / 1000.0)
 }
 
-/// Input to [`solve_fan_system_intersection`]; `speed_ratio` and `minimum_flow_fraction` keep
-/// their JavaScript defaults through [`FanSystemIntersectionInput::new`].
+/// Input to [`solve_fan_system_intersection`]; `speed_ratio` and `minimum_flow_fraction` keep their JavaScript defaults through [`FanSystemIntersectionInput::new`].
 #[derive(Clone, Copy, Debug)]
 pub struct FanSystemIntersectionInput<'a> {
     pub fan: &'a FanRecord,
@@ -207,8 +168,7 @@ pub struct FanSystemIntersectionInput<'a> {
 }
 
 impl<'a> FanSystemIntersectionInput<'a> {
-    /// The required inputs; defaults to the JavaScript `speedRatio: 1` and
-    /// `minimumFlowFraction: 0.05`.
+    /// The required inputs; defaults to the JavaScript `speedRatio: 1` and `minimumFlowFraction: 0.05`.
     pub fn new(fan: &'a FanRecord, air_density_kg_m3: f64) -> Self {
         Self {
             fan,
@@ -242,11 +202,6 @@ pub struct FanSystemIntersection {
 }
 
 /// Port of `solveFanSystemIntersection`.
-///
-/// The root is found by the same scan-then-bisect as the reference: 300 samples over
-/// `[max(minFlow, maxFlow * minimumFlowFraction), maxFlow]`, residual tolerance `1e-7`, and the
-/// **last** bracketed root preferred. The system curve is a fallible closure, so a domain
-/// refusal raised inside it propagates exactly as a JavaScript `throw` does.
 pub fn solve_fan_system_intersection<F>(
     input: &FanSystemIntersectionInput<'_>,
     system_pressure_fn: F,
@@ -310,8 +265,7 @@ pub struct AirflowEstimateInput {
     pub actual_air_density_kg_m3: f64,
 }
 
-/// Port of `estimateAirflowFromFanPower`: the fan-affinity estimate
-/// `Q = Q_ref * (P/P_ref * rho_ref/rho)^(1/3)`.
+/// Port of `estimateAirflowFromFanPower`: the fan-affinity estimate `Q = Q_ref * (P/P_ref * rho_ref/rho)^(1/3)`.
 pub fn estimate_airflow_from_fan_power(input: AirflowEstimateInput) -> Result<f64, DomainError> {
     assert_positive(
         input.reference_volumetric_flow_m3_s,
@@ -337,17 +291,13 @@ pub const STANDARD_MOTOR_SIZES_KW: [f64; 24] = [
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MotorSelection {
     pub required_motor_output_kw: f64,
-    /// `None` when the required output is above the largest standard size (the JavaScript
-    /// `?? null`).
+    /// `None` when the required output is above the largest standard size (the JavaScript `??
     pub selected_motor_kw: Option<f64>,
     pub drive_efficiency: f64,
     pub service_factor: f64,
 }
 
 /// Port of `chooseStandardMotor`.
-///
-/// The reference's `standardSizesKW` parameter is not exposed: no JavaScript caller overrides
-/// it. `driveEfficiency` and `serviceFactor` keep their JavaScript call-site values.
 pub fn choose_standard_motor(
     shaft_power_kw: f64,
     drive_efficiency: f64,

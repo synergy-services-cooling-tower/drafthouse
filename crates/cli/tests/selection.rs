@@ -1,21 +1,3 @@
-//! Component selection — port of `src/core/selection.js` with the engineering-objective
-//! ranking of issue #1, tested against the reference engine's recorded behaviour.
-//!
-//! Sources, quoted per test:
-//!
-//! * `tests/selection.test.js` — 'default synthetic catalog returns feasible constrained
-//!   selections'.
-//! * `src/core/selection.js` — the candidate generation, the rejection labels and the
-//!   per-candidate physics (the bundled catalog records below are quoted verbatim from
-//!   `src/data/sampleCatalog.js`; all coefficients are illustrative synthetic data).
-//! * issue #1's measured table (18 September 2026) — the four-objective anchors on the
-//!   bundled catalog; the capacity and capability-ratio numbers were measured from the
-//!   reference engine's own functions at this commit (`scripts/parity/run.mjs` recomputes
-//!   them independently on every run).
-//!
-//! The JavaScript engine is the specification; nothing here re-derives a physics value.
-
-use serde_json::Value;
 use drafthouse_cli as cli;
 use drafthouse_engine::{
     default_selection_requirements, rank_candidates, run_selection,
@@ -26,8 +8,7 @@ use drafthouse_engine::{
     SelectionTower, SystemPressureBreakdown, TowerRecord, TowerType, WaterQualityFactor,
     ZoneCorrelation,
 };
-
-/* ---------------- the bundled sample catalog, quoted verbatim ---------------- */
+use serde_json::Value;
 
 fn zone(
     coefficient_per_m: f64,
@@ -362,7 +343,6 @@ fn fan(
             curve,
         },
         allowed_speed_ratio,
-        // These fixtures predate the record's rated speed; the rpm read-out is not what they test.
         nominal_rpm: None,
         drive_efficiency,
         motor_efficiency,
@@ -508,8 +488,6 @@ fn bundled_catalog() -> SelectionCatalog {
     }
 }
 
-/// The single-cell catalog the focused tests run on: `IDCF-064` with `FILM-OF25`, `DE-3P-10`
-/// and `AX-500`.
 fn small_catalog() -> SelectionCatalog {
     let mut catalog = bundled_catalog();
     catalog.towers.retain(|tower| tower.id == "IDCF-064");
@@ -541,8 +519,6 @@ fn identity(candidate: &drafthouse_engine::SelectionCandidate) -> String {
     )
 }
 
-/* ---------------- focused tests on the single-cell catalog ---------------- */
-
 #[test]
 fn the_reference_defaults_are_pinned() {
     let requirements = default_selection_requirements();
@@ -564,8 +540,6 @@ fn the_reference_defaults_are_pinned() {
     assert_eq!(Objective::default(), Objective::LeastOverCapacity);
 }
 
-/// `tests/selection.test.js` — 'default synthetic catalog returns feasible constrained
-/// selections' — on the single-cell catalog, every constraint checked on the winner.
 #[test]
 fn a_small_catalog_returns_feasible_constrained_candidates() {
     let catalog = small_catalog();
@@ -588,7 +562,6 @@ fn a_small_catalog_returns_feasible_constrained_candidates() {
         assert!(candidate.capability_ratio.is_some());
         assert_eq!(candidate.provenance_status, catalog.metadata.status);
     }
-    // The winner is the smallest unit: its capacity is the minimum over the feasible set.
     let smallest = result
         .results
         .iter()
@@ -597,14 +570,6 @@ fn a_small_catalog_returns_feasible_constrained_candidates() {
     assert_eq!(result.results[0].capacity_kg_s, Some(smallest));
 }
 
-/// The inverse solve, pinned. The case: the single-cell catalog's least-over-capacity winner
-/// (`IDCF-064 / FILM-OF25 / DE-3P-10 / AX-500`, depth 1.5 m, speed ratio 0.78) at the
-/// reference's default duty. The expected 225.32138116657734 was measured with the reference
-/// engine's own functions (2026-09-19, `solveFanSystemIntersection` + `solveColdWaterTemperature`
-/// per flow, then `solveBracketedRoot` on water mass flow, tolerance 1e-9 / xTolerance 1e-6 —
-/// the same bracketed bisection `scripts/parity/run.mjs` performs), and the harness reproduces
-/// it for every candidate of the bundled catalog. The winner's identity is reproducible from
-/// the selection itself.
 #[test]
 fn the_capacity_inverse_solve_is_pinned_and_self_consistent() {
     let catalog = small_catalog();
@@ -618,16 +583,12 @@ fn the_capacity_inverse_solve_is_pinned_and_self_consistent() {
     let capacity = winner.capacity_kg_s.expect("capacity resolves");
     assert_close(capacity, 225.321_381_166_577_34, 1e-6, "capacityKgS");
 
-    // Forward check in the port itself: re-evaluating the unit at the capacity must reproduce
-    // the required cold-water temperature to the solver's own floor.
     let residual = re_evaluate_unit(winner, &result.requirements, capacity)
         - result.requirements.target_cold_water_c;
     assert!(
         residual.abs() <= 1e-6,
         "the forward evaluation at the capacity missed the target by {residual} K"
     );
-    // And the capability ratio is the reported available KaV/L over the required demand at the
-    // required cold-water temperature.
     let demand = drafthouse_engine::merkel_demand(&drafthouse_engine::MerkelInput {
         pressure_pa: result.requirements.pressure_pa,
         salinity_g_kg: result.requirements.salinity_g_kg,
@@ -649,8 +610,6 @@ fn the_capacity_inverse_solve_is_pinned_and_self_consistent() {
     );
 }
 
-/// Re-evaluate one candidate's unit at one water flow, using only the public ported
-/// primitives — the same call sequence `selection.js` makes, built independently here.
 fn re_evaluate_unit(
     candidate: &drafthouse_engine::SelectionCandidate,
     requirements: &SelectionRequirements,
@@ -717,27 +676,22 @@ fn re_evaluate_unit(
     )
     .expect("the fan balance solves");
     let airside = breakdown(point.flow_m3_s).expect("the breakdown evaluates");
-    drafthouse_engine::solve_cold_water_temperature(
-        &drafthouse_engine::ColdWaterTemperatureInput {
-            pressure_pa: requirements.pressure_pa,
-            salinity_g_kg: requirements.salinity_g_kg,
-            integration: drafthouse_engine::Integration::Chebyshev4,
-            ..drafthouse_engine::ColdWaterTemperatureInput::new(
-                requirements.hot_water_c,
-                requirements.wet_bulb_c,
-                requirements.dry_bulb_c,
-                water_mass_flow_kg_s / airside.dry_air_mass_flow_kg_s,
-                airside.available_merkel_number,
-            )
-        },
-    )
+    drafthouse_engine::solve_cold_water_temperature(&drafthouse_engine::ColdWaterTemperatureInput {
+        pressure_pa: requirements.pressure_pa,
+        salinity_g_kg: requirements.salinity_g_kg,
+        integration: drafthouse_engine::Integration::Chebyshev4,
+        ..drafthouse_engine::ColdWaterTemperatureInput::new(
+            requirements.hot_water_c,
+            requirements.wet_bulb_c,
+            requirements.dry_bulb_c,
+            water_mass_flow_kg_s / airside.dry_air_mass_flow_kg_s,
+            airside.available_merkel_number,
+        )
+    })
     .expect("the thermal solve runs")
     .cold_water_c
 }
 
-/// Duty and thermal margin are constraints, never sort keys: the candidate that ranks first
-/// under `LowestElectricalInput` while the margin floor is 0.3 K is refused under every one of
-/// the four objectives once the floor rises above its margin.
 #[test]
 fn a_candidate_below_the_required_margin_cannot_rank_under_any_objective() {
     let catalog = small_catalog();
@@ -756,8 +710,6 @@ fn a_candidate_below_the_required_margin_cannot_rank_under_any_objective() {
         "the case must straddle the floor"
     );
 
-    // Raise the floor above that candidate's margin. It must leave every order, and the count
-    // of 'thermal duty' refusals must rise by exactly one.
     let stricter = SelectionRequirements {
         minimum_thermal_margin_c: 0.6,
         ..default_selection_requirements()
@@ -824,15 +776,6 @@ fn the_temperature_order_and_the_quality_class_are_refused() {
     assert_eq!(error.message(), "Unknown water-quality class.");
 }
 
-/* ---------------- the bundled catalog: issue #1's anchors ---------------- */
-
-/// The four-objective anchors on the bundled catalog, matching issue #1's measured table
-/// (least over-capacity and lowest electrical input) and the reference engine's own values
-/// for the other two. Also checks that every order is a total order built from the declared
-/// objective plus the documented tie-break chain, and that the margin floor holds in each.
-///
-/// The full-bundled-catalog run computes the capacity and capability ratio of all 202 feasible
-/// candidates, so this test is the slow one (tens of seconds in a debug build).
 #[test]
 fn the_bundled_catalog_winners_are_the_issue_1_anchors() {
     let catalog = bundled_catalog();
@@ -876,8 +819,6 @@ fn the_bundled_catalog_winners_are_the_issue_1_anchors() {
             expected,
             "{objective:?} winner"
         );
-        // Every order is the documented total order: the objective's own metric, then the
-        // fixed tie-break chain, then the identity — recomputed here independently.
         let mut reference = order.clone();
         reference.sort_by(|&a, &b| {
             compare_documented(&run.candidates[a], &run.candidates[b], objective)
@@ -937,8 +878,6 @@ fn the_bundled_catalog_winners_are_the_issue_1_anchors() {
     );
 }
 
-/// The documented tie-break chain, recomputed in the test: objective metric, then electrical
-/// input, make-up water, total air-side pressure, capability ratio, capacity, identity.
 fn compare_documented(
     a: &drafthouse_engine::SelectionCandidate,
     b: &drafthouse_engine::SelectionCandidate,
@@ -973,8 +912,6 @@ fn compare_documented(
         })
 }
 
-/// `rank_candidates` is the public seam the CLI's `--all-orders` uses; it must agree with the
-/// order `run_selection` reports for the same objective.
 #[test]
 fn rank_candidates_agrees_with_the_run_order() {
     let catalog = small_catalog();
@@ -990,27 +927,12 @@ fn rank_candidates_agrees_with_the_run_order() {
     assert_eq!(ranked, expected);
 }
 
-/* ---------------- the tie-break chain's interior links ---------------- */
-
-/// The base both exact-tie catalogs start from: the single-cell catalog at one fill depth, so
-/// the order is the tie-break chain's and not a depth or speed grid's.
 fn tie_base_catalog() -> SelectionCatalog {
     let mut catalog = small_catalog();
     catalog.towers[0].fill_depth_options_m = vec![1.5];
     catalog
 }
 
-/// The catalog of the **electrical-input** case. `AX-500-ECO` is `AX-500` record for record
-/// except its **motor efficiency** — the fan curve, the stack area, the pressure basis, the
-/// drive efficiency, the speed window and every physics input are identical. `motorEfficiency`
-/// enters `electricalInputKW` and nothing else (`chooseStandardMotor` is called with the drive
-/// efficiency), so the two units tie on the objective metric, on the air-side solve, on the
-/// thermal solve, on make-up water and on the capability ratio: they differ on electrical input
-/// alone.
-///
-/// The new id sorts *after* the base one (`AX-500` < `AX-500-ECO`) while its electrical input is
-/// the lower of the two, so the identity tail orders the pair against the chain. A case that
-/// dropped the interior links fails rather than passes.
 fn efficiency_tie_catalog() -> SelectionCatalog {
     let mut catalog = tie_base_catalog();
     catalog.towers[0]
@@ -1028,18 +950,6 @@ fn efficiency_tie_catalog() -> SelectionCatalog {
     catalog
 }
 
-/// The catalog of the **make-up water** case. `DE-3P-10-LP` is `DE-3P-10` record for record
-/// except the **drift-ppm column** of its curve; the pressure-drop column — the only one the
-/// fan/system balance reads — is identical, so the operating point, the electrical input, the
-/// capacity, the total air-side pressure and the capability ratio are bit-identical and the pair
-/// differs on make-up water alone.
-///
-/// The make-up water is drift-sensitive only where the balance's blowdown term floors at zero
-/// (`coolingTowerWaterBalance`: `blowdown = evaporation / (cycles − 1) − drift`, floored;
-/// `makeup = evaporation + drift + blowdown`, in which the drift cancels algebraically while
-/// blowdown stays positive). The case therefore runs at 3000 cycles of concentration, where the
-/// base eliminator's blowdown floors and the halved one's does not — the two make-up values
-/// below are pinned, so the case fails loudly if that premise ever stops holding.
 fn drift_tie_catalog() -> SelectionCatalog {
     let mut catalog = tie_base_catalog();
     let mut low_drift = catalog.drift_eliminators[0].clone();
@@ -1051,11 +961,6 @@ fn drift_tie_catalog() -> SelectionCatalog {
     catalog
 }
 
-/// The chain's **first** interior link, on a synthetic catalog with an exact objective-metric
-/// tie: `efficiency_tie_catalog()`'s two units tie on the objective metric — the capacities
-/// compared below are the same `f64`, not merely close — and on every link after the decisive
-/// one, and differ on electrical input alone. The order asserted is the electrical link's, and
-/// it is the reverse of the identity order.
 #[test]
 fn the_electrical_link_orders_an_exact_objective_metric_tie() {
     let catalog = efficiency_tie_catalog();
@@ -1085,15 +990,9 @@ fn the_electrical_link_orders_an_exact_objective_metric_tie() {
     assert_eq!(eco.airside.total_pa, base.airside.total_pa);
     assert_eq!(eco.capability_ratio, base.capability_ratio);
     assert!(eco.electrical_input_kw < base.electrical_input_kw);
-    // The identity tail reads `AX-500` before `AX-500-ECO`, the opposite of the order the chain
-    // produces: the case is evidence about the chain, not about the names.
     assert!("AX-500" < "AX-500-ECO");
 }
 
-/// The chain's **second** interior link, the same way: `drift_tie_catalog()`'s two units tie on
-/// the objective metric, on electrical input, on total air-side pressure and on the capability
-/// ratio, and differ on make-up water alone. The lower make-up water ranks first; the identity
-/// order is again the reverse.
 #[test]
 fn the_makeup_link_orders_an_exact_objective_metric_tie() {
     let catalog = drift_tie_catalog();
@@ -1126,31 +1025,19 @@ fn the_makeup_link_orders_an_exact_objective_metric_tie() {
     );
     assert!(low.water_balance.makeup_kg_s < base.water_balance.makeup_kg_s);
 
-    // The premise of the case, pinned: the base eliminator's blowdown floors at zero (which is
-    // what makes any make-up value drift-sensitive at all) and the halved one's does not.
     assert_eq!(base.water_balance.blowdown_kg_s, 0.0);
     assert!(low.water_balance.blowdown_kg_s > 0.0);
     assert!("DE-3P-10" < "DE-3P-10-LP");
 }
 
-/// One row of the link-by-link discrimination table: two candidates whose metrics differ on
-/// exactly the named links, and the order the documented chain must produce.
 struct LinkCase {
-    /// What the row discriminates, for the failure message.
     label: &'static str,
     objective: Objective,
-    /// `(electricalInputKW, makeupKgS, totalPa, capabilityRatio, capacityKgS)`
     a: [f64; 5],
     b: [f64; 5],
-    /// Which side the documented chain must rank first.
     expected_first: &'static str,
 }
 
-/// A candidate of the row's pair: a real candidate from `small_catalog()` with its tie-break
-/// metrics replaced by the row's values. The comparator reads those metrics as fields, and its
-/// contract is the order it imposes on them; the rows below are that contract, one link at a
-/// time. The tower ids (`TIE-B` for `a`, `TIE-A` for `b`) put the identity tail *against* the
-/// row's expected order, so no row passes on the identity comparison.
 fn engineered_candidate(
     base: &SelectionCandidate,
     tower_id: &str,
@@ -1168,13 +1055,8 @@ fn engineered_candidate(
     candidate
 }
 
-/// The rows: for each of the chain's five interior links, a pair that ties on every *other*
-/// metric and differs on that one; and for each adjacent pair of links, a pair whose two
-/// metrics are anti-correlated, so the links' **order** is exercised as well as their
-/// direction. `a` is always the side the documented chain must rank first.
 fn link_cases() -> Vec<LinkCase> {
     vec![
-        // Direction, link 1 of the chain: electrical input, ascending.
         LinkCase {
             label: "electrical input ascending",
             objective: Objective::LeastOverCapacity,
@@ -1182,7 +1064,6 @@ fn link_cases() -> Vec<LinkCase> {
             b: [11.0, 1.0, 100.0, 2.0, 300.0],
             expected_first: "A",
         },
-        // Direction, link 2: make-up water, ascending.
         LinkCase {
             label: "make-up water ascending",
             objective: Objective::LeastOverCapacity,
@@ -1190,7 +1071,6 @@ fn link_cases() -> Vec<LinkCase> {
             b: [10.0, 2.0, 100.0, 2.0, 300.0],
             expected_first: "A",
         },
-        // Direction, link 3: total air-side pressure, ascending.
         LinkCase {
             label: "total air-side pressure ascending",
             objective: Objective::LeastOverCapacity,
@@ -1198,7 +1078,6 @@ fn link_cases() -> Vec<LinkCase> {
             b: [10.0, 1.0, 101.0, 2.0, 300.0],
             expected_first: "A",
         },
-        // Direction, link 4: capability ratio, ascending.
         LinkCase {
             label: "capability ratio ascending",
             objective: Objective::LeastOverCapacity,
@@ -1206,8 +1085,6 @@ fn link_cases() -> Vec<LinkCase> {
             b: [10.0, 1.0, 100.0, 2.1, 300.0],
             expected_first: "A",
         },
-        // Direction, link 5: capacity, ascending. Its own objective would make it the primary
-        // metric, so this row ranks under an objective it does not carry.
         LinkCase {
             label: "capacity ascending",
             objective: Objective::LowestMakeupWater,
@@ -1215,8 +1092,6 @@ fn link_cases() -> Vec<LinkCase> {
             b: [10.0, 1.0, 100.0, 2.0, 301.0],
             expected_first: "A",
         },
-        // Order, links 1-2: electrical input and make-up water anti-correlated, so the pair is
-        // ordered by which link the chain consults first.
         LinkCase {
             label: "electrical input before make-up water",
             objective: Objective::LeastOverCapacity,
@@ -1224,7 +1099,6 @@ fn link_cases() -> Vec<LinkCase> {
             b: [11.0, 1.0, 100.0, 2.0, 300.0],
             expected_first: "A",
         },
-        // Order, links 2-3: make-up water before total air-side pressure.
         LinkCase {
             label: "make-up water before total air-side pressure",
             objective: Objective::LeastOverCapacity,
@@ -1232,7 +1106,6 @@ fn link_cases() -> Vec<LinkCase> {
             b: [10.0, 2.0, 99.0, 2.0, 300.0],
             expected_first: "A",
         },
-        // Order, links 3-4: total air-side pressure before capability ratio.
         LinkCase {
             label: "total air-side pressure before capability ratio",
             objective: Objective::LeastOverCapacity,
@@ -1240,7 +1113,6 @@ fn link_cases() -> Vec<LinkCase> {
             b: [10.0, 1.0, 101.0, 1.9, 300.0],
             expected_first: "A",
         },
-        // Order, links 4-5: capability ratio before capacity.
         LinkCase {
             label: "capability ratio before capacity",
             objective: Objective::LowestMakeupWater,
@@ -1251,9 +1123,6 @@ fn link_cases() -> Vec<LinkCase> {
     ]
 }
 
-/// Every interior link of the chain, discriminated: each row ties on the objective metric and
-/// on every other link and is ordered by its own. A link whose direction or position moved
-/// flips its row (and for the anti-correlated rows, the link *order* flips them too).
 #[test]
 fn the_tie_break_chain_discriminates_every_interior_link() {
     let catalog = small_catalog();
@@ -1274,9 +1143,6 @@ fn the_tie_break_chain_discriminates_every_interior_link() {
     }
 }
 
-/// The identity tail on a full metric tie: every metric is equal, so the tail decides — and it
-/// compares the tower before the fill, which matters because the two candidates disagree on the
-/// two axes in opposite directions (`TIE-A`/`FILL-Z` against `TIE-B`/`FILL-A`).
 #[test]
 fn the_identity_tail_orders_a_full_metric_tie() {
     let catalog = small_catalog();
@@ -1291,11 +1157,6 @@ fn the_identity_tail_orders_a_full_metric_tie() {
     assert_eq!(pair[1].tower_id, "TIE-B");
 }
 
-/* ---------------- the fail-closed money guard ---------------- */
-
-/// The same fail-closed spirit as `tests/injection.test.js`: a money-ish identifier must not
-/// reappear anywhere in the port's source, and the selector's own result must not carry one.
-/// The guard is demonstrated to bite in a scratch tree (see the lane report).
 #[test]
 fn no_money_ish_identifier_exists_anywhere_in_the_port() {
     const TOKENS: [&str; 10] = [
@@ -1333,7 +1194,6 @@ fn no_money_ish_identifier_exists_anywhere_in_the_port() {
         }
     }
 
-    // The result the CLI actually prints must be just as clean.
     let (args, tower_spec) = small_catalog_args();
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_ct-engine"))
         .args(&args)
@@ -1352,7 +1212,6 @@ fn no_money_ish_identifier_exists_anywhere_in_the_port() {
         "the CLI result must carry the new quantities"
     );
 
-    // And a cost-shaped field is a usage error, never a silently ignored value.
     let poisoned = args
         .iter()
         .map(|argument| {
@@ -1379,7 +1238,6 @@ fn no_money_ish_identifier_exists_anywhere_in_the_port() {
     );
 }
 
-/// Walk `directory` for `.rs` sources, as `(path, text)`.
 fn collect_sources(directory: &std::path::Path, sink: &mut Vec<(String, String)>) {
     for entry in std::fs::read_dir(directory).expect("the source directory reads") {
         let path = entry.expect("the entry reads").path();
@@ -1392,9 +1250,6 @@ fn collect_sources(directory: &std::path::Path, sink: &mut Vec<(String, String)>
     }
 }
 
-/// The `ct-engine select` arguments of the single-cell catalog, with a representative
-/// requirements set. Returns the argument list and the tower spec it contains (so a test can
-/// poison that exact spec).
 fn small_catalog_args() -> (Vec<String>, String) {
     let catalog = small_catalog();
     let tower = &catalog.towers[0];
@@ -1526,10 +1381,6 @@ fn small_catalog_args() -> (Vec<String>, String) {
     (args, tower_spec)
 }
 
-/* ---------------- issue #54: complete stack variants ---------------- */
-
-/// The bundled catalog reduced to the records a mixed stack needs: `IDCF-064` on `AX-500`
-/// through `DE-3P-10`, with the two counterflow/crossflow fills the variant cases below use.
 fn pair_catalog() -> SelectionCatalog {
     let mut catalog = bundled_catalog();
     catalog.towers.retain(|tower| tower.id == "IDCF-064");
@@ -1543,7 +1394,6 @@ fn pair_catalog() -> SelectionCatalog {
     catalog
 }
 
-/// The reduced duty the recorded `select` case uses, which keeps both variants feasible.
 fn variant_requirements() -> SelectionRequirements {
     SelectionRequirements {
         water_mass_flow_kg_s: 180.0,
@@ -1555,7 +1405,6 @@ fn variant_requirements() -> SelectionRequirements {
     }
 }
 
-/// The mixed stack issue #54 names, over the single-layer variant of the same tower.
 fn variant_stacks() -> Vec<FillStack> {
     vec![
         FillStack::new(vec![
@@ -1568,9 +1417,6 @@ fn variant_stacks() -> Vec<FillStack> {
 
 #[test]
 fn a_tower_without_declared_stacks_keeps_the_single_fill_enumeration() {
-    // Acceptance criterion 1's regression pin: a tower that declares no stacks is enumerated
-    // exactly as before — one layer per compatible fill × depth option — and every candidate
-    // carries that one layer, so the identity is the fill's own.
     let catalog = small_catalog();
     let run =
         run_selection(&SelectionInput::new(&catalog).with_requirements(variant_requirements()))
@@ -1592,8 +1438,6 @@ fn a_tower_without_declared_stacks_keeps_the_single_fill_enumeration() {
 
 #[test]
 fn a_tower_selects_over_its_complete_stack_variants() {
-    // Acceptance criterion 6: the declared variants are the identities compared — a mixed
-    // stack and a single-layer one — each carrying its own layers.
     let mut catalog = pair_catalog();
     let stacks = variant_stacks();
     catalog.towers[0].fill_stacks = stacks.clone();
@@ -1618,7 +1462,6 @@ fn a_tower_selects_over_its_complete_stack_variants() {
     assert_eq!(mixed.fill_layers[0].depth_m, 0.45);
     assert_eq!(mixed.fill_layers[1].fill_id, "FILM-VF38");
     assert_eq!(mixed.fill_layers[1].depth_m, 0.9);
-    // The candidate's fill term is its layers' own total, and the layers ride on the stack.
     assert_eq!(
         mixed.airside.fill_merkel_number,
         mixed.fill_layers[0].merkel_number + mixed.fill_layers[1].merkel_number
@@ -1659,9 +1502,6 @@ fn a_declared_variant_whose_fill_is_not_in_the_catalog_is_refused_by_label() {
 
 #[test]
 fn the_selection_surface_carries_the_layers_into_the_worked_steps() {
-    // Acceptance criterion 7: the data-only surface carries the layers through — the reply's
-    // `fillLayers` and the worked sheet's per-layer steps name the same layers in the same
-    // top-first order.
     let (mut args, tower_spec) = small_catalog_args();
     let tower_index = args
         .iter()
@@ -1695,8 +1535,6 @@ pressure:43|3|2|0.1|1.67,limits:1.1|6.2|0.8|3.5|75",
         serde_json::from_str(&cli::run(&args).expect("the variants select")).expect("a JSON reply");
     let results = reply["results"].as_array().expect("results");
     assert_eq!(results.len(), 2, "one feasible candidate per variant");
-    // The mixed stack is the recommended unit at this duty (least over-capacity); the
-    // single-layer variant is the other feasible candidate. Both are complete stacks.
     assert_eq!(results[0]["rank"], 1);
     assert_eq!(results[1]["rank"], 2);
     assert_eq!(results[1]["fillId"], "FILM-OF25");

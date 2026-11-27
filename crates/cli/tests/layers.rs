@@ -1,22 +1,3 @@
-//! Ordered fill layers — the layered fill-stack contract (issue #54).
-//!
-//! Sources, quoted per test:
-//!
-//! * `validation/test-vectors.json` (family `airside`) — the recorded single-fill vectors this
-//!   suite reproduces through a **one-layer stack**. The vectors record behaviour; the
-//!   one-layer case is the single-fill arithmetic itself, so the recorded numbers are the
-//!   layered path's own regression anchor, and `validation/regression-baseline.json` (the
-//!   harness's comparison partner) carries the same numbers for the one-layer CLI call.
-//! * `validation/test-vectors.json` (family `fillLayers`, added by issue #54) — the layered
-//!   cases: one single-layer case and one mixed case, both expressed through the recorded
-//!   single-fill values.
-//! * `src/data/sampleCatalog.js` (retired with the reference, last commit `d5d4cf8`, recorded in
-//!   the private decision record D17) — the tower, fill and drift records quoted below verbatim; all
-//!   coefficients are illustrative synthetic data.
-//!
-//! The JavaScript engine is the specification; nothing here re-derives a physics value.
-
-use serde_json::Value;
 use drafthouse_cli as cli;
 use drafthouse_engine::{
     check_stack_operating_envelope, fill_pressure_drop_pa, fill_thermal_merkel_number,
@@ -26,11 +7,10 @@ use drafthouse_engine::{
     LayeredBreakdownInput, SystemPressureBreakdown, SystemPressureBreakdownInput, TowerRecord,
     ZoneCorrelation,
 };
+use serde_json::Value;
 
-/// The relative tolerance `tests/vectors.test.js` uses for the recorded vectors.
 const VECTOR_TOLERANCE: f64 = 1e-6;
 
-/// The two air densities the recorded `airside-*` cases cross the command line with.
 const DRY_AIR_DENSITY: f64 = 1.116703643908769;
 const MOIST_AIR_DENSITY: f64 = 1.1392905373780184;
 
@@ -42,12 +22,6 @@ fn agrees(actual: f64, expected: f64, label: &str) {
     );
 }
 
-/// Compare two JSON numbers within a few ulp.
-///
-/// `serde_json`'s float parse is not correctly-rounded (the reply carries the shortest
-/// round-trip text either way), so a sum of two *parsed* values can land a couple of ulp away
-/// from the same sum computed inside the engine. Nothing here is looser than that: the
-/// engine's own sums are compared exactly at the library seam.
 fn close(actual: f64, expected: f64, label: &str) {
     let scale = expected.abs().max(1.0);
     assert!(
@@ -56,9 +30,6 @@ fn close(actual: f64, expected: f64, label: &str) {
     );
 }
 
-/* ---------------- the bundled sample catalog ---------------- */
-
-/// `sampleCatalog.towers` / `IDCF-064`.
 fn idcf_064() -> TowerRecord {
     TowerRecord {
         fill_area_m2: 64.0,
@@ -96,7 +67,6 @@ fn zone(
     }
 }
 
-/// `sampleCatalog.fills` / `FILM-OF25`.
 fn film_of25() -> FillRecord {
     FillRecord {
         id: "FILM-OF25".to_string(),
@@ -119,7 +89,6 @@ fn film_of25() -> FillRecord {
     }
 }
 
-/// `sampleCatalog.fills` / `FILM-VF38` — a second, different fill type for the mixed stacks.
 fn film_vf38() -> FillRecord {
     FillRecord {
         id: "FILM-VF38".to_string(),
@@ -146,7 +115,6 @@ fn film_vf38() -> FillRecord {
     }
 }
 
-/// `sampleCatalog.driftEliminators` / `DE-3P-10`.
 fn de_3p_10() -> DriftEliminatorRecord {
     DriftEliminatorRecord {
         id: "DE-3P-10".to_string(),
@@ -170,7 +138,6 @@ fn de_3p_10() -> DriftEliminatorRecord {
     }
 }
 
-/// `sampleCatalog.fans` / `AX-500`.
 fn ax_500() -> FanRecord {
     FanRecord {
         id: "AX-500".to_string(),
@@ -195,10 +162,6 @@ fn ax_500() -> FanRecord {
     }
 }
 
-/* ---------------- the layered path at the library seam ---------------- */
-
-/// The single-fill breakdown the reference's `systemPressureBreakdown` produces for this
-/// fixture — the comparison partner of every one-layer stack below.
 fn single_fill(
     fill: &FillRecord,
     depth_m: f64,
@@ -223,7 +186,6 @@ fn single_fill(
     .expect("the single-fill fixture computes")
 }
 
-/// The stack through the layered path, with the layers resolved against `fills` in order.
 fn stacked(
     stack: &FillStack,
     fills: &[FillRecord],
@@ -248,17 +210,12 @@ fn stacked(
     .expect("the fixture stack computes")
 }
 
-/// The single `(fill, depth)` pair a one-layer stack carries.
 fn one_layer(fill: &str, depth_m: f64) -> FillStack {
     FillStack::single(fill, depth_m)
 }
 
-/* ---------------- issue #54: a one-layer stack IS the single fill ---------------- */
-
 #[test]
 fn a_one_layer_stack_reproduces_the_single_fill_breakdown_bit_for_bit() {
-    // Acceptance criterion 4's anchor at the library seam: the layered path's fill terms are
-    // the single-fill path's own values, not a re-derivation of them.
     let fill = film_of25();
     for flow_m3_s in [100.0, 130.0, 160.0] {
         let single = single_fill(&fill, 1.5, flow_m3_s, 200.0, 1.0, 1.0);
@@ -298,8 +255,6 @@ fn a_one_layer_stack_reproduces_the_single_fill_breakdown_bit_for_bit() {
 
 #[test]
 fn a_one_layer_stack_reproduces_the_recorded_airside_vector() {
-    // `validation/test-vectors.json`, family `airside`, case `airside-160`: the recorded
-    // single-fill numbers, reached through a one-layer stack and the recorded inputs.
     let fill = film_of25();
     let result = stacked(
         &one_layer("FILM-OF25", 1.5),
@@ -322,7 +277,6 @@ fn a_one_layer_stack_reproduces_the_recorded_airside_vector() {
         2.258391,
         "airside-160 availableMerkelNumber",
     );
-    // The layer's own terms are the recorded fill terms exactly.
     assert_eq!(result.fill_layers[0].pressure_drop_pa, breakdown.fill_pa);
     assert_eq!(
         result.fill_layers[0].merkel_number,
@@ -330,13 +284,8 @@ fn a_one_layer_stack_reproduces_the_recorded_airside_vector() {
     );
 }
 
-/* ---------------- issue #54: mixes, in physical order ---------------- */
-
 #[test]
 fn two_layers_of_the_same_fill_split_the_single_fill_terms_by_depth() {
-    // Same-type layers are equally valid (criterion 5). At fixed loadings both the transfer
-    // number and the drop are linear in depth, so a 0.6 m + 0.9 m split of the recorded 1.5 m
-    // case must sum to the recorded 1.5 m terms — and split them in the depth ratio.
     let fill = film_of25();
     let single = single_fill(&fill, 1.5, 160.0, 200.0, 1.0, 1.0);
     let stack = FillStack::new(vec![
@@ -358,7 +307,6 @@ fn two_layers_of_the_same_fill_split_the_single_fill_terms_by_depth() {
     assert_eq!(lower.position, 2);
     assert_eq!(upper.depth_m, 0.6);
     assert_eq!(lower.depth_m, 0.9);
-    // The split is the depth ratio, to the last few ulp.
     let ratio = upper.merkel_number / lower.merkel_number;
     assert!(
         (ratio - 0.6 / 0.9).abs() / (0.6 / 0.9) < 1e-12,
@@ -372,14 +320,12 @@ fn two_layers_of_the_same_fill_split_the_single_fill_terms_by_depth() {
         upper.merkel_number + lower.merkel_number,
         result.breakdown.fill_merkel_number
     );
-    // The running totals through each layer end at the stack's own totals.
     assert_eq!(upper.cumulative_pressure_drop_pa, upper.pressure_drop_pa);
     assert_eq!(lower.cumulative_pressure_drop_pa, result.breakdown.fill_pa);
     assert_eq!(
         lower.cumulative_merkel_number,
         result.breakdown.fill_merkel_number
     );
-    // Every layer sees the stack's own loadings and airflow.
     for layer in &result.fill_layers {
         assert_eq!(layer.volumetric_air_flow_m3_s, 160.0);
         assert_eq!(layer.water_loading_kg_m2_s, single.water_loading_kg_m2_s);
@@ -394,9 +340,6 @@ fn two_layers_of_the_same_fill_split_the_single_fill_terms_by_depth() {
 
 #[test]
 fn a_mixed_stack_sums_its_layers_in_physical_order() {
-    // Different fill types in one stack (criterion 5): the upper layer is `FILM-OF25` over
-    // `FILM-VF38`, the shape issue #54 names. Each layer's term is the ported fill function at
-    // that layer's own fill, depth and multipliers; the totals are those terms summed top down.
     let fills = [film_of25(), film_vf38()];
     let stack = FillStack::new(vec![
         FillLayer::new("FILM-OF25", 0.45),
@@ -415,7 +358,6 @@ fn a_mixed_stack_sums_its_layers_in_physical_order() {
     assert_eq!(stack.total_depth_m(), 1.35);
     assert_eq!(stack.identity(), (stack.label(), 1.35));
 
-    // Each layer is the ported primitive, called with the loadings the layer sees.
     let expected_pressure = |fill: &FillRecord, depth_m: f64| {
         fill_pressure_drop_pa(
             fill,
@@ -441,7 +383,6 @@ fn a_mixed_stack_sums_its_layers_in_physical_order() {
     assert_eq!(upper.merkel_number, expected_merkel(&fills[0], 0.45));
     assert_eq!(lower.merkel_number, expected_merkel(&fills[1], 0.9));
 
-    // The combined totals are the layers' sums, in physical order.
     assert_eq!(
         breakdown.fill_pa,
         expected_pressure(&fills[0], 0.45) + expected_pressure(&fills[1], 0.9)
@@ -452,26 +393,20 @@ fn a_mixed_stack_sums_its_layers_in_physical_order() {
     );
     assert_eq!(upper.cumulative_merkel_number, upper.merkel_number);
     assert_eq!(lower.cumulative_merkel_number, breakdown.fill_merkel_number);
-    // The stack's transfer terms ride on top of the two zones, unchanged.
     assert_eq!(
         breakdown.available_merkel_number,
         breakdown.fill_merkel_number
             + breakdown.spray_zone_merkel_number
             + breakdown.rain_zone_merkel_number
     );
-    // The layers' characteristics are the records' own, echoed per layer.
     assert_eq!(upper.thermal, *fills[0].thermal.as_ref().unwrap());
     assert_eq!(lower.thermal, *fills[1].thermal.as_ref().unwrap());
     assert_eq!(upper.limits, fills[0].limits);
     assert_eq!(lower.limits, fills[1].limits);
 }
 
-/* ---------------- issue #54: multipliers ---------------- */
-
 #[test]
 fn a_layer_multiplier_composes_with_the_run_multiplier() {
-    // The layer's own multiplier and the run's are separate inputs; the layer's contribution is
-    // the ported function at their product, and each is echoed separately.
     let fill = film_of25();
     let stack = FillStack::new(vec![FillLayer::new("FILM-OF25", 0.9)
         .with_thermal_multiplier(0.9)
@@ -504,7 +439,6 @@ fn a_layer_multiplier_composes_with_the_run_multiplier() {
         )
         .expect("the primitive computes")
     );
-    // The run's thermal multiplier still reaches the zones, as it does for a single fill.
     let single = single_fill(&fill, 0.9, 160.0, 200.0, 0.8, 0.5);
     assert_eq!(
         result.breakdown.spray_zone_merkel_number,
@@ -515,8 +449,6 @@ fn a_layer_multiplier_composes_with_the_run_multiplier() {
         single.rain_zone_merkel_number
     );
 }
-
-/* ---------------- issue #54: refusals name the layer ---------------- */
 
 #[test]
 fn an_empty_stack_is_refused() {
@@ -596,17 +528,12 @@ fn a_fill_without_the_characteristic_its_layer_needs_is_refused_by_name() {
 
 #[test]
 fn a_layer_outside_its_fills_limits_is_refused_by_name() {
-    // The stack is refused at its own operating point: 400 kg/s over 64 m² is 6.25 kg/(m²·s),
-    // above `FILM-OF25`'s 5.4 — and the message names the layer and the limit. The layer is
-    // never clamped into range.
     let fills = [film_of25(), film_vf38()];
     let stack = FillStack::new(vec![
         FillLayer::new("FILM-OF25", 1.5),
         FillLayer::new("FILM-VF38", 1.5),
     ]);
     let terms = resolve_fill_layers(&stack, &fills).expect("the fixture stack resolves");
-    // 5.8 kg/(m²·s) is inside FILM-VF38's own 1.1–6.2 and outside FILM-OF25's 1.3–5.4, so the
-    // failure names the first layer and only the first layer.
     let water_loading = 5.8;
     let failures =
         check_stack_operating_envelope(&terms, water_loading, 1.7448494436074515, None, None);
@@ -619,7 +546,6 @@ fn a_layer_outside_its_fills_limits_is_refused_by_name() {
         failures[0],
         "Layer 1 (FILM-OF25@1.5): Water loading 5.800 kg/(m²·s) is outside 1.3–5.4."
     );
-    // The declared dimensions are checked when the run declares them.
     let with_claims = check_stack_operating_envelope(
         &terms,
         water_loading,
@@ -637,7 +563,6 @@ fn a_layer_outside_its_fills_limits_is_refused_by_name() {
             .starts_with("Layer 1 (FILM-OF25@1.5): Fill is not approved in the sample catalog")),
         "{with_claims:?}"
     );
-    // `FILM-VF38` allows 6.2, so its own layer passes the same loading.
     assert!(
         !with_claims
             .iter()
@@ -646,11 +571,6 @@ fn a_layer_outside_its_fills_limits_is_refused_by_name() {
     );
 }
 
-/* ---------------- issue #54: the recorded layered vectors ---------------- */
-
-/// Parse one recorded stack spelling: `<fillId>@<depthM>` per layer, `+`-joined. The family's
-/// cases are the plain two-field spelling — a layer carrying its own multipliers has no
-/// recorded case, and the multiplies are exercised at the library seam above.
 fn recorded_stack(spelling: &str) -> FillStack {
     FillStack::new(
         spelling
@@ -672,10 +592,6 @@ fn recorded_stack(spelling: &str) -> FillStack {
 
 #[test]
 fn the_recorded_fill_layer_vectors_reproduce() {
-    // The `fillLayers` family of `validation/test-vectors.json` — the layered cases issue #54
-    // adds alongside the recorded families. Both cases carry the recorded `airside-160` fill
-    // terms (the single layer directly, the split by depth shares), so a disagreement here is a
-    // finding about the layered path, not a licence to move the vector.
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../../validation/test-vectors.json"
@@ -741,7 +657,6 @@ fn the_recorded_fill_layer_vectors_reproduce() {
                 &format!("{id} layer {} merkelNumber", got.position),
             );
         }
-        // The last cumulative value is the stack's own total.
         agrees(
             result
                 .fill_layers
@@ -764,10 +679,6 @@ fn the_recorded_fill_layer_vectors_reproduce() {
     );
 }
 
-/* ---------------- issue #54: the data-only surface ---------------- */
-
-/// The recorded `airside-160` case's options, verbatim (`validation/regression-baseline.json`):
-/// the tower, fill, drift and fan records and the two densities the single-fill leg compares.
 const TOWER_SPEC: &str = "fillAreaM2:64,airFreeAreaM2:64,driftAreaM2:61,inletAreaM2:32,\
 stackRecoveryFactor:0.35,inletLossCoefficient:3,distributionLossCoefficient:4.4,\
 supportLossCoefficient:2.1,plenumLossCoefficient:0.38,fixedPressureLossPa:10,\
@@ -784,7 +695,6 @@ const SPRAY: &str = "coefficientPerM:0.16,referenceWaterLoadingKgM2S:3,\
 referenceDryAirLoadingKgM2S:2,waterExponent:-0.3,airExponent:0.45";
 const RAIN: &str = "coefficientPerM:0.13,referenceWaterLoadingKgM2S:3,\
 referenceDryAirLoadingKgM2S:2,waterExponent:-0.35,airExponent:0.5";
-/// The `--fills` records in the selector's own encoding (also the `layers` command's).
 const FILLS: &str = "id:FILM-OF25,compatibleTowerTypes:counterflow|crossflow,\
 allowedWaterQualityClasses:clean|moderate,thermal:1.12|3|2|-0.31|0.44,\
 pressure:61|3|2|0.14|1.72,limits:1.3|5.4|0.9|3.3|60;\
@@ -792,7 +702,6 @@ id:FILM-VF38,compatibleTowerTypes:counterflow|crossflow,\
 allowedWaterQualityClasses:clean|moderate|dirty,thermal:0.94|3|2|-0.27|0.39,\
 pressure:43|3|2|0.1|1.67,limits:1.1|6.2|0.8|3.5|75";
 
-/// The air-side options every command below shares (the recorded case's own).
 fn common_args() -> Vec<String> {
     [
         "--tower",
@@ -833,8 +742,6 @@ fn run(args: &[&str]) -> Value {
 
 #[test]
 fn the_rate_command_reports_every_layer_and_the_combined_total() {
-    // Criterion 7's data surface: `ct-engine layers` is one command over the whole stack, and
-    // its reply carries the layers in physical order plus the layers' totals.
     let mut args = vec![
         "layers".to_string(),
         "--fills".to_string(),
@@ -860,8 +767,6 @@ fn the_rate_command_reports_every_layer_and_the_combined_total() {
     assert_eq!(layers[1]["label"], "FILM-VF38@0.9");
     assert_eq!(layers[1]["fillId"], "FILM-VF38");
     assert_eq!(layers[1]["depthM"], 0.9);
-    // Each layer identifies its characteristic, its multipliers and the limits it was checked
-    // against; each sees the stack's own airflow and loadings.
     assert_eq!(layers[1]["thermal"]["coefficientPerM"], 0.94);
     assert_eq!(layers[1]["pressure"]["coefficientPaPerM"], 43.0);
     assert_eq!(layers[1]["limits"]["maxWaterLoadingKgM2S"], 6.2);
@@ -879,7 +784,6 @@ fn the_rate_command_reports_every_layer_and_the_combined_total() {
         layers[0]["dryAirLoadingKgM2S"],
         layers[1]["dryAirLoadingKgM2S"]
     );
-    // The combined total is the layers' sum, and it is the breakdown's fill term too.
     let layer_sum =
         layers[0]["merkelNumber"].as_f64().unwrap() + layers[1]["merkelNumber"].as_f64().unwrap();
     let layer_pressure_sum = layers[0]["pressureDropPa"].as_f64().unwrap()
@@ -908,7 +812,6 @@ fn the_rate_command_reports_every_layer_and_the_combined_total() {
         layer_sum,
         "the last cumulative value",
     );
-    // The breakdown around the layers is the single-fill one: the zones are unchanged.
     assert!(reply["airside"]["sprayZoneMerkelNumber"].as_f64().unwrap() > 0.0);
     assert!(reply["airside"]["rainZoneMerkelNumber"].as_f64().unwrap() > 0.0);
     assert!(reply["airside"]["driftPa"].as_f64().unwrap() > 0.0);
@@ -916,8 +819,6 @@ fn the_rate_command_reports_every_layer_and_the_combined_total() {
 
 #[test]
 fn the_rate_command_reproduces_the_single_fill_command_for_a_one_layer_stack() {
-    // Criterion 4 at the data surface: the identical inputs through `airside` (single fill) and
-    // through `layers` (a one-layer stack) answer with the same air-side object.
     let single = run(&[
         "airside",
         "--fill-thermal",
@@ -953,8 +854,6 @@ fn the_rate_command_reproduces_the_single_fill_command_for_a_one_layer_stack() {
 
 #[test]
 fn the_rate_command_refuses_a_layer_outside_its_limits_and_names_it() {
-    // Criterion 2 at the data surface: the refusal is a named domain error, not a clamped
-    // number, and it says which layer hit which limit.
     let mut args = vec![
         "layers".to_string(),
         "--fills".to_string(),
@@ -962,7 +861,6 @@ fn the_rate_command_refuses_a_layer_outside_its_limits_and_names_it() {
     ];
     args.extend(common_args());
     args.extend(["--fill-stack".to_string(), "FILM-OF25@1.5".to_string()]);
-    // 400 kg/s over the 64 m² fill face is 6.25 kg/(m²·s): outside FILM-OF25's 5.4.
     let water_index = args
         .iter()
         .position(|argument| argument == "--water")
@@ -977,7 +875,6 @@ fn the_rate_command_refuses_a_layer_outside_its_limits_and_names_it() {
         "Layer 1 (FILM-OF25@1.5): Water loading 6.250 kg/(m²·s) is outside 1.3–5.4."
     );
 
-    // The same stack inside the limits still answers.
     let water_index = args
         .iter()
         .position(|argument| argument == "--water")
@@ -988,8 +885,6 @@ fn the_rate_command_refuses_a_layer_outside_its_limits_and_names_it() {
 
 #[test]
 fn a_layer_stack_spelling_round_trips_through_the_command_surface() {
-    // The stack's own name parses back into the stack that produced it, so a caller can feed a
-    // result's `stackLabel` straight back in.
     let mut args = vec![
         "layers".to_string(),
         "--fills".to_string(),
@@ -1006,7 +901,6 @@ fn a_layer_stack_spelling_round_trips_through_the_command_surface() {
     assert_eq!(reply["layers"][0]["fillId"], "FILM-VF38");
     assert_eq!(reply["layers"][1]["fillId"], "FILM-OF25");
 
-    // A malformed spelling is a usage error that names the option.
     let mut broken = vec![
         "layers".to_string(),
         "--fills".to_string(),

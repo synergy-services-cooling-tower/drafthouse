@@ -1,20 +1,3 @@
-//! Characteristic-curve capability — the JavaScript suite's expectations for
-//! `src/core/capability.js`, ported test for test.
-//!
-//! Sources, quoted per test:
-//!
-//! * `tests/capability.test.js` — identical design and test conditions evaluate to 100 %
-//!   capability, and a seeded Monte Carlo is repeatable for the same seed.
-//! * `validation/test-vectors.json` (family `capability`) — the recorded cases are replayed in
-//!   `rust/tests/vectors.rs`, next to the two JavaScript vector families.
-//! * `src/core/capability.js` — the guard order and messages, the default exponent, the
-//!   `-1e12` infeasible-demand residual, the curve sampling range and filter, and the
-//!   Monte-Carlo acceptance floor.
-//! * `tests/vectors.test.js` — the seeded generator's first draws, quoted in `rand_js_draws`
-//!   (produced by `createSeededRandom(17)` in the JavaScript engine itself).
-//!
-//! The JavaScript engine is the specification; nothing here re-derives a value.
-
 use drafthouse_engine::{
     create_seeded_random, evaluate_characteristic_capability, gaussian_random,
     monte_carlo_characteristic_capability, percentile, CapabilityCondition, CapabilityUncertainty,
@@ -22,12 +5,10 @@ use drafthouse_engine::{
     MonteCarloInput,
 };
 
-/// The condition of `tests/capability.test.js`.
 fn condition() -> CapabilityCondition {
     CapabilityCondition::new(200.0, 133.3333333, 42.0, 32.0, 27.0, 33.0).with_pressure(101_325.0)
 }
 
-/// `evaluateCharacteristicCapability({ design, test, characteristicExponent: -0.6 })`.
 fn capability_input(
     design: CapabilityCondition,
     test: CapabilityCondition,
@@ -41,7 +22,6 @@ fn message(error: &drafthouse_engine::DomainError) -> String {
 
 #[test]
 fn identical_design_and_test_conditions_evaluate_to_one_hundred_percent() {
-    // tests/capability.test.js: `Math.abs(capabilityPct - 100) < 0.001`.
     let result = evaluate_characteristic_capability(&capability_input(condition(), condition()))
         .expect("the documented case evaluates");
     assert!(
@@ -55,8 +35,6 @@ fn identical_design_and_test_conditions_evaluate_to_one_hundred_percent() {
 
 #[test]
 fn the_default_exponent_applies_when_the_input_omits_it() {
-    // src/core/capability.js: `characteristicExponent = -0.6`. `CharacteristicCapabilityInput::new`
-    // applies the reference's default; `with_characteristic_exponent` overrides it.
     let input = CharacteristicCapabilityInput::new(condition(), condition());
     assert_eq!(input.characteristic_exponent, -0.6);
     let result = evaluate_characteristic_capability(&input).expect("defaults evaluate");
@@ -65,8 +43,6 @@ fn the_default_exponent_applies_when_the_input_omits_it() {
         result.inlet_enthalpy_convention,
         InletEnthalpyConvention::Bulk
     );
-    // The reference's own test asserts within 0.001: the capability is root-solved, so an
-    // identical design and test condition lands on 100 % to within the scan's stopping width.
     assert!(
         (result.capability_pct - 100.0).abs() < 0.001,
         "capabilityPct {}",
@@ -76,8 +52,6 @@ fn the_default_exponent_applies_when_the_input_omits_it() {
 
 #[test]
 fn a_warmer_test_cold_water_declines_and_a_cooler_one_gains_capability() {
-    // The recorded vectors (`cap-worse` 88.7939 %, `cap-better` 111.605272 %) pin the
-    // direction; this test only asserts the direction, not the recorded number.
     let worse = evaluate_characteristic_capability(&capability_input(
         condition(),
         CapabilityCondition::new(200.0, 133.3333333, 42.0, 33.0, 27.0, 33.0),
@@ -94,7 +68,6 @@ fn a_warmer_test_cold_water_declines_and_a_cooler_one_gains_capability() {
 
 #[test]
 fn a_positive_exponent_is_refused_after_both_conditions_are_validated() {
-    // The reference validates `design`, then `test`, then the exponent.
     let error = evaluate_characteristic_capability(
         &capability_input(condition(), condition()).with_characteristic_exponent(0.5),
     )
@@ -103,7 +76,6 @@ fn a_positive_exponent_is_refused_after_both_conditions_are_validated() {
         message(&error),
         "A whole-tower characteristic exponent must be negative."
     );
-    // A bad condition is reported before the exponent.
     let error = evaluate_characteristic_capability(
         &capability_input(condition(), condition()).with_characteristic_exponent(0.5),
     )
@@ -138,10 +110,6 @@ fn a_condition_with_a_non_finite_field_is_refused_naming_it() {
 
 #[test]
 fn the_curves_span_the_reference_window_and_carry_both_ordinates() {
-    // src/core/capability.js: `range(max(0.05, min(...) * 0.55), max(...) * 1.55, curvePoints)`,
-    // filtered to the points whose design demand is finite. The documented condition is
-    // feasible at the low end of the window (the approach to the wet bulb pinches only at
-    // higher L/G), so every point survives here.
     let result = evaluate_characteristic_capability(&capability_input(condition(), condition()))
         .expect("evaluates");
     assert_eq!(result.curves.len(), 80);
@@ -155,7 +123,6 @@ fn the_curves_span_the_reference_window_and_carry_both_ordinates() {
         result.curves[79].water_to_dry_air_ratio,
         start + (stop - start)
     );
-    // The characteristic ordinate follows `coefficient * L/G ** exponent` exactly.
     for point in &result.curves {
         let expected = result.test_characteristic_coefficient
             * point
@@ -167,9 +134,6 @@ fn the_curves_span_the_reference_window_and_carry_both_ordinates() {
 
 #[test]
 fn a_case_with_a_pinch_in_the_curve_window_drops_the_infeasible_points() {
-    // A design condition whose demand pinches inside the sampling window loses those curve
-    // points to the reference's `Number.isFinite` filter; 80 sampled points come back as 78
-    // (measured in the reference for this pair of conditions).
     let design = CapabilityCondition::new(200.0, 133.3333333, 42.0, 32.5, 27.0, 33.0);
     let test = CapabilityCondition::new(200.0, 133.3333333, 42.0, 32.0, 27.0, 33.0);
     let result = evaluate_characteristic_capability(&capability_input(design, test))
@@ -179,19 +143,14 @@ fn a_case_with_a_pinch_in_the_curve_window_drops_the_infeasible_points() {
         .curves
         .iter()
         .all(|point| point.design_demand_merkel.is_finite()));
-    // The dropped points are the high-L/G end: the surviving window starts where it started.
     assert_eq!(
         result.curves[0].water_to_dry_air_ratio,
         0.05_f64.max(design.water_mass_flow_kg_s / design.dry_air_mass_flow_kg_s * 0.55)
     );
 }
 
-/* ---------------- the seeded stream ---------------- */
-
 #[test]
 fn the_seeded_generator_draws_the_javascript_stream() {
-    // Measured in the reference engine itself (`createSeededRandom(17)`): the generator is
-    // 32-bit wrapping arithmetic, so these draws are exact, not approximate.
     let expected = [
         0.6771502960473299_f64,
         0.19265692122280598,
@@ -203,7 +162,6 @@ fn the_seeded_generator_draws_the_javascript_stream() {
     for (index, value) in expected.iter().enumerate() {
         assert_eq!(random.next_value(), *value, "draw {index}");
     }
-    // `gaussianRandom` over that stream (measured in the reference in the same place).
     let mut random = create_seeded_random(17.0);
     let expected_gaussian = [
         0.31131072930854836_f64,
@@ -222,21 +180,15 @@ fn the_seeded_generator_draws_the_javascript_stream() {
 
 #[test]
 fn percentile_matches_the_reference_definition() {
-    // `percentile([3, 1, 4, 1, 5, 9, 2, 6], p)` in the reference: sorted, position clamped,
-    // then linearly interpolated between the neighbours.
     let values = [3.0, 1.0, 4.0, 1.0, 5.0, 9.0, 2.0, 6.0];
     assert_eq!(percentile(&values, 0.025), 1.0);
     assert_eq!(percentile(&values, 0.5), 3.5);
     assert_eq!(percentile(&values, 0.975), 8.475000000000001);
     assert!(percentile(&[], 0.5).is_nan());
-    // A position outside [0, 1] clamps to the ends.
     assert_eq!(percentile(&values, -1.0), 1.0);
     assert_eq!(percentile(&values, 2.0), 9.0);
 }
 
-/* ---------------- Monte Carlo ---------------- */
-
-/// The uncertainty of `tests/capability.test.js`: five perturbed test fields, in its order.
 fn documented_uncertainty() -> CapabilityUncertainty {
     CapabilityUncertainty {
         design: Vec::new(),
@@ -254,7 +206,6 @@ fn documented_uncertainty() -> CapabilityUncertainty {
 
 #[test]
 fn a_seeded_monte_carlo_is_repeatable() {
-    // tests/capability.test.js: the same input twice gives the same p50, and p2_5 < p97_5.
     let input = MonteCarloInput::new(
         capability_input(condition(), condition()),
         documented_uncertainty(),
@@ -265,7 +216,6 @@ fn a_seeded_monte_carlo_is_repeatable() {
     let second = monte_carlo_characteristic_capability(&input).expect("runs again");
     assert_eq!(first.p50, second.p50);
     assert!(first.p2_5 < first.p97_5);
-    // Every sample is either accepted or rejected, and the seed is echoed.
     assert_eq!(first.samples_requested, 80);
     assert_eq!(first.samples_accepted + first.rejected_samples, 80);
     assert_eq!(first.seed, 17.0);
@@ -290,8 +240,6 @@ fn a_different_seed_draws_a_different_sample_set() {
 
 #[test]
 fn a_run_that_cannot_clear_the_acceptance_floor_is_refused() {
-    // The reference refuses when fewer than `max(20, samples * 0.5)` samples are accepted, so
-    // a request for ten samples can never clear its own floor.
     let input = MonteCarloInput::new(
         capability_input(condition(), condition()),
         documented_uncertainty(),
@@ -306,8 +254,6 @@ fn a_run_that_cannot_clear_the_acceptance_floor_is_refused() {
 
 #[test]
 fn the_perturbation_order_decides_which_field_draws_which_gaussian() {
-    // The reference walks `Object.entries(standardUncertainty)`: two fields whose sigmas are
-    // swapped between orders produce different samples, so the order is part of the contract.
     let swapped = CapabilityUncertainty {
         design: Vec::new(),
         test: vec![

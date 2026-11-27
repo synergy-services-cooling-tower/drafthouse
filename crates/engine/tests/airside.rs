@@ -1,17 +1,3 @@
-//! Air-side losses and fan-stack discharge — the JavaScript suite's expectations for
-//! `src/core/airside.js`, ported test for test.
-//!
-//! Sources, quoted per test:
-//!
-//! * `tests/airside.test.js` — the eight air-side expectations, against the bundled sample
-//!   catalog records (`src/data/sampleCatalog.js`, quoted below verbatim; all coefficients
-//!   are illustrative synthetic data).
-//! * `validation/test-vectors.json` (family `airside`) — the recorded regression vectors,
-//!   reproduced at the same 1e-6 relative tolerance `tests/vectors.test.js` uses.
-//! * `src/core/airside.js` — the formulas, `??` defaults and guard messages.
-//!
-//! The JavaScript engine is the specification; nothing here re-derives a value.
-
 use drafthouse_engine::{
     check_fill_operating_envelope, drift_performance_at_velocity, fan_stack_discharge_pressure_pa,
     fill_pressure_drop_pa, fill_thermal_merkel_number, minor_loss_pressure_pa, psychrometric_state,
@@ -22,9 +8,6 @@ use drafthouse_engine::{
     TowerRecord, ZoneCorrelation,
 };
 
-/* ---------------- the bundled sample catalog ---------------- */
-
-/// `sampleCatalog.towers` / `IDCF-064`.
 fn idcf_064() -> TowerRecord {
     TowerRecord {
         fill_area_m2: 64.0,
@@ -58,7 +41,6 @@ fn idcf_064() -> TowerRecord {
     }
 }
 
-/// `sampleCatalog.fills` / `FILM-OF25`.
 fn film_of25() -> FillRecord {
     FillRecord {
         id: "FILM-OF25".to_string(),
@@ -87,7 +69,6 @@ fn film_of25() -> FillRecord {
     }
 }
 
-/// `sampleCatalog.fills` / `FILM-VF38` (used by the envelope cases only).
 fn film_vf38() -> FillRecord {
     FillRecord {
         id: "FILM-VF38".to_string(),
@@ -120,7 +101,6 @@ fn film_vf38() -> FillRecord {
     }
 }
 
-/// `sampleCatalog.driftEliminators` / `DE-3P-10`.
 fn de_3p_10() -> DriftEliminatorRecord {
     DriftEliminatorRecord {
         id: "DE-3P-10".to_string(),
@@ -159,7 +139,6 @@ fn de_3p_10() -> DriftEliminatorRecord {
     }
 }
 
-/// `sampleCatalog.fans` / `AX-500`.
 fn ax_500() -> FanRecord {
     FanRecord {
         id: "AX-500".to_string(),
@@ -197,8 +176,6 @@ fn ax_500() -> FanRecord {
     }
 }
 
-/// The `breakdownAt` helper of `tests/airside.test.js`: the catalog cell at the recorded
-/// 33/27 °C condition, 1.5 m of fill and 200 kg/s of water.
 fn breakdown_at(volumetric_air_flow_m3_s: f64, fan: Option<&FanRecord>) -> SystemPressureBreakdown {
     let air = psychrometric_state(PsychrometricStateInput::from_wet_bulb(33.0, 27.0)).unwrap();
     let tower = idcf_064();
@@ -228,29 +205,20 @@ fn agrees(actual: f64, expected: f64, label: &str) {
     );
 }
 
-/* ---------------- the loss definitions ---------------- */
-
 #[test]
 fn velocity_pressure_and_minor_loss_follow_the_definition() {
-    // dp = 0.5 rho v^2, and a minor loss is K times that velocity pressure.
     let density = 1.1392905373780184;
     let velocity = 4.0625;
     let velocity_pressure = velocity_pressure_pa(density, velocity);
-    // The reference expression is `0.5 * rho * v ** 2`; keep the same association.
     assert_eq!(velocity_pressure, 0.5 * density * velocity.powi(2));
     assert_eq!(
         minor_loss_pressure_pa(3.0, density, velocity),
         3.0 * velocity_pressure
     );
-    // Values pinned from the reference (src/core/airside.js).
     assert!((velocity_pressure - 9.40137211019947).abs() < 1e-12);
     assert!((minor_loss_pressure_pa(3.0, density, velocity) - 28.20411633059841).abs() < 1e-9);
 }
 
-/* ---------------- recorded vectors ---------------- */
-
-/// `validation/test-vectors.json`, family `airside`, at the same 1e-6 relative tolerance
-/// `tests/vectors.test.js` uses.
 #[test]
 fn the_recorded_airside_vectors_reproduce() {
     let cases: [(f64, [f64; 7]); 3] = [
@@ -294,7 +262,6 @@ fn the_recorded_airside_vectors_reproduce() {
                 &format!("{flow} m³/s {}", quantity.0),
             );
         }
-        // The per-zone Merkel numbers are part of the recorded vector too.
         agrees(
             result.fill_merkel_number,
             [1.562189, 1.753351, 1.921084][[100.0, 130.0, 160.0]
@@ -321,8 +288,6 @@ fn the_recorded_airside_vectors_reproduce() {
         );
     }
 }
-
-/* ---------------- tests/airside.test.js, ported ---------------- */
 
 #[test]
 fn each_minor_loss_is_referenced_to_its_own_section_velocity_not_the_fill_face() {
@@ -469,13 +434,8 @@ fn available_merkel_number_includes_the_spray_and_rain_zones() {
     );
 }
 
-/* ---------------- areas ---------------- */
-
 #[test]
 fn resolve_airside_areas_falls_back_exactly_as_the_reference_does() {
-    // `tower.airFreeAreaM2 ?? fillAreaM2` and the rest of the chain, verified against the
-    // reference: with no fan the stack area is absent, and a fan with a zero stack area wins
-    // over the tower's own non-zero field.
     let bare = TowerRecord {
         fill_area_m2: 64.0,
         air_free_area_m2: None,
@@ -516,16 +476,12 @@ fn resolve_airside_areas_falls_back_exactly_as_the_reference_does() {
     assert_eq!(areas.plenum_area_m2, 0.0);
 }
 
-/* ---------------- drift and fill correlations ---------------- */
-
 #[test]
 fn a_drift_performance_reading_interpolates_and_extrapolates_both_curves() {
     let drift = de_3p_10();
     let reading = drift_performance_at_velocity(&drift, 2.25).unwrap();
     assert_eq!(reading.drift_ppm, 11.5);
     assert_eq!(reading.pressure_drop_pa, 40.0);
-    // `clampEnds: false`: outside the tabulated range the end pair is continued linearly, so
-    // a velocity beyond the curve is a value, not a refusal. Values read from the reference.
     let above = drift_performance_at_velocity(&drift, 4.0).unwrap();
     assert_eq!(above.drift_ppm, 53.0);
     assert_eq!(above.pressure_drop_pa, 130.0);
@@ -536,7 +492,6 @@ fn a_drift_performance_reading_interpolates_and_extrapolates_both_curves() {
 
 #[test]
 fn the_fill_correlations_reproduce_the_reference_values() {
-    // Water/air loadings of the recorded 130 m³/s case (see the vector test above).
     let fill = film_of25();
     let water_loading = 3.125;
     let dry_air_loading = 2.268304276689687;
@@ -545,15 +500,12 @@ fn the_fill_correlations_reproduce_the_reference_values() {
     let pressure = fill_pressure_drop_pa(&fill, 1.5, water_loading, dry_air_loading, 1.0).unwrap();
     assert!((merkel - 1.7533505058419276).abs() < 1e-12);
     assert!((pressure - 114.27146227407496).abs() < 1e-9);
-    // The multipliers scale only their own term, as in the reference.
     let damped = fill_pressure_drop_pa(&fill, 1.5, water_loading, dry_air_loading, 1.35).unwrap();
     assert!((damped - 1.35 * pressure).abs() < 1e-9);
     let degraded =
         fill_thermal_merkel_number(&fill, 1.5, water_loading, dry_air_loading, 0.8).unwrap();
     assert!((degraded - 0.8 * merkel).abs() < 1e-12);
 }
-
-/* ---------------- the fill operating envelope ---------------- */
 
 #[test]
 fn the_envelope_accepts_a_clean_fill_inside_its_limits() {
@@ -569,8 +521,6 @@ fn the_envelope_accepts_a_clean_fill_inside_its_limits() {
     assert!(envelope.failures.is_empty());
 }
 
-/// The failure strings below were read from the reference (`checkFillOperatingEnvelope` in
-/// `src/core/airside.js`) and are quoted verbatim, `toFixed` rounding included.
 #[test]
 fn the_envelope_rejection_messages_match_the_reference_byte_for_byte() {
     let fill = film_of25();
@@ -605,7 +555,6 @@ fn the_envelope_rejection_messages_match_the_reference_byte_for_byte() {
         ]
     );
 
-    // All three loading/temperature limits fail at once, in the reference's order.
     let vf38 = film_vf38();
     let envelope = check_fill_operating_envelope(FillOperatingEnvelopeInput {
         fill: &vf38,
@@ -625,13 +574,8 @@ fn the_envelope_rejection_messages_match_the_reference_byte_for_byte() {
     );
 }
 
-/// `Number.prototype.toFixed` rounds the exact value of the double, ties away from zero.
-/// These cases were read from the reference; the ones that distinguish it from Rust's own
-/// fixed-precision formatting are 1.0005 (below the tie) and 54.9995 (below the tie).
 #[test]
 fn the_envelope_messages_round_like_the_reference() {
-    // A fill whose limits are all zero, so the water-loading message is always the first
-    // failure and the value under test is the one printed.
     let mut zero_limits = film_of25();
     zero_limits.limits = FillLimits {
         min_water_loading_kg_m2_s: 0.0,
@@ -656,14 +600,10 @@ fn the_envelope_messages_round_like_the_reference() {
     assert!(water_message(0.0625).starts_with("Water loading 0.063 "));
     assert!(water_message(54.9995).starts_with("Water loading 54.999 "));
     assert!(water_message(0.0005).starts_with("Water loading 0.001 "));
-    // Values just above and below the tie, read from the reference: 1.9995 and 0.9995 are
-    // above their tie, 2.9995 is below.
     assert!(water_message(1.9995).starts_with("Water loading 2.000 "));
     assert!(water_message(2.9995).starts_with("Water loading 2.999 "));
     assert!(water_message(0.9995).starts_with("Water loading 1.000 "));
 
-    // A fill that accepts the water and air loadings but not any hot water, so the
-    // temperature message is the first (and only) failure.
     let mut temperature_limits = film_of25();
     temperature_limits.limits.max_water_temperature_c = 0.0;
     let fill = temperature_limits;
@@ -682,8 +622,6 @@ fn the_envelope_messages_round_like_the_reference() {
     assert!(temperature_message(54.9995).starts_with("Hot-water temperature 55.0 "));
 }
 
-/* ---------------- refusal behaviour ---------------- */
-
 #[test]
 fn a_total_pressure_curve_without_a_stack_area_is_refused_with_the_reference_message() {
     let error = fan_stack_discharge_pressure_pa(FanStackDischargeInput {
@@ -695,7 +633,6 @@ fn a_total_pressure_curve_without_a_stack_area_is_refused_with_the_reference_mes
     })
     .expect_err("a missing stack area must be refused");
     assert!(error.message().contains("A fan-stack area is required"));
-    // Zero and negative areas are refused the same way (the reference guards `!(area > 0)`).
     for area in [Some(0.0), Some(-1.0), Some(f64::NAN)] {
         assert!(
             fan_stack_discharge_pressure_pa(FanStackDischargeInput {
@@ -709,7 +646,6 @@ fn a_total_pressure_curve_without_a_stack_area_is_refused_with_the_reference_mes
             "area {area:?} must be refused"
         );
     }
-    // With no fan the breakdown declares the curve static, so no stack area is required.
     let fanless = breakdown_at(130.0, None);
     assert_eq!(fanless.fan_stack_pa, 0.0);
     assert_eq!(fanless.fan_stack_velocity_ms, None);
@@ -729,7 +665,6 @@ fn a_stack_recovery_factor_outside_zero_one_is_refused() {
         .expect_err("out-of-range recovery factor must be refused");
         assert_eq!(error.message(), "stackRecoveryFactor must be in [0, 1).");
     }
-    // The bounds themselves: 0 is accepted, 1 is not.
     assert!(fan_stack_discharge_pressure_pa(FanStackDischargeInput {
         volumetric_air_flow_m3_s: 130.0,
         fan_stack_area_m2: Some(19.635),
@@ -752,8 +687,6 @@ fn a_fill_without_a_correlation_is_refused_and_a_missing_zone_contributes_nothin
         .expect_err("a missing pressure correlation must be refused");
     assert_eq!(error.message(), "Fill pressure correlation is missing.");
 
-    // A missing zone is not an error: it contributes zero, and the reference only checks the
-    // height once there is a zone to apply it to.
     assert_eq!(zone_merkel_number(None, 0.0, 3.0, 2.0, 1.0).unwrap(), 0.0);
     let zone = ZoneCorrelation {
         coefficient_per_m: 0.16,
@@ -806,8 +739,6 @@ fn non_positive_depths_and_air_flows_are_refused() {
 
 #[test]
 fn the_defaults_of_the_breakdown_match_the_reference_option_defaults() {
-    // A tower with no loss coefficients, no recovery factor, no fixed loss and no fan
-    // resolves the reference defaults (1.2, 0.8, 0.6, 0.7, 0, static basis).
     let tower = TowerRecord {
         fill_area_m2: 64.0,
         air_free_area_m2: Some(64.0),

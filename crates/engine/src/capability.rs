@@ -1,29 +1,3 @@
-//! Characteristic-curve capability — port of `src/core/capability.js`.
-//!
-//! Two functions: the capability projection of a test condition against a design condition
-//! (`evaluateCharacteristicCapability`), and the seeded Monte-Carlo propagation of input
-//! standard uncertainties through it (`monteCarloCharacteristicCapability`).
-//!
-//! The JavaScript engine is the specification. Mirrored here as it is there: the guard order
-//! (design, then test, then the exponent), the default exponent −0.6, the 720-sample scan with
-//! `prefer: 'last'`, the `−1e12` residual that stands in for an infeasible design demand, the
-//! curve sampling range and the `Number.isFinite` filter over it, and — in the Monte-Carlo —
-//! the Box–Muller draws in the reference's own order, the `samples * 0.5` (floor 20)
-//! acceptance rule and the `n − 1` sample variance.
-//!
-//! `towerCharacteristic` and `characteristicCoefficient` — the two `merkel.js` functions this
-//! projection needs — are ported in [`crate::merkel`], the module that mirrors their file.
-//!
-//! Known divergence, in a corner the parity harness does not compare: the reference perturbs
-//! a field only when the base object carries it (`Number.isFinite(undefined)` is false), so a
-//! sigma for a top-level scalar (`characteristicExponent`, `salinityGKg`) is skipped when the
-//! caller omitted that key. The Rust input always carries a resolved value, so a sigma for it
-//! always applies. Every compared case passes both keys explicitly.
-//!
-//! The perturbation order is the caller's list order, which is the reference's
-//! `Object.entries` order: it decides which field consumes which Gaussian draw, so the two
-//! engines agree only when the lists are in the same order (the harness passes them so).
-
 use crate::merkel::{
     characteristic_coefficient, merkel_demand, safe_merkel_demand, tower_characteristic,
     InletEnthalpyConvention, Integration, MerkelInput,
@@ -34,9 +8,7 @@ use crate::numeric::{
 };
 use crate::psychrometrics::{psychrometric_state, PsychrometricState, PsychrometricStateInput};
 
-/// One condition object — the design or the test condition of the reference call. `pressurePa`
-/// is optional because the reference reads it through `?? 101325` at each use site; every other
-/// field is checked finite by [`validate_condition`] before use.
+/// One condition object — the design or the test condition of the reference call.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CapabilityCondition {
     pub water_mass_flow_kg_s: f64,
@@ -49,7 +21,7 @@ pub struct CapabilityCondition {
 }
 
 impl CapabilityCondition {
-    /// A condition at the reference's default pressure (the `?? 101325` site).
+    /// A condition at the reference's default pressure (the `??
     pub fn new(
         water_mass_flow_kg_s: f64,
         dry_air_mass_flow_kg_s: f64,
@@ -74,14 +46,11 @@ impl CapabilityCondition {
         self
     }
 
-    /// The `pressurePa ?? 101325` the reference applies at every use site.
     fn pressure(&self) -> f64 {
         self.pressure_pa.unwrap_or(101_325.0)
     }
 }
 
-/// Port of `validateCondition`: the six required numbers, in the reference's own order, then
-/// the temperature ordering `hot > cold > wet bulb`.
 fn validate_condition(condition: &CapabilityCondition, label: &str) -> Result<(), DomainError> {
     let required = [
         ("waterMassFlowKgS", condition.water_mass_flow_kg_s),
@@ -106,9 +75,7 @@ fn validate_condition(condition: &CapabilityCondition, label: &str) -> Result<()
     Ok(())
 }
 
-/// The inputs of [`evaluate_characteristic_capability`], carrying the reference's default
-/// arguments: exponent −0.6, salinity 0 g/kg, `chebyshev4` integration, 80 curve points and
-/// the `bulk` enthalpy convention.
+/// The inputs of [`evaluate_characteristic_capability`], carrying the reference's default arguments: exponent −0.6, salinity 0 g/kg, `chebyshev4` integration, 80 curve points and the `bulk` enthalpy convention.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CharacteristicCapabilityInput {
     pub design: CapabilityCondition,
@@ -121,8 +88,7 @@ pub struct CharacteristicCapabilityInput {
 }
 
 impl CharacteristicCapabilityInput {
-    /// `evaluateCharacteristicCapability({ design, test })` — the two required conditions and
-    /// every default argument.
+    /// `evaluateCharacteristicCapability({ design, test })` — the two required conditions and every default argument.
     pub fn new(design: CapabilityCondition, test: CapabilityCondition) -> Self {
         Self {
             design,
@@ -168,7 +134,6 @@ impl CharacteristicCapabilityInput {
         self
     }
 
-    /// The `merkelDemand` call the reference makes for one of the two conditions.
     fn demand_input(&self, condition: &CapabilityCondition, ratio: f64) -> MerkelInput {
         MerkelInput {
             pressure_pa: condition.pressure(),
@@ -194,9 +159,7 @@ pub struct CapabilityCurvePoint {
     pub test_characteristic_merkel: f64,
 }
 
-/// The object `evaluateCharacteristicCapability` returns, field for field (minus the two the
-/// harness reads as text: `method` and `disclaimer` are in `rust/src/cli.rs`, which renders
-/// them, so this struct carries the physics).
+/// The object `evaluateCharacteristicCapability` returns, field for field (minus the two the harness reads as text: `method` and `disclaimer` are in `rust/src/cli.rs`, which renders them, so this struct carries the physics).
 #[derive(Clone, Debug)]
 pub struct CharacteristicCapability {
     pub capability_pct: f64,
@@ -212,9 +175,7 @@ pub struct CharacteristicCapability {
     pub curves: Vec<CapabilityCurvePoint>,
 }
 
-/// Port of `evaluateCharacteristicCapability`: the test demand sets the characteristic
-/// coefficient, and the capability is the design-condition L/G at which the design demand
-/// meets that characteristic — the last such crossing in the scan interval.
+/// Port of `evaluateCharacteristicCapability`: the test demand sets the characteristic coefficient, and the capability is the design-condition L/G at which the design demand meets that characteristic — the last such crossing in the scan interval.
 pub fn evaluate_characteristic_capability(
     input: &CharacteristicCapabilityInput,
 ) -> Result<CharacteristicCapability, DomainError> {
@@ -242,7 +203,6 @@ pub fn evaluate_characteristic_capability(
     let residual = |ratio: f64| -> Result<f64, DomainError> {
         let demand = design_demand_at(ratio)?;
         if !demand.is_finite() {
-            // The reference's own stand-in for "infeasible at this L/G".
             return Ok(-1e12);
         }
         Ok(tower_characteristic(ratio, test_coefficient, input.characteristic_exponent)? - demand)
@@ -315,8 +275,7 @@ pub fn evaluate_characteristic_capability(
     })
 }
 
-/// The condition fields a perturbation can carry, in the order the reference's condition
-/// objects declare them.
+/// The condition fields a perturbation can carry, in the order the reference's condition objects declare them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ConditionField {
     WaterMassFlowKgS,
@@ -328,8 +287,7 @@ pub enum ConditionField {
     PressurePa,
 }
 
-/// Port of the reference's `standardUncertainty` object: one sigma per named field, in the
-/// caller's order (that order is what decides which field draws which Gaussian, so it matters).
+/// Port of the reference's `standardUncertainty` object: one sigma per named field, in the caller's order (that order is what decides which field draws which Gaussian, so it matters).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CapabilityUncertainty {
     pub design: Vec<(ConditionField, f64)>,
@@ -340,8 +298,7 @@ pub struct CapabilityUncertainty {
     pub salinity_g_kg: Option<f64>,
 }
 
-/// The inputs of [`monte_carlo_characteristic_capability`], carrying the reference's defaults
-/// (1000 samples, seed 20260813).
+/// The inputs of [`monte_carlo_characteristic_capability`], carrying the reference's defaults (1000 samples, seed 20260813).
 #[derive(Clone, Debug, PartialEq)]
 pub struct MonteCarloInput {
     pub base_input: CharacteristicCapabilityInput,
@@ -392,15 +349,12 @@ pub struct MonteCarloResult {
     pub seed: f64,
 }
 
-/// The reference's `target[key] += sigma * gaussianRandom(random)`, which skips a target the
-/// base object does not carry as a finite number.
 fn perturb_value(target: &mut f64, sigma: f64, random: &mut SeededRandom) {
     if target.is_finite() {
         *target += sigma * gaussian_random(&mut || random.next_value());
     }
 }
 
-/// The reference's recursive walk over one nested object, over a typed condition here.
 fn perturb_condition(
     condition: &mut CapabilityCondition,
     sigmas: &[(ConditionField, f64)],
@@ -438,10 +392,7 @@ fn perturb_condition(
     }
 }
 
-/// Port of `monteCarloCharacteristicCapability`: perturb the base input `samples` times with
-/// the seeded Gaussian stream, evaluate each draw, and report the accepted capability
-/// distribution. A run that accepts fewer than `max(20, samples / 2)` draws is refused, as in
-/// the reference.
+/// Port of `monteCarloCharacteristicCapability`: perturb the base input `samples` times with the seeded Gaussian stream, evaluate each draw, and report the accepted capability distribution.
 pub fn monte_carlo_characteristic_capability(
     input: &MonteCarloInput,
 ) -> Result<MonteCarloResult, DomainError> {

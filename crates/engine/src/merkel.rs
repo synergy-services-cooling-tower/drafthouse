@@ -1,13 +1,3 @@
-//! Counterflow Merkel demand — port of `src/core/merkel.js` (the slice excludes
-//! `estimateOutletAirState` and `generateDemandCurve`: the first is ported with the selector,
-//! `selection.rs`, and the second is still unported — nothing in the ported slices needs it).
-//!
-//! `KaV/L = ∫ cp dTw / (hs(Tw) - ha(Tw))`, with the entering-air enthalpy taken either as
-//! the true moist-air enthalpy of the measured dry bulb/wet bulb pair (`bulk`, the default)
-//! or as saturated air at the entering wet bulb (`cti-saturated-wetbulb`). The two
-//! conventions differ by roughly 1 % at a typical design point; the difference is real and
-//! is recorded in the vectors.
-
 use crate::numeric::{
     assert_positive, find_root_by_scan, integrate_chebyshev4, integrate_simpson, DomainError,
     RootPreference, RootScanOptions,
@@ -26,13 +16,10 @@ pub enum Integration {
     Chebyshev4,
 }
 
-/// Entering-air enthalpy convention, mirroring the JavaScript
-/// `inletEnthalpyConvention` option.
+/// Entering-air enthalpy convention, mirroring the JavaScript `inletEnthalpyConvention` option.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InletEnthalpyConvention {
-    /// True moist-air enthalpy of the entering dry bulb/wet bulb pair (default).
     Bulk,
-    /// Enthalpy of saturated air at the entering wet bulb; the CTI demand-curve convention.
     CtiSaturatedWetBulb,
 }
 
@@ -42,7 +29,6 @@ pub fn validate_thermal_temperatures(
     cold_water_c: f64,
     wet_bulb_c: f64,
 ) -> Result<(), DomainError> {
-    // `!(a > b)`, written so it stays true for NaN (the JavaScript comparison does too).
     if hot_water_c.partial_cmp(&cold_water_c) != Some(Ordering::Greater) {
         return Err(DomainError::new(
             "Hot-water temperature must exceed cold-water temperature.",
@@ -98,7 +84,7 @@ pub struct MerkelInput {
     pub salinity_g_kg: f64,
     /// Default [`Integration::Simpson`].
     pub integration: Integration,
-    /// Simpson segment count. Default 240.
+    /// Simpson segment count.
     pub segments: usize,
     /// Default 1e-7.
     pub minimum_enthalpy_potential: f64,
@@ -202,8 +188,7 @@ pub fn merkel_demand(input: &MerkelInput) -> Result<MerkelResult, DomainError> {
     })
 }
 
-/// Port of `safeMerkelDemand`: a pinch returns positive infinity (as the reference does)
-/// instead of an error; every other refusal still propagates.
+/// Port of `safeMerkelDemand`: a pinch returns positive infinity (as the reference does) instead of an error; every other refusal still propagates.
 pub fn safe_merkel_demand(input: &MerkelInput) -> Result<f64, DomainError> {
     match merkel_demand(input) {
         Ok(result) => Ok(result.merkel_number),
@@ -212,9 +197,7 @@ pub fn safe_merkel_demand(input: &MerkelInput) -> Result<f64, DomainError> {
     }
 }
 
-/// Port of `towerCharacteristic`: the whole-tower characteristic `coefficient · L/G^exponent`
-/// the capability projection compares the design demand against. Both the ratio and the
-/// coefficient are asserted positive, as in the reference.
+/// Port of `towerCharacteristic`: the whole-tower characteristic `coefficient · L/G^exponent` the capability projection compares the design demand against.
 pub fn tower_characteristic(
     water_to_dry_air_ratio: f64,
     coefficient: f64,
@@ -225,9 +208,7 @@ pub fn tower_characteristic(
     Ok(coefficient * water_to_dry_air_ratio.powf(exponent))
 }
 
-/// Port of `characteristicCoefficient`: the coefficient that makes the characteristic pass
-/// through a measured demand at a measured L/G — the test-condition anchor of the capability
-/// projection.
+/// Port of `characteristicCoefficient`: the coefficient that makes the characteristic pass through a measured demand at a measured L/G — the test-condition anchor of the capability projection.
 pub fn characteristic_coefficient(
     merkel_number: f64,
     water_to_dry_air_ratio: f64,
@@ -238,8 +219,7 @@ pub fn characteristic_coefficient(
     Ok(merkel_number / water_to_dry_air_ratio.powf(exponent))
 }
 
-/// Inputs for [`solve_cold_water_temperature`] — the port of the JavaScript
-/// `solveColdWaterTemperature({...})` call (which takes no segment count).
+/// Inputs for [`solve_cold_water_temperature`] — the port of the JavaScript `solveColdWaterTemperature({...})` call (which takes no segment count).
 #[derive(Clone, Copy, Debug)]
 pub struct ColdWaterTemperatureInput {
     pub hot_water_c: f64,

@@ -1,17 +1,3 @@
-//! Simplised finite-volume crossflow grid — port of `src/core/crossflow.js`, line for line.
-//!
-//! The explicit cell scheme is the reference's: water flows down the columns, air flows across
-//! the rows, each cell applies a local enthalpy-potential effectiveness relation, the coarse
-//! grid is Richardson-extrapolated against a doubled grid, and the water-side heat capacity is
-//! iterated to the mean bulk temperature. The JavaScript engine is the specification; nothing
-//! here re-derives a value, and a reference quirk found here is a finding to report.
-//!
-//! One function of `src/core/psychrometrics.js` is ported in this file, because the
-//! psychrometrics slice explicitly left it out and this lane's file fence keeps that reviewed
-//! module byte-identical: [`saturated_temperature_from_enthalpy`] (`saturatedTemperatureFrom
-//! Enthalpy`), the inversion `crossflow.js` and the selection slice both need. It uses the
-//! already-ported [`solve_bracketed_root`] machinery, so no new numeric primitive is introduced.
-
 use crate::numeric::{assert_positive, solve_bracketed_root, BracketedRootOptions, DomainError};
 use crate::psychrometrics::{
     psychrometric_state, saturated_air_enthalpy_kj_kg_dry_air, saturation_humidity_ratio,
@@ -22,8 +8,6 @@ use crate::water::water_specific_heat_kj_kg_k;
 /// `model` string `solveCrossflowGrid` returns.
 pub const CROSSFLOW_MODEL: &str = "simplified finite-volume crossflow";
 
-/// Port of the reference's `Math.max(a, b)`: a NaN operand wins, where `f64::max` would
-/// return the other operand and quietly swallow it.
 fn js_max(a: f64, b: f64) -> f64 {
     if a.is_nan() || b.is_nan() {
         f64::NAN
@@ -32,7 +16,6 @@ fn js_max(a: f64, b: f64) -> f64 {
     }
 }
 
-/// Port of the reference's `Math.min(a, b)`, NaN-propagating for the same reason.
 fn js_min(a: f64, b: f64) -> f64 {
     if a.is_nan() || b.is_nan() {
         f64::NAN
@@ -41,12 +24,7 @@ fn js_min(a: f64, b: f64) -> f64 {
     }
 }
 
-/// Port of `saturatedTemperatureFromEnthalpy` from `src/core/psychrometrics.js`: the
-/// temperature at which saturated air carries the given enthalpy, by bracketed root.
-///
-/// The JavaScript `options` argument is not ported (every call site in this slice uses the
-/// default enhancement-factor-on option set), and the default bounds stay `[-50, 100]` when
-/// the caller passes none.
+/// Port of `saturatedTemperatureFromEnthalpy` from `src/core/psychrometrics.js`: the temperature at which saturated air carries the given enthalpy, by bracketed root.
 pub fn saturated_temperature_from_enthalpy(
     enthalpy_kj_kg_dry_air: f64,
     pressure_pa: f64,
@@ -70,7 +48,6 @@ pub fn saturated_temperature_from_enthalpy(
     )
 }
 
-/// `sweepCrossflowGrid` — one explicit sweep at a fixed cell count and water specific heat.
 struct SweepInput {
     hot_water_c: f64,
     inlet_air_enthalpy_kj_kg_dry_air: f64,
@@ -106,8 +83,6 @@ fn sweep_crossflow_grid(input: &SweepInput) -> Result<Sweep, DomainError> {
         row[0] = input.inlet_air_enthalpy_kj_kg_dry_air;
     }
 
-    // The reference's sweep also accumulates `totalHeatKW`; its caller never reads it, so the
-    // port does not carry the dead field.
     for y in 0..input.water_cells {
         for x in 0..input.air_cells {
             let water_in_c = water[y][x];
@@ -135,9 +110,7 @@ fn sweep_crossflow_grid(input: &SweepInput) -> Result<Sweep, DomainError> {
     })
 }
 
-/// Inputs for [`solve_crossflow_grid`] — the port of the JavaScript
-/// `solveCrossflowGrid({...})` call, with the reference's default arguments on
-/// [`CrossflowGridInput::new`].
+/// Inputs for [`solve_crossflow_grid`] — the port of the JavaScript `solveCrossflowGrid({...})` call, with the reference's default arguments on [`CrossflowGridInput::new`].
 #[derive(Clone, Copy, Debug)]
 pub struct CrossflowGridInput {
     pub hot_water_c: f64,
@@ -231,8 +204,7 @@ pub struct CrossflowGridConvergence {
     pub note: &'static str,
 }
 
-/// The `outletAirState` object the crossflow solve returns (and the one
-/// `estimateOutletAirState` builds in the selection slice).
+/// The `outletAirState` object the crossflow solve returns (and the one `estimateOutletAirState` builds in the selection slice).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct OutletAirState {
     pub dry_bulb_c: f64,
@@ -266,7 +238,6 @@ impl CrossflowGridResult {
     }
 }
 
-/// One `solveAt` call: a sweep at `nx × ny` with the water-specific-heat iteration.
 fn solve_at(
     input: &CrossflowGridInput,
     inlet_air: &PsychrometricState,
@@ -327,8 +298,6 @@ pub fn solve_crossflow_grid(
             .with_pressure(input.pressure_pa),
     )?;
 
-    // The water cp is a property of the mean bulk temperature, which is not known until the
-    // outlet temperature is known; iterate (or take the caller's converged seed).
     let (coarse, coarse_cp) =
         solve_at(input, &inlet_air, None, input.air_cells, input.water_cells)?;
     let fine = if input.richardson {
@@ -418,8 +387,7 @@ pub fn solve_crossflow_grid(
     })
 }
 
-/// Inputs for [`crossflow_convergence_study`]: the reference's `{ baseCells, safetyFactor }`
-/// plus the grid inputs it spreads into every solve.
+/// Inputs for [`crossflow_convergence_study`]: the reference's `{ baseCells, safetyFactor }` plus the grid inputs it spreads into every solve.
 #[derive(Clone, Copy, Debug)]
 pub struct CrossflowStudyInput {
     /// Default 12.
@@ -464,8 +432,7 @@ pub struct CrossflowConvergenceStudy {
     pub interpretation: &'static str,
 }
 
-/// Port of `crossflowConvergenceStudy` — the three-grid (n, 2n, 4n) convergence study the
-/// selector deliberately does not call.
+/// Port of `crossflowConvergenceStudy` — the three-grid (n, 2n, 4n) convergence study the selector deliberately does not call.
 pub fn crossflow_convergence_study(
     input: &CrossflowStudyInput,
 ) -> Result<CrossflowConvergenceStudy, DomainError> {
@@ -487,8 +454,6 @@ pub fn crossflow_convergence_study(
         Some(f64::log2((coarse_gap / medium_gap).abs()))
     };
     let order = observed_order.unwrap_or(1.0);
-    // f_exact ~ f_fine + (f_fine - f_medium) / (2^p - 1); medium_gap is (medium - fine), so it
-    // enters with a negative sign.
     let extrapolated_cold_water_c = fine - medium_gap / (2f64.powf(order) - 1.0);
     let relative_error = (medium_gap / fine).abs();
     let grid_convergence_index_pct =

@@ -1,24 +1,12 @@
-//! Moist-air properties — port of `src/core/psychrometrics.js`.
-//!
-//! Conventions, mirrored from the JavaScript reference (see `docs/ENGINEERING_METHODS.md`):
-//!
-//! * ASHRAE Fundamentals saturation-pressure correlation, liquid branch above 0.01 °C and
-//!   ice branch at or below it, limited to -100…200 °C.
-//! * The water-vapour **enhancement factor** `f = 1.0007 + 3.46e-6 P[hPa]` (pressure-only
-//!   Buck 1981) is applied by default; the simplified ASHRAE set is available by turning it
-//!   off. ASHRAE's published tables include this real-mixture effect.
-//! * Out-of-domain inputs return [`DomainError`]; nothing is clamped to a value.
-
 use crate::numeric::{
     assert_finite_number, clamp, solve_bracketed_root, BracketedRootOptions, DomainError,
 };
 
-const R_DA: f64 = 287.042; // J/(kg dry air · K)
+const R_DA: f64 = 287.042;
 const MIN_HUM_RATIO: f64 = 1e-7;
 const EPSILON: f64 = 0.621945;
 
 /// Port of `DEFAULT_PSYCHROMETRIC_OPTIONS`:
-/// `enhancementFactor` selects the real-mixture treatment.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PsychrometricOptions {
     pub enhancement_factor: bool,
@@ -33,10 +21,6 @@ impl Default for PsychrometricOptions {
 }
 
 /// Port of `waterVaporEnhancementFactor`.
-///
-/// The true saturation partial pressure of water in moist air is `f * pws(t)`, with `f`
-/// slightly greater than 1; ignoring it leaves humidity ratios about 0.3-0.6 % low near
-/// ambient conditions.
 pub fn water_vapor_enhancement_factor(pressure_pa: f64, options: PsychrometricOptions) -> f64 {
     if !options.enhancement_factor {
         return 1.0;
@@ -85,8 +69,7 @@ pub fn saturation_vapor_pressure_pa(dry_bulb_c: f64) -> Result<f64, DomainError>
     Ok(ln_pws.exp())
 }
 
-/// Port of `effectiveSaturationPressurePa`: the quantity that should drive every
-/// humidity-ratio calculation.
+/// Port of `effectiveSaturationPressurePa`: the quantity that should drive every humidity-ratio calculation.
 pub fn effective_saturation_pressure_pa(
     temperature_c: f64,
     pressure_pa: f64,
@@ -135,7 +118,7 @@ pub fn saturation_humidity_ratio(
     humidity_ratio_from_vapor_pressure(pws, pressure_pa)
 }
 
-/// Port of `humidityRatioFromRelativeHumidity`. `relative_humidity` is a fraction, 0…1.
+/// Port of `humidityRatioFromRelativeHumidity`.
 pub fn humidity_ratio_from_relative_humidity(
     dry_bulb_c: f64,
     relative_humidity: f64,
@@ -188,9 +171,7 @@ pub fn humidity_ratio_from_wet_bulb(
     Ok(MIN_HUM_RATIO.max(ratio))
 }
 
-/// Port of `wetBulbFromHumidityRatio`. The residual tolerance is scaled to the humidity
-/// ratio being matched: sub-zero air holds about 6e-4, where a fixed 1e-7 would be a 1e-4
-/// *relative* error.
+/// Port of `wetBulbFromHumidityRatio`.
 pub fn wet_bulb_from_humidity_ratio(
     dry_bulb_c: f64,
     humidity_ratio: f64,
@@ -279,10 +260,7 @@ pub fn moist_air_density_kg_m3(dry_bulb_c: f64, humidity_ratio: f64, pressure_pa
     (1.0 + humidity_ratio) * dry_air_density_kg_m3(dry_bulb_c, humidity_ratio, pressure_pa)
 }
 
-/// Inputs for [`psychrometric_state`] — the port of the JavaScript
-/// `psychrometricState({ dryBulbC, wetBulbC, relativeHumidity, pressurePa, enhancementFactor })`
-/// call. When both `wet_bulb_c` and `relative_humidity` are present the wet bulb wins, as in
-/// the reference.
+/// Inputs for [`psychrometric_state`] — the port of the JavaScript `psychrometricState({ dryBulbC, wetBulbC, relativeHumidity, pressurePa, enhancementFactor })` call.
 #[derive(Clone, Copy, Debug)]
 pub struct PsychrometricStateInput {
     pub dry_bulb_c: f64,

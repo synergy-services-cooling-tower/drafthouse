@@ -1,23 +1,8 @@
-//! Air-side pressure losses and fan-stack discharge — port of `src/core/airside.js`.
-//!
-//! Every formula, default and guard mirrors the JavaScript reference; where the reference
-//! carries a `??` default (a loss coefficient, an area fallback, a stack recovery factor) the
-//! Rust struct models the missing field as `Option` and applies the same default here.
-//! Out-of-domain input returns a [`DomainError`] rather than a clamped value.
-//!
-//! The functions that take a JavaScript options object take positional arguments or a struct
-//! here; the JavaScript-to-Rust name mapping is in the crate README.
-
 use crate::fan::{FanPressureBasis, FanRecord};
 use crate::layers::{FillLayerResult, LayerTerms};
 use crate::numeric::{assert_positive, interpolate_1d, DomainError};
 
-/// One heat/mass-transfer correlation, the shared shape of `tower.sprayZone`, `tower.rainZone`
-/// and `fill.thermal`:
-///
-/// ```text
-/// Me_zone = c * (L''/L''ref)^a * (G''/G''ref)^b * height
-/// ```
+/// One heat/mass-transfer correlation, the shared shape of `tower.sprayZone`, `tower.rainZone` and `fill.thermal`:
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ZoneCorrelation {
     pub coefficient_per_m: f64,
@@ -57,8 +42,7 @@ pub struct FillRecord {
     pub allowed_water_quality_classes: Vec<String>,
 }
 
-/// A validated tower catalog record, reduced to the fields this slice reads. The optional
-/// fields are the ones the JavaScript reference reads through `??` fallbacks.
+/// A validated tower catalog record, reduced to the fields this slice reads.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TowerRecord {
     pub fill_area_m2: f64,
@@ -126,8 +110,7 @@ pub fn minor_loss_pressure_pa(
     loss_coefficient * velocity_pressure_pa(air_density_kg_m3, velocity_ms)
 }
 
-/// Port of `zoneMerkelNumber`. A missing zone contributes nothing and is not an error — the
-/// height is only checked once there is a zone to apply it to, exactly as the reference does.
+/// Port of `zoneMerkelNumber`.
 pub fn zone_merkel_number(
     zone: Option<&ZoneCorrelation>,
     height_m: f64,
@@ -146,8 +129,7 @@ pub fn zone_merkel_number(
     Ok(per_meter * height_m * thermal_multiplier)
 }
 
-/// Port of `fillThermalMerkelNumber`. The depth is asserted before the correlation is looked
-/// up, matching the reference's guard order.
+/// Port of `fillThermalMerkelNumber`.
 pub fn fill_thermal_merkel_number(
     fill: &FillRecord,
     depth_m: f64,
@@ -190,8 +172,7 @@ pub fn fill_pressure_drop_pa(
     Ok(per_meter_pa * depth_m * pressure_multiplier)
 }
 
-/// Port of `driftPerformanceAtVelocity`: both curve readings are extrapolated linearly outside
-/// the tabulated range (`clampEnds: false`), so a velocity beyond the curve is not an error.
+/// Port of `driftPerformanceAtVelocity`: both curve readings are extrapolated linearly outside the tabulated range (`clampEnds: false`), so a velocity beyond the curve is not an error.
 pub fn drift_performance_at_velocity(
     drift_eliminator: &DriftEliminatorRecord,
     face_velocity_ms: f64,
@@ -217,11 +198,6 @@ pub fn drift_performance_at_velocity(
 }
 
 /// Port of `resolveAirsideAreas`.
-///
-/// Each loss coefficient in this model is bound to a named area, because K is only meaningful
-/// relative to a stated reference velocity: `dp = K * 0.5 * rho * v_ref^2`. The fan record
-/// wins over the tower's own fan-stack area — pairing the same cell with a larger fan gives a
-/// larger throat and a lower discharge velocity.
 pub fn resolve_airside_areas(tower: &TowerRecord, fan: Option<&FanRecord>) -> AirsideAreas {
     let fill_area_m2 = tower.fill_area_m2;
     let air_free_area_m2 = tower.air_free_area_m2.unwrap_or(fill_area_m2);
@@ -249,8 +225,7 @@ pub struct FanStackDischargeInput {
     pub moist_air_density_kg_m3: f64,
     /// 0 is a plain cylindrical stack; 0.3–0.5 is typical for a velocity-recovery stack.
     pub stack_recovery_factor: f64,
-    /// `'total'` (the default) charges the outlet velocity pressure against the curve;
-    /// `'static'` has already netted it out and returns zero.
+    /// `'total'` (the default) charges the outlet velocity pressure against the curve; `'static'` has already netted it out and returns zero.
     pub fan_pressure_basis: FanPressureBasis,
 }
 
@@ -264,12 +239,6 @@ pub struct FanStackDischarge {
 }
 
 /// Port of `fanStackDischargePressurePa`.
-///
-/// Air leaving the stack carries kinetic energy `0.5 * rho * v^2` per unit volume out of the
-/// control volume; that energy is supplied by the fan and is not recovered by the tower, so it
-/// is a genuine load on the fan. Whether it must be charged to the *system* depends on how the
-/// fan curve is published: a total-pressure curve includes it, a static-pressure curve
-/// (`FSP = FTP - outlet velocity pressure`) already has it netted out.
 pub fn fan_stack_discharge_pressure_pa(
     input: FanStackDischargeInput,
 ) -> Result<FanStackDischarge, DomainError> {
@@ -283,8 +252,6 @@ pub fn fan_stack_discharge_pressure_pa(
     let Some(fan_stack_area_m2) = input.fan_stack_area_m2 else {
         return Err(missing_fan_stack_area());
     };
-    // The reference guards with `!(fanStackAreaM2 > 0)`, which also refuses a NaN area; an
-    // explicit `is_nan` keeps that behaviour without a negated comparison clippy rejects.
     if fan_stack_area_m2.is_nan() || fan_stack_area_m2 <= 0.0 {
         return Err(missing_fan_stack_area());
     }
@@ -308,8 +275,7 @@ fn missing_fan_stack_area() -> DomainError {
     )
 }
 
-/// Input to [`system_pressure_breakdown`], mirroring the JavaScript options object. The
-/// multipliers default to 1 and `fan` to `None`, as the reference's default arguments do.
+/// Input to [`system_pressure_breakdown`], mirroring the JavaScript options object.
 pub struct SystemPressureBreakdownInput<'a> {
     pub tower: &'a TowerRecord,
     pub fill: &'a FillRecord,
@@ -353,13 +319,7 @@ pub struct SystemPressureBreakdown {
     pub available_merkel_number: f64,
 }
 
-/// Input to [`layered_system_pressure_breakdown`]: the air-side machinery plus the **resolved
-/// layers**, in physical order (top first). `layers` is never empty on a valid call — an empty
-/// slice is refused, so a caller that loses its stack cannot silently get a no-fill tower.
-///
-/// `thermal_multiplier` and `pressure_multiplier` are the run's: they reach every layer of the
-/// stack (multiplied by that layer's own) and the spray and rain zones above and below it,
-/// exactly as the single-fill `SystemPressureBreakdownInput`'s do.
+/// Input to [`layered_system_pressure_breakdown`]: the air-side machinery plus the **resolved layers**, in physical order (top first).
 pub struct LayeredBreakdownInput<'a> {
     pub tower: &'a TowerRecord,
     pub layers: &'a [LayerTerms<'a>],
@@ -373,8 +333,7 @@ pub struct LayeredBreakdownInput<'a> {
     pub pressure_multiplier: f64,
 }
 
-/// The layered result: the breakdown [`system_pressure_breakdown`] reports — its fill terms are
-/// the stack's totals — plus one entry per layer, in physical order.
+/// The layered result: the breakdown [`system_pressure_breakdown`] reports — its fill terms are the stack's totals — plus one entry per layer, in physical order.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LayeredBreakdown {
     pub breakdown: SystemPressureBreakdown,
@@ -382,16 +341,6 @@ pub struct LayeredBreakdown {
 }
 
 /// Port of `systemPressureBreakdown` for an **ordered fill stack**.
-///
-/// The layers sit in series in both the air path and the water path, so each layer sees the
-/// stack's water loading, dry-air loading and airflow, and the stack's fill terms are its
-/// layers' terms summed in physical order: `fillPa = Σ fillPressureDropPa(layer)` and
-/// `fillMerkelNumber = Σ fillThermalMerkelNumber(layer)`. Everything else — the drift
-/// performance, the minor losses, the discharge term, the spray and rain zones — is the
-/// single-fill path unchanged, and the total keeps the single-fill sum's operand order.
-///
-/// With one layer every sum is its single term, which is why the published single-fill numbers
-/// are this path's one-layer case rather than a parallel implementation of it.
 pub fn layered_system_pressure_breakdown(
     input: LayeredBreakdownInput<'_>,
 ) -> Result<LayeredBreakdown, DomainError> {
@@ -417,8 +366,6 @@ pub fn layered_system_pressure_breakdown(
     let inlet_velocity_ms = input.volumetric_air_flow_m3_s / inlet_area_m2;
     let plenum_velocity_ms = input.volumetric_air_flow_m3_s / plenum_area_m2;
 
-    // The layers are walked in physical order; a refusal is the first layer (top-down) that
-    // cannot be computed, and the accumulation order is the stack's own.
     let mut fill_pa = 0.0;
     let mut layer_pressure_drop_pa = Vec::with_capacity(input.layers.len());
     for terms in input.layers {
@@ -434,7 +381,6 @@ pub fn layered_system_pressure_breakdown(
     }
     let drift = drift_performance_at_velocity(input.drift_eliminator, drift_velocity_ms)?;
 
-    // Each minor loss names the velocity its K is referenced to.
     let inlet_pa = minor_loss_pressure_pa(
         input.tower.inlet_loss_coefficient.unwrap_or(1.2),
         input.moist_air_density_kg_m3,
@@ -464,8 +410,6 @@ pub fn layered_system_pressure_breakdown(
             .stack_recovery_factor
             .or(input.fan.and_then(|fan| fan.stack_recovery_factor))
             .unwrap_or(0.0),
-        // With no fan there is no fan stack, so there is no discharge term to charge against a
-        // fan curve. Natural-draft shell exit losses are handled in the draft balance instead.
         fan_pressure_basis: match input.fan {
             Some(fan) => fan.pressure_basis.unwrap_or(FanPressureBasis::Total),
             None => FanPressureBasis::Static,
@@ -523,8 +467,6 @@ pub fn layered_system_pressure_breakdown(
             pressure_multiplier: terms.pressure_multiplier,
             effective_thermal_multiplier: terms.thermal_multiplier * input.thermal_multiplier,
             effective_pressure_multiplier: terms.pressure_multiplier * input.pressure_multiplier,
-            // Both characteristics were resolved to compute this layer's terms, so the
-            // unwraps below cannot fire: the calls above already refused a missing one.
             thermal: terms
                 .fill
                 .thermal
@@ -581,14 +523,6 @@ pub fn layered_system_pressure_breakdown(
 }
 
 /// Port of `systemPressureBreakdown`.
-///
-/// The total available Merkel number is the sum of every transfer zone the air passes through,
-/// not the fill alone; omitting the spray and rain zones understates a real counterflow tower
-/// by roughly 10–20 %.
-///
-/// This is [`layered_system_pressure_breakdown`] with a **one-layer stack**: the caller's fill,
-/// depth and multipliers become a single layer whose own multipliers are 1, so the sums are
-/// their single terms and the arithmetic is the single-fill arithmetic.
 pub fn system_pressure_breakdown(
     input: SystemPressureBreakdownInput<'_>,
 ) -> Result<SystemPressureBreakdown, DomainError> {
@@ -641,14 +575,7 @@ pub fn check_fill_operating_envelope(
     }
 }
 
-/// The ported envelope's own failure texts, with the two dimensions a run may not be making a
-/// claim about optional: `None` skips that check instead of inventing a value for it (a run
-/// that declares no hot-water temperature has nothing to compare against the fill's limit).
-///
-/// [`check_fill_operating_envelope`] passes both dimensions, so its verdicts are exactly the
-/// ones the reference produces; [`crate::layers::check_stack_operating_envelope`] calls this
-/// per layer and prefixes each text with the layer it belongs to, which keeps one copy of the
-/// wording in the crate.
+/// The ported envelope's own failure texts, with the two dimensions a run may not be making a claim about optional: `None` skips that check instead of inventing a value for it (a run that declares no hot-water temperature has nothing to compare against the fill's limit).
 pub fn envelope_failures(
     fill: &FillRecord,
     water_loading_kg_m2_s: f64,
@@ -702,14 +629,6 @@ pub fn envelope_failures(
     failures
 }
 
-/// Port of JavaScript `Number.prototype.toFixed` for the finite values these failure messages
-/// carry.
-///
-/// The reference rounds the *exact* value of the double, ties away from zero. Rust's own
-/// fixed-precision formatting rounds a different digit sequence (it prints `"1.001"` for
-/// `1.0005`, where the reference prints `"1.000"`), so the rounding is done here instead: the
-/// exact expansion is printed with extra digits and the first dropped digit decides — a tie is
-/// a `5` followed by zeros, and ties round away from zero too, so `>= 5` is the whole rule.
 fn to_fixed(value: f64, digits: usize) -> String {
     if !value.is_finite() {
         return format!("{value}");
@@ -728,14 +647,12 @@ fn to_fixed(value: f64, digits: usize) -> String {
         text.push('.');
         text.push_str(&digits_text[split..]);
     }
-    // A value of exactly zero prints unsigned, matching the reference's `x < 0` sign test.
     if value < 0.0 {
         text.insert(0, '-');
     }
     text
 }
 
-/// Add one to a decimal digit string, carrying (`9.99` -> `10.00`).
 fn increment_decimal(digits: &mut String) {
     let mut bytes = digits.clone().into_bytes();
     for index in (0..bytes.len()).rev() {
@@ -747,7 +664,6 @@ fn increment_decimal(digits: &mut String) {
             return;
         }
     }
-    // All nines: the carry opens a new integer place, keeping the fractional digit count.
     bytes.insert(0, b'1');
     *digits = String::from_utf8(bytes).expect("ascii digits");
 }

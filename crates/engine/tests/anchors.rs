@@ -1,21 +1,3 @@
-//! External anchors for the ported slice — the same anchors, at the same tolerances, that
-//! the JavaScript suite asserts. Every reference value below is a published value or an
-//! independent integration, never a value produced by this crate.
-//!
-//! Sources, quoted per test:
-//!
-//! * `tests/psychrometrics-ashrae.test.js` — ASHRAE Handbook, Fundamentals, Chapter 1
-//!   (psychrometrics), thermodynamic properties of moist air at standard atmospheric
-//!   pressure (101.325 kPa).
-//! * `tests/psychrometrics-range.test.js` — ASHRAE over-ice saturation pressures, ICAO
-//!   standard-atmosphere pressures, and the range/refusal behaviour.
-//! * `tests/psychrometrics.test.js` — the simplified (enhancement-factor-off) cross-check
-//!   against PsychroLib / the ASHRAE simplified equation set.
-//! * `tests/merkel-accuracy.test.js` — an independent reference integration of the Merkel
-//!   demand written as a flat trapezoid loop that shares no code path with the quadrature
-//!   under test.
-//! * `tests/merkel.test.js` — quadrature agreement and the cold-water inverse closure.
-
 use drafthouse_engine::{
     dew_point_from_humidity_ratio, humidity_ratio_from_relative_humidity,
     humidity_ratio_from_vapor_pressure, humidity_ratio_from_wet_bulb, merkel_demand,
@@ -45,10 +27,6 @@ fn close(actual: f64, expected: f64, tolerance: f64, message: &str) {
     );
 }
 
-/* ---------------- ASHRAE saturation pressure, liquid branch ---------------- */
-
-/// ASHRAE Handbook — Fundamentals, Chapter 1: saturation pressure of water at standard
-/// atmospheric pressure.
 const ASHRAE_SATURATION_PRESSURE_PA: [(f64, f64); 7] = [
     (0.0, 611.2),
     (10.0, 1228.1),
@@ -59,8 +37,6 @@ const ASHRAE_SATURATION_PRESSURE_PA: [(f64, f64); 7] = [
     (50.0, 12351.9),
 ];
 
-/// ASHRAE saturated-air properties at 101.325 kPa: temperature °C, humidity ratio
-/// kg/kg dry air, enthalpy kJ/kg dry air.
 const ASHRAE_SATURATED_AIR: [(f64, f64, f64); 7] = [
     (0.0, 0.003790, 9.473),
     (10.0, 0.007661, 29.348),
@@ -71,7 +47,6 @@ const ASHRAE_SATURATED_AIR: [(f64, f64, f64); 7] = [
     (50.0, 0.086863, 275.65),
 ];
 
-/// ASHRAE Handbook — Fundamentals, saturation pressure over ice.
 const ASHRAE_OVER_ICE_PA: [(f64, f64); 5] = [
     (-20.0, 103.24),
     (-15.0, 165.30),
@@ -80,7 +55,6 @@ const ASHRAE_OVER_ICE_PA: [(f64, f64); 5] = [
     (0.0, 611.15),
 ];
 
-/// ICAO standard-atmosphere pressures.
 const ALTITUDES: [(&str, f64); 5] = [
     ("sea level", 101_325.0),
     ("500 m", 95_461.0),
@@ -115,8 +89,6 @@ fn ashrae_saturation_pressure_over_ice_tracks_the_table_within_0_1_percent() {
 
 #[test]
 fn the_ice_and_liquid_correlation_branches_meet_without_a_step() {
-    // The implementation switches branch at 0.01 °C; a discontinuity there would be a
-    // genuine defect, putting a kink in every downstream property.
     let below = saturation_vapor_pressure_pa(0.009).unwrap();
     let above = saturation_vapor_pressure_pa(0.011).unwrap();
     let jump_pct = 100.0 * (above - below).abs() / below;
@@ -140,8 +112,6 @@ fn saturation_pressure_is_monotonic_across_the_freezing_point() {
         t += 0.5;
     }
 }
-
-/* ---------------- ASHRAE saturated-air tables ---------------- */
 
 #[test]
 fn saturated_humidity_ratio_tracks_ashrae_tables_within_0_2_percent() {
@@ -169,8 +139,6 @@ fn saturated_air_enthalpy_tracks_ashrae_tables_within_0_4_kj_per_kg() {
 
 #[test]
 fn omitting_the_enhancement_factor_measurably_degrades_table_agreement() {
-    // Guards against the enhancement factor being silently dropped again: the simplified
-    // treatment must stay visibly worse against the published tables.
     let worst = |options: PsychrometricOptions| {
         ASHRAE_SATURATED_AIR
             .iter()
@@ -185,12 +153,8 @@ fn omitting_the_enhancement_factor_measurably_degrades_table_agreement() {
     assert!(simplified > 3.0 * enhanced, "{simplified} vs {enhanced}");
 }
 
-/* ---------------- documented inputs ---------------- */
-
 #[test]
 fn the_simplified_path_at_30_c_and_50_rh_is_internally_consistent() {
-    // Values pinned in tests/psychrometrics.test.js from PsychroLib / the ASHRAE simplified
-    // equation set, which omits the enhancement factor.
     let humidity_ratio =
         humidity_ratio_from_relative_humidity(30.0, 0.5, 101_325.0, simplified()).unwrap();
     close(
@@ -272,8 +236,6 @@ fn humidity_ratio_and_relative_humidity_round_trip() {
     }
 }
 
-/* ---------------- below freezing and away from standard pressure ---------------- */
-
 #[test]
 fn sub_zero_moist_air_states_resolve_and_stay_physical() {
     for (dry_bulb_c, wet_bulb_c) in [
@@ -330,8 +292,6 @@ fn saturated_air_holds_less_moisture_as_it_gets_colder() {
 
 #[test]
 fn humidity_ratio_rises_as_total_pressure_falls_at_fixed_temperature() {
-    // W = 0.621945 f·pws / (P - f·pws); pws depends only on temperature, so thinner air
-    // holds more water per kilogram of dry air.
     let mut previous = 0.0;
     for (name, pressure_pa) in ALTITUDES {
         let ws = saturation_humidity_ratio(25.0, pressure_pa, options()).unwrap();
@@ -393,12 +353,9 @@ fn air_gets_thinner_with_altitude() {
 
 #[test]
 fn a_saturation_pressure_at_or_above_total_pressure_is_refused_not_returned() {
-    // At 70 kPa water boils near 90 °C; beyond that there is no moist-air state to compute.
     assert!(saturation_humidity_ratio(95.0, 70_121.0, options()).is_err());
     assert!(saturation_humidity_ratio(85.0, 70_121.0, options()).is_ok());
 }
-
-/* ---------------- Merkel demand against an independent integration ---------------- */
 
 #[derive(Clone, Copy, Debug)]
 struct MerkelCase {
@@ -411,7 +368,6 @@ struct MerkelCase {
 
 const REFERENCE_STEPS: usize = 400_000;
 
-/// The same five conditions as `tests/merkel-accuracy.test.js`.
 const MERKEL_CASES: [MerkelCase; 5] = [
     MerkelCase {
         hot_water_c: 42.0,
@@ -450,15 +406,6 @@ const MERKEL_CASES: [MerkelCase; 5] = [
     },
 ];
 
-/// Independent reference integration of the Merkel demand:
-///
-/// ```text
-/// KaV/L = integral over Tc..Th of cp dTw / (hs(Tw) - ha(Tw))
-/// ```
-///
-/// Written as a flat trapezoid loop that shares no code path with this crate's quadrature —
-/// the same deliberately independent reference the JavaScript suite uses
-/// (`tests/merkel-accuracy.test.js`).
 fn reference_merkel(case: MerkelCase, convention: InletEnthalpyConvention) -> f64 {
     let pressure_pa = 101_325.0;
     let cp = water_specific_heat_kj_kg_k((case.hot_water_c + case.cold_water_c) / 2.0, 0.0);
@@ -554,7 +501,6 @@ fn the_cti_wet_bulb_enthalpy_convention_is_available_and_demands_more_transfer()
         InletEnthalpyConvention::Bulk
     );
     assert!(cti.inlet_air_enthalpy_kj_kg_dry_air > bulk.inlet_air_enthalpy_kj_kg_dry_air);
-    // A higher entering-air enthalpy shrinks the driving potential, so demand must rise.
     assert!(cti.merkel_number > bulk.merkel_number);
 
     let spread_pct = 100.0 * (cti.merkel_number - bulk.merkel_number) / bulk.merkel_number;
@@ -597,8 +543,6 @@ fn simpson_and_four_point_tchebycheff_agree_closely() {
     );
 }
 
-/* ---------------- cold-water inverse solver ---------------- */
-
 #[test]
 fn the_cold_water_solver_recovers_the_known_condition_from_its_merkel_demand() {
     let case = MERKEL_CASES[0];
@@ -638,12 +582,8 @@ fn more_available_merkel_capability_produces_colder_water() {
     assert!(high.cold_water_c < low.cold_water_c);
 }
 
-/* ---------------- refusal behaviour ---------------- */
-
 #[test]
 fn an_enthalpy_pinch_is_refused_rather_than_clamped() {
-    // The recorded infeasible vector merkel-02: an L/G of 1.5 cannot meet a 5 K approach
-    // against a 10 °C wet bulb.
     let input = MerkelInput::new(25.0, 15.0, 10.0, 15.0, 1.5);
     let error = merkel_demand(&input).expect_err("the pinch must be refused");
     assert!(
@@ -656,12 +596,9 @@ fn an_enthalpy_pinch_is_refused_rather_than_clamped() {
 fn physically_impossible_inputs_are_refused_and_named() {
     let base = MerkelInput::new(42.0, 32.0, 27.0, 33.0, 1.5);
 
-    // Wet bulb above dry bulb.
     assert!(humidity_ratio_from_wet_bulb(27.0, 33.0, 101_325.0, options()).is_err());
-    // Relative humidity outside 0…1.
     assert!(humidity_ratio_from_relative_humidity(30.0, 1.5, 101_325.0, options()).is_err());
     assert!(humidity_ratio_from_relative_humidity(30.0, -0.1, 101_325.0, options()).is_err());
-    // Capacity must be positive.
     assert!(merkel_demand(&MerkelInput {
         water_to_dry_air_ratio: 0.0,
         ..base
@@ -671,7 +608,6 @@ fn physically_impossible_inputs_are_refused_and_named() {
         solve_cold_water_temperature(&ColdWaterTemperatureInput::new(42.0, 27.0, 33.0, 1.5, 0.0))
             .is_err()
     );
-    // Temperatures must be ordered hot > cold > wet bulb.
     assert!(validate_thermal_temperatures(32.0, 42.0, 27.0).is_err());
     assert!(validate_thermal_temperatures(42.0, 27.0, 27.0).is_err());
     assert!(validate_thermal_temperatures(42.0, 32.0, 27.0).is_ok());
@@ -679,15 +615,12 @@ fn physically_impossible_inputs_are_refused_and_named() {
 
 #[test]
 fn inputs_outside_the_correlations_are_refused_and_named() {
-    // Saturation-pressure correlation limits.
     assert!(saturation_vapor_pressure_pa(-101.0).is_err());
     assert!(saturation_vapor_pressure_pa(201.0).is_err());
     assert!(saturation_vapor_pressure_pa(f64::NAN).is_err());
-    // A vapor pressure at or above the total pressure has no humidity-ratio solution.
     assert!(humidity_ratio_from_vapor_pressure(101_325.0, 101_325.0).is_err());
     assert!(humidity_ratio_from_vapor_pressure(-1.0, 101_325.0).is_err());
     assert!(vapor_pressure_from_humidity_ratio(-0.001, 101_325.0).is_err());
-    // A state needs one of wet bulb or relative humidity.
     let bare = PsychrometricStateInput {
         dry_bulb_c: 33.0,
         wet_bulb_c: None,

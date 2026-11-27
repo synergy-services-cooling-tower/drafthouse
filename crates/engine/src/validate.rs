@@ -1,28 +1,3 @@
-//! The fail-closed catalog-record validator (issue #5).
-//!
-//! `../docs/CATALOG_SCHEMA.md` describes the component catalog in prose. This module is that
-//! prose as data: for every record type it declares every field, whether the field is
-//! required, and what its value must be. The `ct-engine` CLI validates catalog records with
-//! this table before the selector may rank anything; a future front end (the HTML side
-//! through the WASM kernel) shares the same table instead of growing a second validator.
-//!
-//! Fail-closed means each of these is a refusal that names the record and the field:
-//!
-//! * a required field is missing from the record;
-//! * a field name the record type does not declare appears — a mistyped name must fail
-//!   loudly instead of becoming an ignored key, which is the defect this module closes;
-//! * a value is not the declared type, or is a non-finite number (`NaN`, `Infinity`, or a
-//!   literal that overflows to infinity), which is the value class that used to flow into a
-//!   ranking;
-//! * a number is outside its declared domain (positive, non-negative), an enumerated value
-//!   is outside its declared set, or a row/list has the wrong length.
-//!
-//! The schema is the port's own record shape: the fields `selection.js` feeds the selector,
-//! plus the catalog fields `../docs/CATALOG_SCHEMA.md` declares that the port does not read
-//! (`name`, `draftType`, `effectiveDraftHeightM`, `geometry`, `material`). Fields the schema
-//! does not declare are refused; `README.md` records that decision, including the reference
-//! catalog's commercial fields.
-
 /// The five record types `docs/CATALOG_SCHEMA.md` declares.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RecordKind {
@@ -58,11 +33,8 @@ impl RecordKind {
 /// What a numeric field's value must satisfy beyond being a finite number.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NumberDomain {
-    /// Any finite number (the schema's signed quantities: the fill power-law exponents).
     Finite,
-    /// A finite number greater than zero.
     Positive,
-    /// A finite number at or above zero.
     NonNegative,
 }
 
@@ -76,29 +48,22 @@ pub struct Column {
 /// The value shape a field declares.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum FieldKind {
-    /// A non-empty string.
     Text,
-    /// One number.
     Number(NumberDomain),
-    /// A `|`-separated list of numbers.
     NumberList {
         domain: NumberDomain,
         min_len: usize,
     },
-    /// A `|`-separated list of non-empty strings.
-    TextList { min_len: usize },
-    /// A string from a declared set.
+    TextList {
+        min_len: usize,
+    },
     Enum(&'static [&'static str]),
-    /// A `|`-separated list of strings from a declared set.
     EnumList {
         allowed: &'static [&'static str],
         min_len: usize,
     },
-    /// Two `|`-separated ratios forming an ordered bracket: `lower|upper`, `lower <= upper`.
     RatioBracket,
-    /// One `|`-separated row of numeric columns (`a|b|c`).
     Row(&'static [Column]),
-    /// `|`-separated points of `:`-separated numeric columns (`a:b:c|a:b:c`).
     Points {
         columns: &'static [Column],
         min_len: usize,
@@ -134,7 +99,7 @@ impl FieldRule {
 /// One refused field: the record it belongs to, the field, and what is wrong with it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Violation {
-    /// `«kind» record «label»`, e.g. `tower record "IDCF-064"`.
+    /// `«kind» record «label»`, e.g.
     pub record: String,
     pub field: String,
     pub problem: String,
@@ -243,12 +208,8 @@ const DRIFT_CURVE_COLUMNS: [Column; 3] = [
     },
 ];
 
-/// `interpolate1D` refuses a curve with fewer than two points, and
-/// `driftPerformanceAtVelocity` interpolates without clamping the ends, so a curve needs a
-/// span: the same minimum the engine's own contract states.
 const CURVE_MIN_POINTS: usize = 2;
 
-/// The tower geometry record (schema section 3).
 const TOWER_FIELDS: [FieldRule; 26] = [
     FieldRule::required("id", FieldKind::Text),
     FieldRule::required("type", FieldKind::Enum(&TOWER_TYPES)),
@@ -305,9 +266,6 @@ const TOWER_FIELDS: [FieldRule; 26] = [
         },
     ),
     FieldRule::required("compatibleFanIds", FieldKind::TextList { min_len: 1 }),
-    // The ordered-layer contract (issue #54): zero or more complete `+`-joined stack variants,
-    // `|`-separated. Each variant is an ordered list of `<fillId>@<depthM>[@<thermal>[@<pressure>]]`
-    // layers, resolved by the CLI's own reader (a layer's fields are not this record's fields).
     FieldRule::optional("fillStacks", FieldKind::TextList { min_len: 1 }),
     FieldRule::optional("name", FieldKind::Text),
     FieldRule::optional("draftType", FieldKind::Text),
@@ -317,7 +275,6 @@ const TOWER_FIELDS: [FieldRule; 26] = [
     ),
 ];
 
-/// The fill record (schema section 4).
 const FILL_FIELDS: [FieldRule; 9] = [
     FieldRule::required("id", FieldKind::Text),
     FieldRule::required(
@@ -342,7 +299,6 @@ const FILL_FIELDS: [FieldRule; 9] = [
     FieldRule::optional("material", FieldKind::Text),
 ];
 
-/// The drift-eliminator record (schema section 5).
 const DRIFT_ELIMINATOR_FIELDS: [FieldRule; 5] = [
     FieldRule::required("id", FieldKind::Text),
     FieldRule::required(
@@ -375,12 +331,9 @@ const FAN_CURVE_COLUMNS: [Column; 3] = [
     },
 ];
 
-/// The fan record (schema section 6).
 const FAN_FIELDS: [FieldRule; 11] = [
     FieldRule::required("id", FieldKind::Text),
     FieldRule::required("allowedSpeedRatio", FieldKind::RatioBracket),
-    // The speed the recorded curve is published at (speed ratio 1.0), in rpm. Optional: the
-    // record's own datum, and one this schema never invents.
     FieldRule::optional("nominalRpm", FieldKind::Number(NumberDomain::Positive)),
     FieldRule::required("driveEfficiency", FieldKind::Number(NumberDomain::Positive)),
     FieldRule::required("motorEfficiency", FieldKind::Number(NumberDomain::Positive)),
@@ -404,7 +357,6 @@ const FAN_FIELDS: [FieldRule; 11] = [
     FieldRule::optional("name", FieldKind::Text),
 ];
 
-/// The nozzle record (schema section 7).
 const NOZZLE_FIELDS: [FieldRule; 5] = [
     FieldRule::required("id", FieldKind::Text),
     FieldRule::required("name", FieldKind::Text),
@@ -434,11 +386,6 @@ pub fn schema(kind: RecordKind) -> &'static [FieldRule] {
 }
 
 /// Validate one record's `field: value` pairs against the schema of `kind`.
-///
-/// `label` names the record in every refusal — the CLI passes the record's `id` when it has
-/// one, otherwise its position. `Ok(())` means every declared field is present and every
-/// value is in its declared domain; `Err(violations)` names every refused field, so a
-/// caller can report all of them at once.
 pub fn validate_record(
     kind: RecordKind,
     label: &str,
@@ -488,8 +435,6 @@ pub fn validate_record(
         Err(violations)
     }
 }
-
-/* ---------------- the value checks ---------------- */
 
 fn check_value(rule: &FieldRule, raw: &str, record: &str, sink: &mut Vec<Violation>) {
     let field = rule.name;
@@ -714,7 +659,6 @@ fn column_names(columns: &[Column]) -> String {
         .join(":")
 }
 
-/// What is wrong with `raw` as a value of `domain`, or `None` when the value is acceptable.
 fn number_problem(domain: NumberDomain, raw: &str) -> Option<String> {
     let value: f64 = match raw.parse() {
         Ok(value) => value,

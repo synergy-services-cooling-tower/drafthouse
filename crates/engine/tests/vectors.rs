@@ -1,15 +1,3 @@
-//! Recorded regression vectors — the ported families of `validation/test-vectors.json`.
-//!
-//! Mirrors `tests/vectors.test.js`. The vector file declares itself **unvalidated**: it
-//! records what the reference engine computes, not physical truth. This test only proves the
-//! Rust port reproduces it at the same 1e-6 relative tolerance the JavaScript suite uses.
-//!
-//! The file's `naturalDraft` and `performanceCurve` families were added by issue #40 slice 1
-//! (additions only; every pre-existing entry is byte-unchanged) together with the extra
-//! `capability` case, so the three concerns that had no Rust counterpart are now checked
-//! against recorded vectors as well as against the live JavaScript engine.
-
-use serde_json::Value;
 use drafthouse_engine::{
     evaluate_characteristic_capability, evaluate_performance_curve_capability, merkel_demand,
     performance_curve_bounds, predict_cold_water_from_performance_curves,
@@ -21,8 +9,8 @@ use drafthouse_engine::{
     InletEnthalpyConvention, Integration, MerkelInput, NaturalDraftInput, PerformanceCurveRecord,
     PsychrometricOptions, PsychrometricStateInput, TowerRecord, ZoneCorrelation,
 };
+use serde_json::Value;
 
-/// The tolerance `tests/vectors.test.js` uses.
 const VECTOR_TOLERANCE: f64 = 1e-6;
 
 fn agrees(actual: f64, expected: f64, label: &str) {
@@ -54,7 +42,6 @@ fn id(case: &Value) -> &str {
 
 #[test]
 fn the_vector_file_declares_itself_unvalidated() {
-    // Guards against someone quietly promoting regression vectors to "reference data".
     let file = vectors();
     assert!(file["status"].as_str().unwrap().contains("UNVALIDATED"));
     assert!(file["warning"].as_str().unwrap().contains("CTI ToolKit"));
@@ -117,7 +104,6 @@ fn psychrometric_vectors_reproduce() {
     }
 }
 
-/// The four recorded combinations of convention × quadrature.
 const COMBINATIONS: [(InletEnthalpyConvention, Integration, &str); 4] = [
     (
         InletEnthalpyConvention::Bulk,
@@ -168,7 +154,6 @@ fn merkel_vectors_reproduce_under_both_conventions_and_both_quadratures() {
                     let actual = merkel_demand(&input).unwrap().merkel_number;
                     agrees(actual, expected, &format!("{id} {key}"));
                 }
-                // The vector records an infeasible duty; the port must refuse it too.
                 None => assert!(
                     merkel_demand(&input).is_err(),
                     "{id} {key} should still be infeasible"
@@ -208,7 +193,6 @@ fn merkel_vectors_reproduce_under_both_conventions_and_both_quadratures() {
 
 #[test]
 fn the_cti_convention_is_consistently_the_higher_demand() {
-    // If this ever flips, the conventions have been swapped somewhere.
     let file = vectors();
     let mut compared = 0;
     for case in file["families"]["merkel"].as_array().unwrap() {
@@ -226,14 +210,10 @@ fn the_cti_convention_is_consistently_the_higher_demand() {
     assert!(compared > 10, "only {compared} feasible cases compared");
 }
 
-/* ---------------- issue #40 slice 1: the three added families ---------------- */
-
-/// An optional numeric key: absent means the reference's default argument applies.
 fn number_or(value: &Value, key: &str, default: f64) -> f64 {
     value.get(key).and_then(Value::as_f64).unwrap_or(default)
 }
 
-/// The `capability` family's condition objects.
 fn vector_condition(value: &Value) -> CapabilityCondition {
     CapabilityCondition {
         water_mass_flow_kg_s: number(value, "waterMassFlowKgS"),
@@ -295,7 +275,6 @@ fn capability_vectors_reproduce() {
     assert!(compared >= 5, "only {compared} capability vectors compared");
 }
 
-/// `sampleCatalog.fills` / `FILM-VF38`.
 fn vector_fill_vf38() -> FillRecord {
     FillRecord {
         id: "FILM-VF38".to_string(),
@@ -324,7 +303,6 @@ fn vector_fill_vf38() -> FillRecord {
     }
 }
 
-/// `sampleCatalog.towers` / `IDCF-064`.
 fn vector_tower_idcf_064() -> TowerRecord {
     TowerRecord {
         fill_area_m2: 64.0,
@@ -358,7 +336,6 @@ fn vector_tower_idcf_064() -> TowerRecord {
     }
 }
 
-/// `sampleCatalog.driftEliminators` / `DE-3P-10`.
 fn vector_drift_de_3p_10() -> DriftEliminatorRecord {
     DriftEliminatorRecord {
         id: "DE-3P-10".to_string(),
@@ -443,8 +420,6 @@ fn performance_curve_vectors_reproduce() {
             .collect();
         let expected = &case["expected"];
         let id = id(case);
-        // The bounds are recorded implicitly through the probes; the probes themselves are the
-        // recorded cases: a direct prediction, and the inverse solve with the capability ratio.
         if let Some(expected_cold_water) = expected["coldWaterC"].as_f64() {
             let prediction = predict_cold_water_from_performance_curves(
                 &records,

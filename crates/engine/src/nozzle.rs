@@ -1,15 +1,6 @@
-//! Nozzle flow and arrangement — port of `src/core/nozzle.js`, line for line.
-//!
-//! The reference's `waterDensityKgM3 = 997` default and its
-//! `nozzle.referenceWaterDensityKgM3 ?? 997` fallback are [`NOZZLE_WATER_DENSITY_KG_M3`]
-//! here; the count stays an `f64` because the reference never truncates `Math.ceil` to an
-//! integer, and the sort is the reference's two-key comparator
-//! (`excessFlowPct`, then `count`), stable like `Array.prototype.sort`.
-
 use crate::numeric::{assert_positive, DomainError};
 
-/// The reference's prototype water density when neither the call nor the nozzle record
-/// supplies one.
+/// The reference's prototype water density when neither the call nor the nozzle record supplies one.
 pub const NOZZLE_WATER_DENSITY_KG_M3: f64 = 997.0;
 
 /// Port of `nozzleFlowM3S`.
@@ -49,8 +40,7 @@ pub struct NozzleArrangement {
     pub valid_count: bool,
 }
 
-/// Inputs for [`select_nozzle_arrangement`] — the port of the JavaScript
-/// `selectNozzleArrangement({...})` call.
+/// Inputs for [`select_nozzle_arrangement`] — the port of the JavaScript `selectNozzleArrangement({...})` call.
 #[derive(Clone, Copy, Debug)]
 pub struct NozzleArrangementInput<'a> {
     pub total_volumetric_water_flow_m3_s: f64,
@@ -82,9 +72,6 @@ impl<'a> NozzleArrangementInput<'a> {
     }
 }
 
-/// The reference's comparator: `a.excessFlowPct - b.excessFlowPct || a.count - b.count`.
-/// A zero difference and a NaN difference both fall through to the count, exactly as the
-/// JavaScript `||` does.
 fn compare_arrangements(a: &NozzleArrangement, b: &NozzleArrangement) -> std::cmp::Ordering {
     let difference = a.excess_flow_pct - b.excess_flow_pct;
     if difference == 0.0 || difference.is_nan() {
@@ -98,8 +85,7 @@ fn compare_arrangements(a: &NozzleArrangement, b: &NozzleArrangement) -> std::cm
     }
 }
 
-/// Port of `selectNozzleArrangement`: one candidate per nozzle, filtered to the valid count
-/// range, sorted by excess flow. An empty result is refused, as the reference refuses it.
+/// Port of `selectNozzleArrangement`: one candidate per nozzle, filtered to the valid count range, sorted by excess flow.
 pub fn select_nozzle_arrangement(
     input: &NozzleArrangementInput<'_>,
 ) -> Result<Vec<NozzleArrangement>, DomainError> {

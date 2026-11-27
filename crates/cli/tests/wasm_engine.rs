@@ -1,17 +1,5 @@
-//! The engine surface the wasm export adds (issue #24): the `inputs` and `worked` keys
-//! `select` emits, and the reply envelope a caller that is not a process reads.
-//!
-//! `cli::run` is the engine both the `ct-engine` binary and the wasm export call, so this
-//! data contract is testable natively, without a wasm runtime. The wasm-specific half — the
-//! C ABI (`src/wasm.rs`), the artifact and the JS binding's catalog projection — is
-//! exercised by the parity harness under `--engine wasm` (`scripts/parity/run.mjs`).
-//!
-//! The records below are one tower, fill, drift eliminator, fan and nozzle from the bundled
-//! catalog, in the `key:value` spec form the CLI parses; the selection they produce is
-//! feasible at the engine's default duty, which is what makes the worked sheet non-empty.
-
-use serde_json::Value;
 use drafthouse_cli::{self as cli, Failure, USAGE};
+use serde_json::Value;
 
 const TOWER: &str = "id:IDCF-064,type:counterflow,fillAreaM2:64,airFreeAreaM2:64,driftAreaM2:61,inletAreaM2:32,stackRecoveryFactor:0.35,inletLossCoefficient:3,distributionLossCoefficient:4.4,supportLossCoefficient:2.1,plenumLossCoefficient:0.38,fixedPressureLossPa:10,sprayZoneHeightM:0.6,rainZoneHeightM:1.5,footprintM2:78,maxWaterMassFlowKgS:265,fillDepthOptionsM:1.2|1.5|1.8,compatibleFanIds:AX-500,sprayZone:0.16|3|2|-0.3|0.45,rainZone:0.13|3|2|-0.35|0.5";
 const FILL: &str = "id:FILM-OF25,compatibleTowerTypes:counterflow|crossflow,allowedWaterQualityClasses:clean|moderate,thermal:1.12|3|2|-0.31|0.44,pressure:61|3|2|0.14|1.72,limits:1.3|5.4|0.9|3.3|60";
@@ -22,7 +10,6 @@ const NOZZLE: &str =
     "id:NZ-20,name:Illustrative 20 mm Full-Cone Nozzle,dischargeCoefficient:0.72,orificeDiameterM:0.02";
 const QUALITY_FACTORS: &str = "clean:1:1;moderate:0.92:1.12";
 
-/// The `worked.js` step's field set — the shape a step is data in, not markup.
 const STEP_FIELDS: [&str; 8] = [
     "label",
     "why",
@@ -96,7 +83,6 @@ fn select_reports_the_inputs_it_used_including_catalog_dimensions() {
     let run = select();
     let leader = field(&run, "results.0");
 
-    // The identity the run resolved for the recommended candidate...
     let selected = field(&run, "inputs.selected");
     assert_eq!(
         text(selected, "towerId"),
@@ -109,8 +95,6 @@ fn select_reports_the_inputs_it_used_including_catalog_dimensions() {
     assert_eq!(number(selected, "fillDepthM"), number(leader, "fillDepthM"));
     assert_eq!(number(selected, "speedRatio"), number(leader, "speedRatio"));
 
-    // ...and the catalog dimensions it read out of the records, as values, not as the spec
-    // text they arrived in.
     let tower = field(&run, "inputs.records.tower");
     assert_eq!(text(tower, "id"), "IDCF-064");
     assert_eq!(number(tower, "fillAreaM2"), 64.0);
@@ -143,7 +127,6 @@ fn select_reports_the_inputs_it_used_including_catalog_dimensions() {
         0.72
     );
 
-    // The requirements the run ranked against travel with the inputs.
     assert!(field(&run, "inputs.requirements.waterMassFlowKgS").is_number());
 }
 
@@ -189,8 +172,6 @@ fn worked_steps_follow_the_worked_js_shape_and_are_data_only() {
         }
     }
 
-    // Data, not markup: nothing in the sheet may carry the characters that would make it
-    // renderable, and nothing may build geometry either (the numbers are values, not paths).
     let serialised = serde_json::to_string(&run["worked"]).expect("serialises");
     for forbidden in ["<", ">", "&lt;", "&amp;", "class=", "style="] {
         assert!(
@@ -237,8 +218,6 @@ fn worked_step_values_are_the_candidates_own_numbers() {
         );
     }
 
-    // The sheet's result block and the ranked candidate agree, field for field, on the
-    // quantities both carry.
     for (result_path, candidate_path) in [
         ("capacityKgS", "capacityKgS"),
         ("coldWaterC", "coldWaterC"),
@@ -292,7 +271,6 @@ fn the_reply_envelope_carries_the_status_the_binary_would_exit_with() {
     );
     assert_eq!(domain["error"]["error"].as_str(), Some("DomainError"));
 
-    // The envelope is the process's own classification, not a second opinion.
     assert!(matches!(cli::run(&["nope".into()]), Err(Failure::Usage(_))));
     assert!(matches!(
         cli::run(&[
@@ -338,8 +316,6 @@ fn select_fields_lists_the_field_names_the_selector_accepts() {
         );
     }
 
-    // Every field name the tower spec above carries must be in the list: the projection a
-    // caller applies (the wasm binding's, and this test's) is exactly this intake.
     for pair in TOWER.split(',') {
         let key = pair.split(':').next().expect("a key");
         assert!(

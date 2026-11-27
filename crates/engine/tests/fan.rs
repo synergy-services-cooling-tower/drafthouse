@@ -1,17 +1,3 @@
-//! Fans — the JavaScript suite's expectations for `src/core/fan.js`, ported test for test.
-//!
-//! Sources, quoted per test:
-//!
-//! * `tests/airside.test.js` — the balanced-operating-point expectation (the fan/system
-//!   solver is exercised there, not in a file of its own).
-//! * `validation/test-vectors.json` (family `fan`) — the three recorded operating points,
-//!   reproduced against the same `35 + 0.0085 Q²` system curve and 1.14 kg/m³ air,
-//!   at the same 1e-6 relative tolerance `tests/vectors.test.js` uses.
-//! * `src/core/fan.js` — the formulas, defaults (`speedRatio: 1`,
-//!   `minimumFlowFraction: 0.05`, the IEC `standardSizesKW` table) and guard messages.
-//!
-//! The JavaScript engine is the specification; nothing here re-derives a value.
-
 use drafthouse_engine::{
     choose_standard_motor, estimate_airflow_from_fan_power, fan_efficiency_at_flow,
     fan_operating_limits, fan_pressure_pa_at_flow, fan_shaft_power_kw, fan_speed_ratio_limit,
@@ -20,7 +6,6 @@ use drafthouse_engine::{
     PRESSURE_AFFINITY_EXPONENT, SHAFT_POWER_AFFINITY_EXPONENT,
 };
 
-/// `sampleCatalog.fans` / `AX-500` (illustrative synthetic data, quoted verbatim).
 fn ax_500() -> FanRecord {
     FanRecord {
         id: "AX-500".to_string(),
@@ -58,7 +43,6 @@ fn ax_500() -> FanRecord {
     }
 }
 
-/// The `35 + 0.0085 Q²` system curve of `tests/airside.test.js` and the recorded vectors.
 fn documented_system_curve(flow_m3_s: f64) -> f64 {
     35.0 + 0.0085 * flow_m3_s.powi(2)
 }
@@ -79,9 +63,6 @@ fn agrees(actual: f64, expected: f64, label: &str) {
     );
 }
 
-/* ---------------- recorded vectors ---------------- */
-
-/// `validation/test-vectors.json`, family `fan`.
 #[test]
 fn the_recorded_fan_vectors_reproduce() {
     let fan = ax_500();
@@ -112,7 +93,6 @@ fn the_recorded_fan_vectors_reproduce() {
             expected[3],
             &format!("{speed_ratio} shaftPowerKW"),
         );
-        // The reference reports the residual at the returned point; it must vanish.
         agrees(
             result.fan_pressure_pa - result.system_pressure_pa,
             result.residual_pa,
@@ -126,8 +106,6 @@ fn the_recorded_fan_vectors_reproduce() {
     }
 }
 
-/* ---------------- tests/airside.test.js, ported ---------------- */
-
 #[test]
 fn the_fan_system_solver_returns_a_balanced_positive_operating_point() {
     let fan = ax_500();
@@ -140,8 +118,6 @@ fn the_fan_system_solver_returns_a_balanced_positive_operating_point() {
     assert!(result.shaft_power_kw > 0.0);
     assert!(result.residual_pa.abs() < 1e-4);
 }
-
-/* ---------------- curve evaluation ---------------- */
 
 #[test]
 fn operating_limits_scale_with_the_speed_ratio_and_are_not_validated_there() {
@@ -157,10 +133,8 @@ fn operating_limits_scale_with_the_speed_ratio_and_are_not_validated_there() {
 #[test]
 fn a_curve_reading_uses_the_density_ratio_and_the_square_of_the_speed_ratio() {
     let fan = ax_500();
-    // Values read from the reference at this point (tests/airside.test.js uses the same call).
     let pressure = fan_pressure_pa_at_flow(&fan, 130.0, 0.9, 1.14).unwrap();
     assert!((pressure - 293.265).abs() < 1e-9, "{pressure}");
-    // The reference reads the curve at flow / speedRatio and scales by the affinity laws.
     let reference_flow = 130.0 / 0.9;
     let reference_pressure = 470.0 + (reference_flow - 100.0) / 45.0 * (380.0 - 470.0);
     assert!(
@@ -172,9 +146,6 @@ fn a_curve_reading_uses_the_density_ratio_and_the_square_of_the_speed_ratio() {
 #[test]
 fn an_efficiency_reading_clamps_at_the_curve_ends() {
     let fan = ax_500();
-    // Values read from the reference. 130/0.9 = 144.44… m³/s falls between the 100 and 145
-    // points; a flow beyond the curve clamps to the last efficiency rather than extrapolating
-    // (the pressure curve extrapolates — `clampEnds: false` — the efficiency curve does not).
     assert!((fan_efficiency_at_flow(&fan, 130.0, 0.9).unwrap() - 0.8288888888888888).abs() < 1e-12);
     assert_eq!(fan_efficiency_at_flow(&fan, 9999.0, 1.0).unwrap(), 0.67);
     assert_eq!(fan_efficiency_at_flow(&fan, 1.0, 1.0).unwrap(), 0.63);
@@ -192,8 +163,6 @@ fn shaft_power_is_flow_times_pressure_over_efficiency() {
     assert_eq!(shaft_power, 130.0 * 200.0 / efficiency / 1000.0);
 }
 
-/* ---------------- affinity estimate and motor selection ---------------- */
-
 #[test]
 fn an_airflow_estimate_follows_the_affinity_law() {
     let estimate = estimate_airflow_from_fan_power(AirflowEstimateInput {
@@ -204,9 +173,7 @@ fn an_airflow_estimate_follows_the_affinity_law() {
         actual_air_density_kg_m3: 1.14,
     })
     .unwrap();
-    // Value read from the reference.
     assert!((estimate - 166.5320550502368).abs() < 1e-9, "{estimate}");
-    // Same power and density is the identity; more power at the same density raises the flow.
     let identity = estimate_airflow_from_fan_power(AirflowEstimateInput {
         reference_volumetric_flow_m3_s: 150.0,
         reference_fan_power_kw: 40.0,
@@ -221,7 +188,6 @@ fn an_airflow_estimate_follows_the_affinity_law() {
 
 #[test]
 fn motor_selection_walks_the_iec_size_table() {
-    // Values read from the reference (`chooseStandardMotor` defaults).
     let small = choose_standard_motor(0.1, 0.96, 1.1).unwrap();
     assert!((small.required_motor_output_kw - 0.11458333333333334).abs() < 1e-15);
     assert_eq!(small.selected_motor_kw, Some(0.75));
@@ -230,7 +196,6 @@ fn motor_selection_walks_the_iec_size_table() {
     assert_eq!(mid.required_motor_output_kw, 34.375);
     assert_eq!(mid.selected_motor_kw, Some(37.0));
 
-    // Above the largest standard size the reference returns null (`?? null`).
     let large = choose_standard_motor(300.0, 0.97, 1.15).unwrap();
     assert!((large.required_motor_output_kw - 355.67010309278345).abs() < 1e-9);
     assert_eq!(large.selected_motor_kw, None);
@@ -238,7 +203,6 @@ fn motor_selection_walks_the_iec_size_table() {
     assert!(at_the_top.required_motor_output_kw > 315.0);
     assert_eq!(at_the_top.selected_motor_kw, None);
 
-    // The chosen size always covers the requirement, and the table is the reference's.
     assert_eq!(
         drafthouse_engine::STANDARD_MOTOR_SIZES_KW,
         [
@@ -253,8 +217,6 @@ fn motor_selection_walks_the_iec_size_table() {
         }
     }
 }
-
-/* ---------------- refusal behaviour ---------------- */
 
 #[test]
 fn a_fan_curve_with_fewer_than_two_points_is_refused() {
@@ -287,7 +249,7 @@ fn a_non_positive_reference_density_speed_ratio_or_air_density_is_refused() {
             .message(),
         "fan.referenceDensityKgM3 must be positive."
     );
-    fan.reference_density_kg_m3 = None; // the reference default is 1.2, which is accepted
+    fan.reference_density_kg_m3 = None;
     assert!(fan_pressure_pa_at_flow(&fan, 100.0, 1.0, 1.2).is_ok());
 
     let fan = ax_500();
@@ -303,8 +265,6 @@ fn a_non_positive_reference_density_speed_ratio_or_air_density_is_refused() {
             .message(),
         "airDensityKgM3 must be positive."
     );
-    // fanEfficiencyAtFlow does not assert the speed ratio in the reference either: a zero
-    // ratio is an infinite reference flow, which clamps to the last efficiency.
     assert_eq!(fan_efficiency_at_flow(&fan, 100.0, 0.0).unwrap(), 0.67);
 }
 
@@ -332,8 +292,6 @@ fn a_non_positive_efficiency_is_refused() {
 #[test]
 fn a_system_curve_the_fan_never_meets_is_refused() {
     let fan = ax_500();
-    // The reference scans `[max(minFlow, maxFlow * 0.05), maxFlow]` and refuses when no
-    // bracketed root is found, rather than returning a clamp.
     let error =
         solve_fan_system_intersection(&FanSystemIntersectionInput::new(&fan, 1.14), |_flow_m3_s| {
             Ok(10_000.0)
@@ -343,7 +301,6 @@ fn a_system_curve_the_fan_never_meets_is_refused() {
         error.message(),
         "No bracketed root was found in the requested interval."
     );
-    // A system curve that cannot be evaluated is refused as well, from inside the scan.
     let error =
         solve_fan_system_intersection(&FanSystemIntersectionInput::new(&fan, 1.14), |_flow_m3_s| {
             Err(drafthouse_engine::DomainError::new("no system curve"))
@@ -401,18 +358,12 @@ fn non_positive_estimate_inputs_are_refused_and_named() {
         let error = estimate_airflow_from_fan_power(input).expect_err("must refuse");
         assert_eq!(error.message(), name);
     }
-    // A non-positive shaft power is refused by the motor chooser.
     assert_eq!(
         choose_standard_motor(0.0, 0.96, 1.1).unwrap_err().message(),
         "shaftPowerKW must be positive."
     );
 }
 
-/* ---------------- issue #59: the record's rated speed, the affinity legs and the named limit ---- */
-
-/// The AX-500 record as the selector carries it: the physics record above, the fixture's own speed
-/// window `[0.70, 1.13]`, and the rated speed its recorded curve is published at — 233 rpm, the
-/// speed its own stack diameter gives at one blade tip speed across the fan family.
 fn ax_500_selection() -> SelectionFan {
     SelectionFan {
         physics: ax_500(),
@@ -426,8 +377,6 @@ fn ax_500_selection() -> SelectionFan {
 #[test]
 fn ratio_one_reproduces_the_recorded_curve_exactly() {
     let fan = ax_500();
-    // The recorded curve **is** the ratio-1.0 curve: at ratio 1.0 every reading is the tabulated
-    // point itself, bit for bit - no scaling, no interpolation, no clamp.
     for point in &fan.curve {
         assert_eq!(
             fan_pressure_pa_at_flow(&fan, point.flow_m3_s, 1.0, 1.2).unwrap(),
@@ -455,9 +404,6 @@ fn ratio_one_reproduces_the_recorded_curve_exactly() {
 
 #[test]
 fn ratio_078_matches_the_fixtures_recorded_operating_point() {
-    // The fixture's recorded run sits at speed ratio 0.78 on AX-500; its recorded operating point
-    // is `validation/test-vectors.json`'s `fan` vector (the same numbers the cockpit's anchored run
-    // carries), and the rpm behind it is the record's own rated speed times the ratio.
     let fan = ax_500();
     let result = solve(&fan, 1.14, 0.78);
     agrees(result.flow_m3_s, 129.727648, "0.78 flowM3S");
@@ -472,10 +418,6 @@ fn ratio_078_matches_the_fixtures_recorded_operating_point() {
 #[test]
 fn the_power_leg_is_the_third_power_of_the_speed_ratio_from_the_recorded_curve() {
     let fan = ax_500();
-    // The record stores no power: the engine computes it from the recorded curve, and along the
-    // affinity family - one fixed reference flow - it carries the flow leg (n^1) times the pressure
-    // leg (n^2): the third power. A compared value has to MOVE here for the mutation proof to mean
-    // anything, so the assertion names the n^2 law it must not be.
     for reference_flow in [80.0, 130.0, 200.0] {
         let reference_pressure = fan_pressure_pa_at_flow(&fan, reference_flow, 1.0, 1.2).unwrap();
         let reference_power =
@@ -504,12 +446,9 @@ fn the_power_leg_is_the_third_power_of_the_speed_ratio_from_the_recorded_curve()
 #[test]
 fn an_out_of_band_ratio_is_a_named_limit_and_the_rpm_is_the_records_own_datum() {
     let fan = ax_500_selection();
-    // Inside the record's own band there is no limit to report.
     assert_eq!(fan.speed_ratio_limit(0.70), None);
     assert_eq!(fan.speed_ratio_limit(0.78), None);
     assert_eq!(fan.speed_ratio_limit(1.13), None);
-    // Outside it the outcome is named - the fan, the ratio asked for, the record's band - never a
-    // ratio clamped into the band and reported as if the engine had evaluated it.
     assert_eq!(
         fan.speed_ratio_limit(1.50),
         Some(FanSpeedRatioLimit {
@@ -528,11 +467,9 @@ fn an_out_of_band_ratio_is_a_named_limit_and_the_rpm_is_the_records_own_datum() 
             max: 1.13,
         })
     );
-    // The same check at the band level - the adapter's own call shape, no record rebuilt.
     assert!(fan_speed_ratio_limit("AX-500", [0.70, 1.13], 1.50).is_some());
     assert!(fan_speed_ratio_limit("AX-500", [0.70, 1.13], 1.00).is_none());
 
-    // The rpm read-out is the record's datum times the ratio; a record without one has no rpm.
     assert!((fan.rpm_at_speed_ratio(1.0).unwrap() - 233.0).abs() < 1e-12);
     let mut no_datum = ax_500_selection();
     no_datum.nominal_rpm = None;

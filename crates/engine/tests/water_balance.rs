@@ -1,31 +1,9 @@
-//! Water balance — the JavaScript suite's expectations for `src/core/waterBalance.js`,
-//! ported test for test.
-//!
-//! Sources, quoted per test:
-//!
-//! * `validation/test-vectors.json` (family `waterBalance`) — the two recorded cases,
-//!   reproduced against the same `psychrometricState` inlet `tests/vectors.test.js` builds
-//!   and at the same 1e-6 relative tolerance it uses.
-//! * `tests/water-nozzle.test.js` — the conservation expectation (`makeup` equals the sum of
-//!   evaporation, drift and blowdown).
-//! * `tests/water-balance-validation.test.js` (issue #16) — the refusals this module now
-//!   shares with the reference, input for input and message for message, plus the
-//!   zero-valued cases that must stay legitimate.
-//! * `tests/worked.test.js` — the worked water balance of the design cell (the outlet
-//!   humidity ratio is read from the reference and quoted below).
-//! * `src/core/waterBalance.js` — the formulas, the default arguments (`driftKgS` 0,
-//!   `cyclesOfConcentration` 4), the `Math.max(0, …)` floors, the guard order and the guard
-//!   messages.
-//!
-//! The JavaScript engine is the specification; nothing here re-derives a value.
-
-use serde_json::Value;
 use drafthouse_engine::{
     cooling_tower_water_balance, drift_loss_kg_s, evaporation_from_air_mass_balance,
     psychrometric_state, PsychrometricStateInput, WaterBalanceInput,
 };
+use serde_json::Value;
 
-/// The tolerance `tests/vectors.test.js` uses.
 const VECTOR_TOLERANCE: f64 = 1e-6;
 
 fn agrees(actual: f64, expected: f64, label: &str) {
@@ -51,9 +29,6 @@ fn number(value: &Value, key: &str) -> f64 {
         .unwrap_or_else(|| panic!("{key} is not a number in {value}"))
 }
 
-/* ---------------- recorded vectors ---------------- */
-
-/// `validation/test-vectors.json`, family `waterBalance`.
 #[test]
 fn the_recorded_water_balance_vectors_reproduce() {
     let file = vectors();
@@ -95,8 +70,6 @@ fn the_recorded_water_balance_vectors_reproduce() {
     }
 }
 
-/* ---------------- tests/water-nozzle.test.js, ported ---------------- */
-
 #[test]
 fn water_balance_conserves_makeup_equals_evaporation_plus_drift_plus_blowdown() {
     let drift_kg_s = drift_loss_kg_s(200.0, 10.0).unwrap();
@@ -114,13 +87,8 @@ fn water_balance_conserves_makeup_equals_evaporation_plus_drift_plus_blowdown() 
     assert_eq!(drift_kg_s, 0.002);
 }
 
-/* ---------------- tests/worked.test.js, ported ---------------- */
-
 #[test]
 fn the_worked_water_balance_of_the_design_cell_closes() {
-    // The leaving humidity ratio of the design cell (33/27 °C air, 42/32 °C water, L/G 1.5):
-    // read from the reference's `workedOutletAir`, which is a worked-steps renderer and
-    // deliberately not ported.
     const OUTLET_HUMIDITY_RATIO: f64 = 0.042764593386655496;
     let inlet = psychrometric_state(PsychrometricStateInput::from_wet_bulb(33.0, 27.0)).unwrap();
     assert_eq!(inlet.humidity_ratio, 0.0202263990025044);
@@ -144,8 +112,6 @@ fn the_worked_water_balance_of_the_design_cell_closes() {
         "worked blowdownKgS",
     );
     agrees(balance.makeup_kg_s, 4.006790112737972, "worked makeupKgS");
-    // The rule-of-thumb sanity check of the JavaScript test: ~1 % of circulating flow per
-    // 5.5 K of range.
     let evaporation_pct = 100.0 * balance.evaporation_kg_s / 200.0;
     assert!(
         evaporation_pct > 1.0 && evaporation_pct < 2.5,
@@ -153,10 +119,6 @@ fn the_worked_water_balance_of_the_design_cell_closes() {
     );
 }
 
-/* ---------------- default arguments ---------------- */
-
-/// `src/core/waterBalance.js`: `coolingTowerWaterBalance({ evaporationKgS })` — `driftKgS`
-/// defaults to 0 and `cyclesOfConcentration` to 4, and each default is independent.
 #[test]
 fn the_reference_default_arguments_apply_when_the_field_is_absent() {
     let defaults = WaterBalanceInput::new(4.5);
@@ -167,7 +129,6 @@ fn the_reference_default_arguments_apply_when_the_field_is_absent() {
     assert_eq!(balance.drift_kg_s, 0.0);
     assert_eq!(balance.blowdown_kg_s, 1.5);
     assert_eq!(balance.makeup_kg_s, 6.0);
-    // The same request with both defaults spelled out is the same request.
     let explicit = cooling_tower_water_balance(
         &WaterBalanceInput::new(4.5)
             .with_drift_kg_s(0.0)
@@ -175,7 +136,6 @@ fn the_reference_default_arguments_apply_when_the_field_is_absent() {
     )
     .unwrap();
     assert_eq!(balance, explicit);
-    // Overriding one default leaves the other in place.
     let drift_only =
         cooling_tower_water_balance(&WaterBalanceInput::new(4.5).with_drift_kg_s(0.002)).unwrap();
     assert_eq!(drift_only.drift_kg_s, 0.002);
@@ -188,11 +148,8 @@ fn the_reference_default_arguments_apply_when_the_field_is_absent() {
     assert_eq!(cycles_only.makeup_kg_s, 4.5 + 4.5 / 7.0);
 }
 
-/* ---------------- the floors ---------------- */
-
 #[test]
 fn blowdown_is_floored_at_zero_while_makeup_still_sums_the_losses() {
-    // `0.5 / (4 − 1) − 1.0` is below zero, so the reference's floor returns zero.
     let balance = cooling_tower_water_balance(
         &WaterBalanceInput::new(0.5)
             .with_drift_kg_s(1.0)
@@ -203,15 +160,8 @@ fn blowdown_is_floored_at_zero_while_makeup_still_sums_the_losses() {
     assert_eq!(balance.makeup_kg_s, 1.5);
 }
 
-/// The reference's floors are `Math.max(0, …)`, which returns `NaN` for a `NaN` input; a
-/// plain Rust `value.max(0.0)` would silently return `0` and hide the broken input.
-///
-/// The NaN path is now reached through `cyclesOfConcentration`, which still passes its own
-/// guard for a NaN (`NaN <= 1.0` is false, the leniency the module header states); the NaN
-/// a humidity ratio used to carry is refused before the floor since issue #16.
 #[test]
 fn the_floors_do_not_swallow_a_nan() {
-    // Condensation floors to +0, not to −0.
     let condensed = evaporation_from_air_mass_balance(1.0, 0.02, 0.01).unwrap();
     assert_eq!(condensed, 0.0);
     assert!(condensed.is_sign_positive());
@@ -222,8 +172,6 @@ fn the_floors_do_not_swallow_a_nan() {
     assert!(balance.blowdown_kg_s.is_nan());
     assert!(balance.makeup_kg_s.is_nan());
 }
-
-/* ---------------- refusal behaviour, in the reference's guard order ---------------- */
 
 #[test]
 fn a_non_positive_or_non_finite_dry_air_mass_flow_is_refused() {
@@ -240,8 +188,6 @@ fn a_non_positive_or_non_finite_dry_air_mass_flow_is_refused() {
 
 #[test]
 fn a_non_positive_circulating_flow_is_refused_before_the_drift_ppm_check() {
-    // Guard order: the flow assertion is the reference's first statement, so a request that
-    // breaks both rules is refused by the flow rule.
     let error = drift_loss_kg_s(0.0, -1.0).expect_err("must refuse");
     assert_eq!(
         error.message(),
@@ -255,7 +201,6 @@ fn a_non_positive_circulating_flow_is_refused_before_the_drift_ppm_check() {
         drift_loss_kg_s(200.0, -1.0).unwrap_err().message(),
         "Drift ppm cannot be negative."
     );
-    // A zero ppm is a legitimate drift-free design and is not refused.
     assert_eq!(drift_loss_kg_s(200.0, 0.0).unwrap(), 0.0);
     assert_eq!(drift_loss_kg_s(200.0, 10.0).unwrap(), 0.002);
 }
@@ -269,8 +214,6 @@ fn cycles_of_concentration_at_or_below_one_is_refused_first() {
         .expect_err("must refuse");
         assert_eq!(error.message(), "Cycles of concentration must exceed 1.");
     }
-    // The guard is the first statement, so a request that also carries a NaN evaporation is
-    // refused by the cycles rule rather than run through the arithmetic.
     let error = cooling_tower_water_balance(
         &WaterBalanceInput::new(f64::NAN).with_cycles_of_concentration(1.0),
     )
@@ -278,9 +221,6 @@ fn cycles_of_concentration_at_or_below_one_is_refused_first() {
     assert_eq!(error.message(), "Cycles of concentration must exceed 1.");
 }
 
-/// `tests/water-balance-validation.test.js` (issue #16): the humidity ratios of the air-mass
-/// balance are refused when non-finite or negative; a zero ratio (dry air) and the
-/// condensation floor are not refused, and the flow guard stays first.
 #[test]
 fn a_non_finite_or_negative_humidity_ratio_is_refused_while_zero_is_not() {
     for ratio in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
@@ -315,7 +255,6 @@ fn a_non_finite_or_negative_humidity_ratio_is_refused_while_zero_is_not() {
             "outlet humidity ratio {ratio}"
         );
     }
-    // A zero humidity ratio is dry air: it computes. (Condensation still floors at zero.)
     agrees(
         evaporation_from_air_mass_balance(10.0, 0.0, 0.02).unwrap(),
         0.2,
@@ -325,7 +264,6 @@ fn a_non_finite_or_negative_humidity_ratio_is_refused_while_zero_is_not() {
         evaporation_from_air_mass_balance(10.0, 0.02, 0.0).unwrap(),
         0.0
     );
-    // The flow assertion is still the reference's first statement.
     assert_eq!(
         evaporation_from_air_mass_balance(0.0, f64::NAN, 0.02)
             .unwrap_err()
@@ -334,8 +272,6 @@ fn a_non_finite_or_negative_humidity_ratio_is_refused_while_zero_is_not() {
     );
 }
 
-/// Issue #16: `driftLossKgS` refuses a non-finite ppm (its `< 0` check could not: `NaN < 0.0`
-/// is false), keeping the negative refusal, and a zero ppm stays a legitimate design.
 #[test]
 fn a_non_finite_drift_ppm_is_refused_while_zero_is_not() {
     for ppm in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
@@ -353,9 +289,6 @@ fn a_non_finite_drift_ppm_is_refused_while_zero_is_not() {
     assert_eq!(drift_loss_kg_s(200.0, 10.0).unwrap(), 0.002);
 }
 
-/// Issue #16: the balance refuses a negative or non-finite loss on either input — the two
-/// paths into `driftKgS` now agree — while a zero loss stays legitimate on both (the no-load
-/// balance, and `driftKgS`'s documented default).
 #[test]
 fn a_negative_or_non_finite_balance_loss_is_refused_while_zero_is_not() {
     for evaporation in [-5.0, -0.001] {
@@ -376,7 +309,6 @@ fn a_negative_or_non_finite_balance_loss_is_refused_while_zero_is_not() {
             "evaporation {evaporation}"
         );
     }
-    // The issue's second reproduction: both losses negative, refused by the first guard.
     assert_eq!(
         cooling_tower_water_balance(&WaterBalanceInput::new(-5.0).with_drift_kg_s(-1.0))
             .unwrap_err()
@@ -396,7 +328,6 @@ fn a_negative_or_non_finite_balance_loss_is_refused_while_zero_is_not() {
         "driftKgS must be a finite number."
     );
 
-    // Zero on either input computes: no load, and the drift-free default.
     let no_load = cooling_tower_water_balance(&WaterBalanceInput::new(0.0)).unwrap();
     assert_eq!(no_load.blowdown_kg_s, 0.0);
     assert_eq!(no_load.makeup_kg_s, 0.0);
@@ -404,8 +335,6 @@ fn a_negative_or_non_finite_balance_loss_is_refused_while_zero_is_not() {
         cooling_tower_water_balance(&WaterBalanceInput::new(4.5).with_drift_kg_s(0.0)).unwrap();
     assert_eq!(zero_drift.blowdown_kg_s, 1.5);
     assert_eq!(zero_drift.makeup_kg_s, 6.0);
-    // A zero evaporation with a real drift is the no-load case with drift: makeup is the
-    // drift alone, blowdown floors at zero.
     let drift_only = cooling_tower_water_balance(
         &WaterBalanceInput::new(0.0).with_drift_kg_s(drift_loss_kg_s(200.0, 10.0).unwrap()),
     )

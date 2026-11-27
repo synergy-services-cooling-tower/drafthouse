@@ -1,28 +1,9 @@
-//! Performance-curve handling — the JavaScript suite's expectations for
-//! `src/core/performanceCurve.js`, ported test for test.
-//!
-//! Sources, quoted per test:
-//!
-//! * `tests/performanceCurve.test.js` — an exact grid point interpolates, the inverse solve
-//!   recovers the flow, and a matching test point evaluates to 100 % capability. The grid is
-//!   `src/data/samplePerformanceCurves.js`, quoted in `sample_grid` below.
-//! * `validation/test-vectors.json` (family `performanceCurve`) — the two recorded cases are
-//!   replayed in `rust/tests/vectors.rs`.
-//! * `src/core/performanceCurve.js` — the 1e-9 corner tolerance, the `clampEnds: false`
-//!   extrapolation, the 8-record bounds floor, the 400-sample inverse scan and both refusal
-//!   messages.
-//!
-//! The JavaScript engine is the specification; nothing here re-derives a value.
-
 use drafthouse_engine::{
     evaluate_performance_curve_capability, performance_curve_bounds,
     predict_cold_water_from_performance_curves, predict_water_flow_from_performance_curves,
     PerformanceCurveRecord,
 };
 
-/// `samplePerformanceCurveRecords` — the 45-point grid of
-/// `src/data/samplePerformanceCurves.js`, cold-water values included (the JavaScript engine's
-/// own output for the generator's formula).
 fn sample_grid() -> Vec<PerformanceCurveRecord> {
     let mut records = Vec::new();
     for wet_bulb_c in [24.0_f64, 27.0, 30.0] {
@@ -47,8 +28,6 @@ fn sample_grid() -> Vec<PerformanceCurveRecord> {
 
 #[test]
 fn an_exact_grid_point_interpolates_and_the_inverse_solve_recovers_the_flow() {
-    // tests/performanceCurve.test.js: `|coldWaterC - 32.8| < 1e-9` at (27, 10, 200), and
-    // `|waterFlowKgS - 200| < 1e-6` for the inverse solve against that same temperature.
     let records = sample_grid();
     let direct = predict_cold_water_from_performance_curves(&records, 27.0, 10.0, 200.0)
         .expect("interpolates");
@@ -58,9 +37,6 @@ fn an_exact_grid_point_interpolates_and_the_inverse_solve_recovers_the_flow() {
         direct.cold_water_c
     );
     assert!(!direct.extrapolated);
-    // `bracketValues` returns the FIRST pair that contains the target, and an exact member is
-    // contained by its left pair: a test point on the grid line interpolates to that line, it
-    // does not collapse the bracket (only a target at or beyond an end does).
     assert_eq!(direct.wet_bulb_bracket_c, (24.0, 27.0));
     assert_eq!(direct.range_bracket_c, (8.0, 10.0));
 
@@ -76,7 +52,6 @@ fn an_exact_grid_point_interpolates_and_the_inverse_solve_recovers_the_flow() {
 
 #[test]
 fn a_matching_test_point_evaluates_to_one_hundred_percent_capability() {
-    // tests/performanceCurve.test.js: both the ratio and the leaving-water deviation are 0.
     let records = sample_grid();
     let result = evaluate_performance_curve_capability(&records, 27.0, 10.0, 32.8, 200.0)
         .expect("evaluates");
@@ -91,15 +66,12 @@ fn a_matching_test_point_evaluates_to_one_hundred_percent_capability() {
 
 #[test]
 fn a_mid_cell_point_brackets_on_both_axes() {
-    // src/core/performanceCurve.js: `bracketValues` collapses to the ends at or beyond them,
-    // and interpolates the four corner curves in between.
     let records = sample_grid();
     let result = predict_cold_water_from_performance_curves(&records, 25.5, 11.0, 180.0)
         .expect("interpolates");
     assert_eq!(result.wet_bulb_bracket_c, (24.0, 27.0));
     assert_eq!(result.range_bracket_c, (10.0, 12.0));
     assert!(!result.extrapolated);
-    // The four corner curves bracket the blended value: it never leaves their envelope.
     let corners = [
         predict_cold_water_from_performance_curves(&records, 24.0, 10.0, 180.0)
             .expect("corner")
@@ -121,15 +93,11 @@ fn a_mid_cell_point_brackets_on_both_axes() {
 
 #[test]
 fn a_point_outside_the_grid_is_flagged_and_extrapolated_not_clamped() {
-    // src/core/performanceCurve.js: the corner table is read with `clampEnds: false`, so a flow
-    // beyond the table continues the end pair's line, and `extrapolated` reports the grid flag.
     let records = sample_grid();
     let inside = predict_cold_water_from_performance_curves(&records, 27.0, 10.0, 280.0)
         .expect("interpolates");
     let beyond = predict_cold_water_from_performance_curves(&records, 27.0, 10.0, 400.0)
         .expect("extrapolates");
-    // The reference's flag reports the wet-bulb/range axes only; a flow beyond the table is
-    // still extrapolated (the value keeps rising) without raising the flag.
     assert!(!inside.extrapolated);
     assert!(!beyond.extrapolated);
     assert!(beyond.cold_water_c > inside.cold_water_c);
@@ -143,8 +111,6 @@ fn a_point_outside_the_grid_is_flagged_and_extrapolated_not_clamped() {
 
 #[test]
 fn an_incomplete_corner_is_refused_naming_the_corner() {
-    // src/core/performanceCurve.js: `interpolateCorner` refuses when fewer than two records
-    // carry the corner.
     let records: Vec<PerformanceCurveRecord> = sample_grid()
         .into_iter()
         .filter(|record| !(record.wet_bulb_c == 24.0 && record.range_c == 10.0))
@@ -159,7 +125,6 @@ fn an_incomplete_corner_is_refused_naming_the_corner() {
 
 #[test]
 fn a_record_set_below_the_grid_floor_is_refused() {
-    // src/core/performanceCurve.js: `records.length < 8` refuses before any interpolation.
     for count in [0_usize, 1, 7] {
         let records: Vec<PerformanceCurveRecord> = sample_grid().into_iter().take(count).collect();
         let error = performance_curve_bounds(&records).expect_err("must refuse");
@@ -168,7 +133,6 @@ fn a_record_set_below_the_grid_floor_is_refused() {
             "Performance curve requires a populated rectangular record set."
         );
     }
-    // Eight records are enough for the bounds (but not for every corner: a separate refusal).
     let eight: Vec<PerformanceCurveRecord> = sample_grid().into_iter().take(8).collect();
     assert!(performance_curve_bounds(&eight).is_ok());
 }
@@ -192,8 +156,6 @@ fn the_bounds_report_the_axis_ranges_of_the_grid() {
 
 #[test]
 fn the_corner_match_tolerance_is_the_reference_onee_nine() {
-    // `recordsAt` matches when both coordinates are within 1e-9 (strictly less than), so a
-    // record 5e-10 away is the corner and one 2e-9 away is not.
     let grid = sample_grid();
     let mut nudged = grid.clone();
     for record in nudged.iter_mut() {
@@ -223,8 +185,6 @@ fn the_corner_match_tolerance_is_the_reference_onee_nine() {
 
 #[test]
 fn the_inverse_scan_stays_inside_the_flow_bounds_it_reports() {
-    // The reference solves over `performanceCurveBounds(records).waterFlowKgS`; a temperature
-    // outside what the grid can produce leaves the bracket empty and is refused.
     let records = sample_grid();
     let error = predict_water_flow_from_performance_curves(&records, 27.0, 10.0, -50.0)
         .expect_err("must refuse");

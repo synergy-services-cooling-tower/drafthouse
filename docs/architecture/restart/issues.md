@@ -48,9 +48,10 @@ flowchart LR
   recorded steps natively and all 299 through the WASM build. Then the owner adds the required checks and
   `drover protection` passes.
 
-**D1. `design: landing page, wizard, results, calc steps, 3D tower`** `--design`
-- Blocked on: F0. Builds: mockups of [screens.md](screens.md) at 1440 and 390, in the one light theme, on
-  Blocks, in `docs/design/restart/`.
+**D1. `design: the cockpit screen`** `--design`
+- Blocked on: F0. Builds: the cockpit mockups of [screens.md](screens.md) at 1440 and 390, dark by default with
+  the light toggle, on Blocks tokens, in `docs/design/restart/`. The mockups approved on this ADR's branch are
+  its starting point.
 
 **E1. `engine: carry the physics, ct-engine and the WASM ABI into crates/`** `--serial engine`
 - Blocked on: F0. Builds: `crates/engine` (the physics, `lib.rs` moved as it is), `crates/cli` (the text
@@ -98,22 +99,22 @@ flowchart LR
 - Done when: screenshots of the four synthetic towers at 1440 and 390 match the approved design; a geometry
   change reuses the scene objects; no model, texture or environment file exists.
 
-**P3. `packages/wizard: steps, ranking, calc steps`**
-- Blocked on: P1, D1. Builds: the reducer, one file per step, the Blocks screens, the screen fixtures for
-  `blocks check`, the `local/guard` gate.
+**P3. `packages/wizard: the cockpit panels, ranking, calc drawer`**
+- Blocked on: P1, D1. Builds: the reducer, one file per panel in `src/steps/` (duty, build, ranking, picked, calc, compare,
+  scenarios), undo and redo, the Blocks screens, the screen fixtures for `blocks check`, the `local/guard` gate.
 - Done when: every state of [screens.md](screens.md) has a fixture with no guard finding; the wizard imports
   neither Three.js nor the tower.
 
-**W1. `apps/web: shell, landing page, prerender, speed gates`**
-- Blocked on: P1, E3, D1. Builds: the Vite app, the Blocks shell, the landing screen prerendered to HTML with the
-  default design's geometry and poster written in at build, the island trigger, the `local/first-load` and `local/lighthouse` gates.
+**W1. `apps/web: shell, prerender, speed gates`**
+- Blocked on: P1, E3, D1. Builds: the Vite app, the Blocks shell, the cockpit's first paint prerendered to HTML
+  with the default design's numbers and poster written in at build, the island trigger, the `local/first-load` and `local/lighthouse` gates.
 - Done when: first-load JavaScript is at most 120,000 bytes gzip on every route; a cold load requests neither
   the engine nor the tower chunk and one scroll requests both; Lighthouse mobile performance is 95 or more.
 
-**W2. `apps/web: the wizard and the live tower`**
-- Blocked on: W1, P2, P3. Builds: the wizard routes, the live update (cancel, rate at once, rank after the
-  pause), the full tower view, `.drover/verify.md` filled in.
-- Done when: verify drives duty to ranking to calc steps to the tower at 1440 and 390, and drags a duty slider
+**W2. `apps/web: the live cockpit`**
+- Blocked on: W1, P2, P3. Builds: the cockpit wired to the engine and the tower, the live update (cancel, rate at
+  once, rank after the pause), the phone sheets, `.drover/verify.md` filled in.
+- Done when: verify edits the duty, picks a row, opens the calc drawer and clicks a part at 1440 and 390, and drags a duty slider
   while a sizing runs: the tower and the numbers follow the drag; the gates stay green.
 
 **R1. `release: the site archive and the embed package`**
@@ -140,7 +141,7 @@ each change lands in the host repo is for its own lanes; none of its files are n
 - Done when: a dry run verifies a v1 dry-run archive and still verifies the cockpit archive pinned today.
 
 **S2. `drafthouse pins: staging to v1.0.0`**
-- Blocked on: S1, R1 and the tag. Done when: the staging site serves the new landing page and wizard.
+- Blocked on: S1, R1 and the tag. Done when: the staging site serves the new cockpit.
 
 **S3. `drafthouse catalog: every list the engine needs, and the engine mapping`** (waits for open question 1)
 - Builds: whatever the host's catalog lacks of the engine's `Catalog` ([shapes.md](shapes.md) section 2), and a
@@ -153,7 +154,7 @@ each change lands in the host repo is for its own lanes; none of its files are n
 - Done when: staging and production each build with the embed their own pin names.
 
 **S5. `admin: the sizing section`** `--design`
-- Blocked on: S3, S4. Builds: the wizard and tower mounted in admin on the real catalog; the page may compile
+- Blocked on: S3, S4. Builds: the cockpit and tower mounted in admin on the real catalog; the page may compile
   WebAssembly and start same-origin workers ([shapes.md](shapes.md) section 4).
 - Done when: a signed-in user sizes a tower on approved records in admin; no frame is involved.
 

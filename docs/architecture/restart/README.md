@@ -17,7 +17,7 @@ Open questions: (1) who supplies real tower cells and water-quality factors for 
 | 3. Rating must not wait behind sizing | Both: `rate` has its own worker, and the wizard cancels the running `size` on every edit. | [loading.md](loading.md) section 3, [tower3d.md](tower3d.md) section 2 |
 | 4. No TODO comments; serde in tests | Only `SAFETY:` and one doc line; a ban on `TODO`. The serde ban covers the engine's `src/` only. | [cutover.md](cutover.md) section 4, [adr.md](adr.md) last section |
 | 5. No internals of the private apps repo | Removed from the tree: its paths, its security policy file, its commit ids and what its code holds. The first commit of this branch still carries them: see the lane report. | every file |
-| Scope: no dark theme | One light theme, drawn at 1440 and 390. No theme switch. | [screens.md](screens.md) |
+| Scope: no dark theme | Superseded by the design amendments: one cockpit screen, dark by default with a light toggle, drawn at 1440 and 390. | [screens.md](screens.md) |
 
 ## Where each acceptance criterion is answered
 

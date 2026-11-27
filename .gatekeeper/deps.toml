@@ -2,3 +2,4 @@ growth = 10
 
 [cargo]
 blocks-cli = "`blocks check` at the Blocks pin, run by crates/blocks over the screen fixtures"
+serde_json = "the engine and cli tests read the recorded vectors and the commands' JSON replies (dev-dependency only)"

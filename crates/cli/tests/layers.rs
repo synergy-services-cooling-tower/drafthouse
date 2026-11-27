@@ -17,8 +17,9 @@
 //! The JavaScript engine is the specification; nothing here re-derives a physics value.
 
 use serde_json::Value;
-use synergy_drafthouse::{
-    check_stack_operating_envelope, cli, fill_pressure_drop_pa, fill_thermal_merkel_number,
+use drafthouse_cli as cli;
+use drafthouse_engine::{
+    check_stack_operating_envelope, fill_pressure_drop_pa, fill_thermal_merkel_number,
     layered_system_pressure_breakdown, resolve_fill_layers, system_pressure_breakdown,
     DriftCurvePoint, DriftEliminatorRecord, FanCurvePoint, FanPressureBasis, FanRecord, FillLayer,
     FillLimits, FillPressureCorrelation, FillRecord, FillStack, LayeredBreakdown,
@@ -677,7 +678,7 @@ fn the_recorded_fill_layer_vectors_reproduce() {
     // finding about the layered path, not a licence to move the vector.
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../validation/test-vectors.json"
+        "/../../validation/test-vectors.json"
     );
     let text = std::fs::read_to_string(path).unwrap_or_else(|error| panic!("read {path}: {error}"));
     let file: Value = serde_json::from_str(&text).unwrap_or_else(|error| panic!("parse: {error}"));

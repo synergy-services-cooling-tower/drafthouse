@@ -16,8 +16,9 @@
 //! The JavaScript engine is the specification; nothing here re-derives a physics value.
 
 use serde_json::Value;
-use synergy_drafthouse::{
-    cli, default_selection_requirements, rank_candidates, run_selection,
+use drafthouse_cli as cli;
+use drafthouse_engine::{
+    default_selection_requirements, rank_candidates, run_selection,
     select_cooling_tower_components, CatalogMetadata, DriftCurvePoint, DriftEliminatorRecord,
     FanCurvePoint, FanPressureBasis, FanRecord, FillLayer, FillLimits, FillPressureCorrelation,
     FillRecord, FillStack, NozzleRecord, Objective, SelectionCandidate, SelectionCatalog,
@@ -528,7 +529,7 @@ fn assert_close(actual: f64, expected: f64, relative: f64, label: &str) {
     );
 }
 
-fn identity(candidate: &synergy_drafthouse::SelectionCandidate) -> String {
+fn identity(candidate: &drafthouse_engine::SelectionCandidate) -> String {
     format!(
         "{}|{}|{}|{}|{}|{}",
         candidate.tower_id,
@@ -627,11 +628,11 @@ fn the_capacity_inverse_solve_is_pinned_and_self_consistent() {
     );
     // And the capability ratio is the reported available KaV/L over the required demand at the
     // required cold-water temperature.
-    let demand = synergy_drafthouse::merkel_demand(&synergy_drafthouse::MerkelInput {
+    let demand = drafthouse_engine::merkel_demand(&drafthouse_engine::MerkelInput {
         pressure_pa: result.requirements.pressure_pa,
         salinity_g_kg: result.requirements.salinity_g_kg,
-        integration: synergy_drafthouse::Integration::Chebyshev4,
-        ..synergy_drafthouse::MerkelInput::new(
+        integration: drafthouse_engine::Integration::Chebyshev4,
+        ..drafthouse_engine::MerkelInput::new(
             result.requirements.hot_water_c,
             result.requirements.target_cold_water_c,
             result.requirements.wet_bulb_c,
@@ -651,7 +652,7 @@ fn the_capacity_inverse_solve_is_pinned_and_self_consistent() {
 /// Re-evaluate one candidate's unit at one water flow, using only the public ported
 /// primitives — the same call sequence `selection.js` makes, built independently here.
 fn re_evaluate_unit(
-    candidate: &synergy_drafthouse::SelectionCandidate,
+    candidate: &drafthouse_engine::SelectionCandidate,
     requirements: &SelectionRequirements,
     water_mass_flow_kg_s: f64,
 ) -> f64 {
@@ -680,8 +681,8 @@ fn re_evaluate_unit(
         .water_quality_factors
         .get(&requirements.water_quality_class)
         .expect("the quality class is in the catalog");
-    let inlet_air = synergy_drafthouse::psychrometric_state(
-        synergy_drafthouse::PsychrometricStateInput::from_wet_bulb(
+    let inlet_air = drafthouse_engine::psychrometric_state(
+        drafthouse_engine::PsychrometricStateInput::from_wet_bulb(
             requirements.dry_bulb_c,
             requirements.wet_bulb_c,
         )
@@ -689,9 +690,9 @@ fn re_evaluate_unit(
     )
     .expect("the inlet state solves");
     let breakdown =
-        |flow_m3_s: f64| -> Result<SystemPressureBreakdown, synergy_drafthouse::DomainError> {
-            synergy_drafthouse::system_pressure_breakdown(
-                synergy_drafthouse::SystemPressureBreakdownInput {
+        |flow_m3_s: f64| -> Result<SystemPressureBreakdown, drafthouse_engine::DomainError> {
+            drafthouse_engine::system_pressure_breakdown(
+                drafthouse_engine::SystemPressureBreakdownInput {
                     tower: &tower.physics,
                     fill: &fill.physics,
                     fill_depth_m: candidate.fill_depth_m,
@@ -706,8 +707,8 @@ fn re_evaluate_unit(
                 },
             )
         };
-    let point = synergy_drafthouse::solve_fan_system_intersection(
-        &synergy_drafthouse::FanSystemIntersectionInput::new(
+    let point = drafthouse_engine::solve_fan_system_intersection(
+        &drafthouse_engine::FanSystemIntersectionInput::new(
             &fan.physics,
             inlet_air.moist_air_density_kg_m3,
         )
@@ -716,12 +717,12 @@ fn re_evaluate_unit(
     )
     .expect("the fan balance solves");
     let airside = breakdown(point.flow_m3_s).expect("the breakdown evaluates");
-    synergy_drafthouse::solve_cold_water_temperature(
-        &synergy_drafthouse::ColdWaterTemperatureInput {
+    drafthouse_engine::solve_cold_water_temperature(
+        &drafthouse_engine::ColdWaterTemperatureInput {
             pressure_pa: requirements.pressure_pa,
             salinity_g_kg: requirements.salinity_g_kg,
-            integration: synergy_drafthouse::Integration::Chebyshev4,
-            ..synergy_drafthouse::ColdWaterTemperatureInput::new(
+            integration: drafthouse_engine::Integration::Chebyshev4,
+            ..drafthouse_engine::ColdWaterTemperatureInput::new(
                 requirements.hot_water_c,
                 requirements.wet_bulb_c,
                 requirements.dry_bulb_c,
@@ -939,8 +940,8 @@ fn the_bundled_catalog_winners_are_the_issue_1_anchors() {
 /// The documented tie-break chain, recomputed in the test: objective metric, then electrical
 /// input, make-up water, total air-side pressure, capability ratio, capacity, identity.
 fn compare_documented(
-    a: &synergy_drafthouse::SelectionCandidate,
-    b: &synergy_drafthouse::SelectionCandidate,
+    a: &drafthouse_engine::SelectionCandidate,
+    b: &drafthouse_engine::SelectionCandidate,
     objective: Objective,
 ) -> std::cmp::Ordering {
     let optional = |left: Option<f64>, right: Option<f64>| match (left, right) {
@@ -1310,10 +1311,13 @@ fn no_money_ish_identifier_exists_anywhere_in_the_port() {
         "penalty",
     ];
     let mut sources = Vec::new();
-    collect_sources(
-        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
-        &mut sources,
-    );
+    let crates = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    for entry in std::fs::read_dir(&crates).expect("the crates directory reads") {
+        let source = entry.expect("the entry reads").path().join("src");
+        if source.is_dir() {
+            collect_sources(&source, &mut sources);
+        }
+    }
     assert!(
         sources.len() >= 10,
         "the port's source tree must be walked, found {}",

@@ -18,7 +18,7 @@
 //!   on stderr; stdout stays empty.
 //! * `2` — usage error (unknown command, missing or unparsable option).
 
-use crate::{
+use drafthouse_engine::{
     layered_system_pressure_breakdown, AirflowEstimateInput, CapabilityCondition,
     CapabilityUncertainty, CatalogMetadata, CharacteristicCapabilityInput,
     ColdWaterTemperatureInput, ConditionField, CrossflowGridInput, CrossflowStudyInput,
@@ -140,11 +140,11 @@ pub enum Failure {
     /// The command line itself is wrong.
     Usage(String),
     /// The physics refuses this input.
-    Domain(crate::DomainError),
+    Domain(drafthouse_engine::DomainError),
 }
 
-impl From<crate::DomainError> for Failure {
-    fn from(error: crate::DomainError) -> Self {
+impl From<drafthouse_engine::DomainError> for Failure {
+    fn from(error: drafthouse_engine::DomainError) -> Self {
         Failure::Domain(error)
     }
 }
@@ -315,7 +315,7 @@ fn psy(cli: &Cli) -> Result<String, Failure> {
     .with_pressure(pressure_pa)
     .with_enhancement_factor(enhancement_factor);
 
-    let state = crate::psychrometric_state(input)?;
+    let state = drafthouse_engine::psychrometric_state(input)?;
     let options = PsychrometricOptions { enhancement_factor };
     Ok(object(&[
         ("dryBulbC", number(state.dry_bulb_c)),
@@ -330,11 +330,11 @@ fn psy(cli: &Cli) -> Result<String, Failure> {
         ("enhancementFactor", number(state.enhancement_factor)),
         (
             "saturationVaporPressurePa",
-            number(crate::saturation_vapor_pressure_pa(state.dry_bulb_c)?),
+            number(drafthouse_engine::saturation_vapor_pressure_pa(state.dry_bulb_c)?),
         ),
         (
             "saturationHumidityRatio",
-            number(crate::saturation_humidity_ratio(
+            number(drafthouse_engine::saturation_humidity_ratio(
                 state.dry_bulb_c,
                 state.pressure_pa,
                 options,
@@ -342,7 +342,7 @@ fn psy(cli: &Cli) -> Result<String, Failure> {
         ),
         (
             "saturatedAirEnthalpyKJkgDryAir",
-            number(crate::saturated_air_enthalpy_kj_kg_dry_air(
+            number(drafthouse_engine::saturated_air_enthalpy_kj_kg_dry_air(
                 state.dry_bulb_c,
                 state.pressure_pa,
                 options,
@@ -353,7 +353,7 @@ fn psy(cli: &Cli) -> Result<String, Failure> {
 
 fn merkel(cli: &Cli) -> Result<String, Failure> {
     let input = merkel_input(cli)?;
-    let result = crate::merkel_demand(&input)?;
+    let result = drafthouse_engine::merkel_demand(&input)?;
     Ok(object(&[
         ("merkelNumber", number(result.merkel_number)),
         (
@@ -390,7 +390,7 @@ fn inverse(cli: &Cli) -> Result<String, Failure> {
         integration: cli.integration()?,
         inlet_enthalpy_convention: cli.convention()?,
     };
-    let result = crate::solve_cold_water_temperature(&input)?;
+    let result = drafthouse_engine::solve_cold_water_temperature(&input)?;
     Ok(object(&[
         ("coldWaterC", number(result.cold_water_c)),
         ("approachC", number(result.approach_c)),
@@ -421,13 +421,13 @@ fn airside(cli: &Cli) -> Result<String, Failure> {
         thermal_multiplier: cli.number_or("--thermal-multiplier", 1.0)?,
         pressure_multiplier: cli.number_or("--pressure-multiplier", 1.0)?,
     };
-    let result = crate::system_pressure_breakdown(input)?;
+    let result = drafthouse_engine::system_pressure_breakdown(input)?;
     Ok(airside_object(&result))
 }
 
 /// Every field the air-side breakdown reports, nested areas included — shared by the
 /// `airside` command and the selector's per-candidate output.
-fn airside_object(result: &crate::SystemPressureBreakdown) -> String {
+fn airside_object(result: &drafthouse_engine::SystemPressureBreakdown) -> String {
     let areas = result.areas;
     object(&[
         ("totalPa", number(result.total_pa)),
@@ -550,7 +550,7 @@ fn layers(cli: &Cli) -> Result<String, Failure> {
         .get("--fill-stack")
         .ok_or_else(|| Failure::Usage("layers needs --fill-stack".to_string()))?;
     let stack = fill_stack("--fill-stack", raw)?;
-    let terms = crate::resolve_fill_layers(&stack, &fills)?;
+    let terms = drafthouse_engine::resolve_fill_layers(&stack, &fills)?;
     let drift_eliminator = drift_record(cli)?;
     let fan = fan_record(cli)?;
     let result = layered_system_pressure_breakdown(LayeredBreakdownInput {
@@ -565,7 +565,7 @@ fn layers(cli: &Cli) -> Result<String, Failure> {
         thermal_multiplier: cli.number_or("--thermal-multiplier", 1.0)?,
         pressure_multiplier: cli.number_or("--pressure-multiplier", 1.0)?,
     })?;
-    let failures = crate::check_stack_operating_envelope(
+    let failures = drafthouse_engine::check_stack_operating_envelope(
         &terms,
         result.breakdown.water_loading_kg_m2_s,
         result.breakdown.dry_air_loading_kg_m2_s,
@@ -573,7 +573,7 @@ fn layers(cli: &Cli) -> Result<String, Failure> {
         cli.values.get("--quality-class").map(String::as_str),
     );
     if !failures.is_empty() {
-        return Err(Failure::Domain(crate::DomainError::new(
+        return Err(Failure::Domain(drafthouse_engine::DomainError::new(
             failures.join("\n"),
         )));
     }
@@ -616,7 +616,7 @@ fn layers_object(stack: &FillStack, result: &LayeredBreakdown) -> String {
 /// multipliers it was computed from, the limits it was checked against, what it sees
 /// (airflow, loadings, velocity) and what it contributes (drop, transfer number) — plus the
 /// running totals through it, whose last value is the stack total.
-fn layer_object(layer: &crate::FillLayerResult) -> String {
+fn layer_object(layer: &drafthouse_engine::FillLayerResult) -> String {
     object(&[
         ("position", layer.position.to_string()),
         ("label", json_string(&layer.label())),
@@ -692,7 +692,7 @@ fn pressure_object(pressure: &FillPressureCorrelation) -> String {
 }
 
 /// A fill's own operating limits, as the record declares them.
-fn limits_object(limits: &crate::FillLimits) -> String {
+fn limits_object(limits: &drafthouse_engine::FillLimits) -> String {
     object(&[
         (
             "minWaterLoadingKgM2S",
@@ -727,8 +727,8 @@ fn fan(cli: &Cli) -> Result<String, Failure> {
     if let Some(minimum_flow_fraction) = cli.number("--min-flow-fraction")? {
         input = input.with_minimum_flow_fraction(minimum_flow_fraction);
     }
-    let limits = crate::fan_operating_limits(&fan, input.speed_ratio)?;
-    let system_pressure_fn: Box<dyn Fn(f64) -> Result<f64, crate::DomainError>> =
+    let limits = drafthouse_engine::fan_operating_limits(&fan, input.speed_ratio)?;
+    let system_pressure_fn: Box<dyn Fn(f64) -> Result<f64, drafthouse_engine::DomainError>> =
         if cli.has("--system-breakdown") {
             let tower = tower_record(cli)?;
             let fill = fill_record(cli)?;
@@ -740,7 +740,7 @@ fn fan(cli: &Cli) -> Result<String, Failure> {
             let fan = fan.clone();
             Box::new(move |flow_m3_s: f64| {
                 Ok(
-                    crate::system_pressure_breakdown(SystemPressureBreakdownInput {
+                    drafthouse_engine::system_pressure_breakdown(SystemPressureBreakdownInput {
                         tower: &tower,
                         fill: &fill,
                         fill_depth_m,
@@ -761,7 +761,7 @@ fn fan(cli: &Cli) -> Result<String, Failure> {
             let quadratic_pa = cli.number_or("--system-b", 0.0)?;
             Box::new(move |flow_m3_s: f64| Ok(constant_pa + quadratic_pa * flow_m3_s.powi(2)))
         };
-    let result = crate::solve_fan_system_intersection(&input, &*system_pressure_fn)?;
+    let result = drafthouse_engine::solve_fan_system_intersection(&input, &*system_pressure_fn)?;
     Ok(object(&[
         ("minFlowM3S", number(limits.min_flow_m3_s)),
         ("maxFlowM3S", number(limits.max_flow_m3_s)),
@@ -781,7 +781,7 @@ fn envelope(cli: &Cli) -> Result<String, Failure> {
         .values
         .get("--quality")
         .ok_or_else(|| Failure::Usage("envelope needs --quality".to_string()))?;
-    let result = crate::check_fill_operating_envelope(FillOperatingEnvelopeInput {
+    let result = drafthouse_engine::check_fill_operating_envelope(FillOperatingEnvelopeInput {
         fill: &fill,
         water_loading_kg_m2_s: cli.required_number("--water-loading")?,
         dry_air_loading_kg_m2_s: cli.required_number("--dry-air-loading")?,
@@ -797,7 +797,7 @@ fn envelope(cli: &Cli) -> Result<String, Failure> {
 }
 
 fn estimate(cli: &Cli) -> Result<String, Failure> {
-    let result = crate::estimate_airflow_from_fan_power(AirflowEstimateInput {
+    let result = drafthouse_engine::estimate_airflow_from_fan_power(AirflowEstimateInput {
         reference_volumetric_flow_m3_s: cli.required_number("--ref-flow")?,
         reference_fan_power_kw: cli.required_number("--ref-power")?,
         actual_fan_power_kw: cli.required_number("--actual-power")?,
@@ -808,7 +808,7 @@ fn estimate(cli: &Cli) -> Result<String, Failure> {
 }
 
 fn motor(cli: &Cli) -> Result<String, Failure> {
-    let selection = crate::choose_standard_motor(
+    let selection = drafthouse_engine::choose_standard_motor(
         cli.required_number("--shaft-power")?,
         cli.number_or("--drive-efficiency", 0.96)?,
         cli.number_or("--service-factor", 1.1)?,
@@ -830,7 +830,7 @@ fn motor(cli: &Cli) -> Result<String, Failure> {
 /* ---------------- water balance ---------------- */
 
 fn evaporation(cli: &Cli) -> Result<String, Failure> {
-    let evaporation_kg_s = crate::evaporation_from_air_mass_balance(
+    let evaporation_kg_s = drafthouse_engine::evaporation_from_air_mass_balance(
         cli.required_number("--dry-air-mass-flow")?,
         cli.required_number("--inlet-humidity-ratio")?,
         cli.required_number("--outlet-humidity-ratio")?,
@@ -839,7 +839,7 @@ fn evaporation(cli: &Cli) -> Result<String, Failure> {
 }
 
 fn drift(cli: &Cli) -> Result<String, Failure> {
-    let drift_kg_s = crate::drift_loss_kg_s(
+    let drift_kg_s = drafthouse_engine::drift_loss_kg_s(
         cli.required_number("--circulating-water")?,
         cli.required_number("--drift-ppm")?,
     )?;
@@ -856,7 +856,7 @@ fn balance(cli: &Cli) -> Result<String, Failure> {
     if let Some(cycles_of_concentration) = cli.number("--cycles")? {
         input = input.with_cycles_of_concentration(cycles_of_concentration);
     }
-    let result = crate::cooling_tower_water_balance(&input)?;
+    let result = drafthouse_engine::cooling_tower_water_balance(&input)?;
     Ok(object(&[
         ("evaporationKgS", number(result.evaporation_kg_s)),
         ("driftKgS", number(result.drift_kg_s)),
@@ -978,7 +978,7 @@ fn convention_name(convention: InletEnthalpyConvention) -> &'static str {
 }
 
 /// The `evaluateCharacteristicCapability` result object, field for field.
-fn capability_object(result: &crate::CharacteristicCapability) -> String {
+fn capability_object(result: &drafthouse_engine::CharacteristicCapability) -> String {
     let curves = result
         .curves
         .iter()
@@ -1030,7 +1030,7 @@ fn capability_object(result: &crate::CharacteristicCapability) -> String {
 
 fn capability(cli: &Cli) -> Result<String, Failure> {
     let input = capability_input(cli)?;
-    let result = crate::evaluate_characteristic_capability(&input)?;
+    let result = drafthouse_engine::evaluate_characteristic_capability(&input)?;
     Ok(capability_object(&result))
 }
 
@@ -1048,7 +1048,7 @@ fn capability_monte_carlo(cli: &Cli) -> Result<String, Failure> {
         samples: cli.integer("--samples", 1000)?,
         seed: cli.number_or("--seed", 20260813.0)?,
     };
-    let result = crate::monte_carlo_characteristic_capability(&input)?;
+    let result = drafthouse_engine::monte_carlo_characteristic_capability(&input)?;
     Ok(object(&[
         ("samplesRequested", result.samples_requested.to_string()),
         ("samplesAccepted", result.samples_accepted.to_string()),
@@ -1093,7 +1093,7 @@ fn natural_draft(cli: &Cli) -> Result<String, Failure> {
         min_face_velocity_ms: cli.number_or("--min-face-velocity", 0.2)?,
         max_face_velocity_ms: cli.number_or("--max-face-velocity", 6.0)?,
     };
-    let result = crate::solve_natural_draft_counterflow(&input)?;
+    let result = drafthouse_engine::solve_natural_draft_counterflow(&input)?;
     Ok(object(&[
         ("model", json_string(MODEL_NATURAL_DRAFT)),
         (
@@ -1167,7 +1167,7 @@ fn range_pair(limits: (f64, f64)) -> String {
 }
 
 fn curve_bounds(cli: &Cli) -> Result<String, Failure> {
-    let bounds = crate::performance_curve_bounds(&performance_curve_records(cli)?)?;
+    let bounds = drafthouse_engine::performance_curve_bounds(&performance_curve_records(cli)?)?;
     Ok(object(&[
         ("wetBulbC", range_pair(bounds.wet_bulb_c)),
         ("rangeC", range_pair(bounds.range_c)),
@@ -1178,7 +1178,7 @@ fn curve_bounds(cli: &Cli) -> Result<String, Failure> {
 
 fn curve_predict(cli: &Cli) -> Result<String, Failure> {
     let records = performance_curve_records(cli)?;
-    let prediction = crate::predict_cold_water_from_performance_curves(
+    let prediction = drafthouse_engine::predict_cold_water_from_performance_curves(
         &records,
         cli.required_number("--wb")?,
         cli.required_number("--range")?,
@@ -1206,7 +1206,7 @@ fn curve_predict(cli: &Cli) -> Result<String, Failure> {
 
 fn curve_flow(cli: &Cli) -> Result<String, Failure> {
     let records = performance_curve_records(cli)?;
-    let prediction = crate::predict_water_flow_from_performance_curves(
+    let prediction = drafthouse_engine::predict_water_flow_from_performance_curves(
         &records,
         cli.required_number("--wb")?,
         cli.required_number("--range")?,
@@ -1223,7 +1223,7 @@ fn curve_flow(cli: &Cli) -> Result<String, Failure> {
 
 fn curve_capability(cli: &Cli) -> Result<String, Failure> {
     let records = performance_curve_records(cli)?;
-    let result = crate::evaluate_performance_curve_capability(
+    let result = drafthouse_engine::evaluate_performance_curve_capability(
         &records,
         cli.required_number("--wb")?,
         cli.required_number("--range")?,
@@ -1330,7 +1330,7 @@ fn select(cli: &Cli) -> Result<String, Failure> {
         .with_objective(objective)
         .with_max_results(max_results)
         .with_requirements(requirements);
-    let run = crate::run_selection(&input)?;
+    let run = drafthouse_engine::run_selection(&input)?;
 
     let capacities_resolved = run
         .candidates
@@ -1400,7 +1400,7 @@ fn select(cli: &Cli) -> Result<String, Failure> {
 /// value, not a second reading of the record.
 fn selection_inputs_object(
     cli: &Cli,
-    run: &crate::SelectionRun,
+    run: &drafthouse_engine::SelectionRun,
     candidate: &SelectionCandidate,
 ) -> String {
     object(&[
@@ -1550,7 +1550,7 @@ fn fill_layer_steps(candidate: &SelectionCandidate) -> Vec<String> {
 /// `reference` / `kind`) and the `result` the steps resolve to. Every `value` is read from
 /// the selection result the engine already computed; the sheet re-derives nothing, exactly
 /// as `worked.js` calls the same core functions rather than restating their physics.
-fn selection_worked_object(run: &crate::SelectionRun, candidate: &SelectionCandidate) -> String {
+fn selection_worked_object(run: &drafthouse_engine::SelectionRun, candidate: &SelectionCandidate) -> String {
     let requirements = &run.requirements;
     let inlet = &run.inlet_air_state;
     let thermal = &candidate.thermal;
@@ -2141,7 +2141,7 @@ fn candidate_identity(candidate: &SelectionCandidate) -> String {
 }
 
 /// The whole feasible set's order under each objective, as identity strings.
-fn orders_object(run: &crate::SelectionRun) -> String {
+fn orders_object(run: &drafthouse_engine::SelectionRun) -> String {
     let entries = Objective::ALL
         .iter()
         .map(|objective| {
@@ -2188,7 +2188,7 @@ fn crossflow_input(cli: &Cli) -> Result<CrossflowGridInput, Failure> {
 }
 
 fn crossflow(cli: &Cli) -> Result<String, Failure> {
-    let result = crate::solve_crossflow_grid(&crossflow_input(cli)?)?;
+    let result = drafthouse_engine::solve_crossflow_grid(&crossflow_input(cli)?)?;
     Ok(object(&[
         ("model", json_string(result.model())),
         ("coldWaterC", number(result.cold_water_c)),
@@ -2236,7 +2236,7 @@ fn convergence(cli: &Cli) -> Result<String, Failure> {
     if let Some(safety_factor) = cli.number("--safety-factor")? {
         input = input.with_safety_factor(safety_factor);
     }
-    let study = crate::crossflow_convergence_study(&input)?;
+    let study = drafthouse_engine::crossflow_convergence_study(&input)?;
     Ok(object(&[
         ("observedOrder", optional_number(study.observed_order)),
         (
@@ -2258,11 +2258,11 @@ fn convergence(cli: &Cli) -> Result<String, Failure> {
 }
 
 fn nozzle_flow(cli: &Cli) -> Result<String, Failure> {
-    let flow_m3_s = crate::nozzle_flow_m3_s(
+    let flow_m3_s = drafthouse_engine::nozzle_flow_m3_s(
         cli.required_number("--discharge-coefficient")?,
         cli.required_number("--orifice-diameter")?,
         cli.required_number("--dp")?,
-        cli.number_or("--density", crate::NOZZLE_WATER_DENSITY_KG_M3)?,
+        cli.number_or("--density", drafthouse_engine::NOZZLE_WATER_DENSITY_KG_M3)?,
     )?;
     Ok(object(&[("nozzleFlowM3S", number(flow_m3_s))]))
 }
@@ -2289,7 +2289,7 @@ fn nozzle(cli: &Cli) -> Result<String, Failure> {
             parse_number(upper, "--count-range")?,
         ]);
     }
-    let options = crate::select_nozzle_arrangement(&input)?;
+    let options = drafthouse_engine::select_nozzle_arrangement(&input)?;
     Ok(object(&[(
         "options",
         json_array(
@@ -2519,7 +2519,7 @@ fn fill_record(cli: &Cli) -> Result<FillRecord, Failure> {
             .unwrap_or_else(|| "fill".to_string()),
         thermal,
         pressure,
-        limits: crate::FillLimits {
+        limits: drafthouse_engine::FillLimits {
             min_water_loading_kg_m2_s: limits_spec.required("minWaterLoadingKgM2S")?,
             max_water_loading_kg_m2_s: limits_spec.required("maxWaterLoadingKgM2S")?,
             min_dry_air_loading_kg_m2_s: limits_spec.required("minDryAirLoadingKgM2S")?,
@@ -2802,7 +2802,7 @@ fn fill_physics(spec: &Spec) -> Result<FillRecord, Failure> {
             water_exponent: parse_number(water_exponent, &pressure_option)?,
             air_exponent: parse_number(air_exponent, &pressure_option)?,
         }),
-        limits: crate::FillLimits {
+        limits: drafthouse_engine::FillLimits {
             min_water_loading_kg_m2_s: parse_number(min_water, &limits_option)?,
             max_water_loading_kg_m2_s: parse_number(max_water, &limits_option)?,
             min_dry_air_loading_kg_m2_s: parse_number(min_dry_air, &limits_option)?,
@@ -2968,7 +2968,7 @@ const CATALOG_LISTS: [CatalogList; 5] = [
     },
 ];
 
-/// Validate every record of the catalog against the machine schema in [`crate::validate`],
+/// Validate every record of the catalog against the machine schema in [`drafthouse_engine::validate`],
 /// returning the per-list record counts. This is the fail-closed gate `select` runs before
 /// it builds or ranks anything: every violation is a usage error naming the record and the
 /// field, and all of them are reported at once.
@@ -2988,7 +2988,7 @@ fn validate_catalog_records(cli: &Cli) -> Result<[usize; 5], Failure> {
                 .iter()
                 .map(|(name, value)| (name.as_str(), value.as_str()))
                 .collect();
-            if let Err(mut refused) = crate::validate_record(list.kind, &label, &pairs) {
+            if let Err(mut refused) = drafthouse_engine::validate_record(list.kind, &label, &pairs) {
                 violations.append(&mut refused);
             }
         }

@@ -10,7 +10,7 @@
 //! against recorded vectors as well as against the live JavaScript engine.
 
 use serde_json::Value;
-use synergy_drafthouse::{
+use drafthouse_engine::{
     evaluate_characteristic_capability, evaluate_performance_curve_capability, merkel_demand,
     performance_curve_bounds, predict_cold_water_from_performance_curves,
     predict_water_flow_from_performance_curves, psychrometric_state,
@@ -36,7 +36,7 @@ fn agrees(actual: f64, expected: f64, label: &str) {
 fn vectors() -> Value {
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../validation/test-vectors.json"
+        "/../../validation/test-vectors.json"
     );
     let text = std::fs::read_to_string(path).unwrap_or_else(|error| panic!("read {path}: {error}"));
     serde_json::from_str(&text).unwrap_or_else(|error| panic!("parse {path}: {error}"))

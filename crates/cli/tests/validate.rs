@@ -4,7 +4,7 @@
 //! reaches the ranking.
 
 use std::process::Command;
-use synergy_drafthouse::validate::{schema, validate_record, FieldKind, RecordKind};
+use drafthouse_engine::validate::{schema, validate_record, FieldKind, RecordKind};
 
 /* ---------------- records in the `ct-engine` spec encoding ---------------- */
 

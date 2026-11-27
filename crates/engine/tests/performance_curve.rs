@@ -14,7 +14,7 @@
 //!
 //! The JavaScript engine is the specification; nothing here re-derives a value.
 
-use synergy_drafthouse::{
+use drafthouse_engine::{
     evaluate_performance_curve_capability, performance_curve_bounds,
     predict_cold_water_from_performance_curves, predict_water_flow_from_performance_curves,
     PerformanceCurveRecord,

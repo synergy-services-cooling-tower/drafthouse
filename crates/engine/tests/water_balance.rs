@@ -20,7 +20,7 @@
 //! The JavaScript engine is the specification; nothing here re-derives a value.
 
 use serde_json::Value;
-use synergy_drafthouse::{
+use drafthouse_engine::{
     cooling_tower_water_balance, drift_loss_kg_s, evaporation_from_air_mass_balance,
     psychrometric_state, PsychrometricStateInput, WaterBalanceInput,
 };
@@ -39,7 +39,7 @@ fn agrees(actual: f64, expected: f64, label: &str) {
 fn vectors() -> Value {
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../validation/test-vectors.json"
+        "/../../validation/test-vectors.json"
     );
     let text = std::fs::read_to_string(path).unwrap_or_else(|error| panic!("read {path}: {error}"));
     serde_json::from_str(&text).unwrap_or_else(|error| panic!("parse {path}: {error}"))

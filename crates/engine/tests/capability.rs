@@ -15,7 +15,7 @@
 //!
 //! The JavaScript engine is the specification; nothing here re-derives a value.
 
-use synergy_drafthouse::{
+use drafthouse_engine::{
     create_seeded_random, evaluate_characteristic_capability, gaussian_random,
     monte_carlo_characteristic_capability, percentile, CapabilityCondition, CapabilityUncertainty,
     CharacteristicCapabilityInput, ConditionField, InletEnthalpyConvention, Integration,
@@ -35,7 +35,7 @@ fn capability_input(
     CharacteristicCapabilityInput::new(design, test).with_characteristic_exponent(-0.6)
 }
 
-fn message(error: &synergy_drafthouse::DomainError) -> String {
+fn message(error: &drafthouse_engine::DomainError) -> String {
     error.message().to_string()
 }
 

@@ -14,7 +14,7 @@
 //! * `ct_alloc(len) -> ptr` — a buffer with room for `len` payload bytes; the caller writes
 //!   them at `ptr + 4`. The header is already filled in.
 //! * `ct_call(ptr) -> ptr` — reads the command line from the buffer, **taking ownership of
-//!   it** (the buffer is freed before returning), runs it through [`crate::cli::run`], and
+//!   it** (the buffer is freed before returning), runs it through [`drafthouse_cli::run`], and
 //!   returns a new buffer holding the reply envelope ({@link} below).
 //! * `ct_free(ptr)` — frees any buffer this module returned, or one that `ct_call` returned
 //!   early because its input was unusable.
@@ -112,10 +112,10 @@ pub extern "C" fn ct_free(pointer: *mut u8) {
 #[no_mangle]
 pub extern "C" fn ct_call(pointer: *mut u8) -> *mut u8 {
     let reply = match unsafe { read_arguments(pointer) } {
-        Ok(arguments) => crate::cli::reply(&arguments),
+        Ok(arguments) => drafthouse_cli::reply(&arguments),
         Err(message) => format!(
             "{{\"ok\":false,\"status\":2,\"error\":{{\"error\":\"usage\",\"message\":{}}}}}",
-            crate::cli::json_string(&message)
+            drafthouse_cli::json_string(&message)
         ),
     };
     // The input buffer is dead either way: `ct_call` owns it from here.

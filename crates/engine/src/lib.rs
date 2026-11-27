@@ -53,7 +53,6 @@
 
 pub mod airside;
 pub mod capability;
-pub mod cli;
 pub mod crossflow;
 pub mod fan;
 pub mod layers;
@@ -68,10 +67,6 @@ pub mod validate;
 pub mod water;
 pub mod water_balance;
 
-/// The wasm export surface (issue #24). Compiled only for the wasm target: it is a C ABI,
-/// not a Rust API, and nothing else in the crate should reach through it.
-#[cfg(target_arch = "wasm32")]
-pub mod wasm;
 
 pub use airside::{
     check_fill_operating_envelope, drift_performance_at_velocity, envelope_failures,

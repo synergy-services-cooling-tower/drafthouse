@@ -11,7 +11,7 @@
 //!
 //! The JavaScript engine is the specification; nothing here re-derives a value.
 
-use synergy_drafthouse::{
+use drafthouse_engine::{
     crossflow_convergence_study, saturated_temperature_from_enthalpy, solve_crossflow_grid,
     CrossflowGridInput, CrossflowStudyInput,
 };
@@ -255,7 +255,7 @@ fn the_grid_and_the_inputs_are_each_refused_out_of_domain() {
 /// exactly as the reference refuses it.
 #[test]
 fn the_saturated_temperature_inversion_round_trips() {
-    use synergy_drafthouse::{saturated_air_enthalpy_kj_kg_dry_air, PsychrometricOptions};
+    use drafthouse_engine::{saturated_air_enthalpy_kj_kg_dry_air, PsychrometricOptions};
     for temperature_c in [5.0, 20.0, 33.0, 60.0] {
         let enthalpy = saturated_air_enthalpy_kj_kg_dry_air(
             temperature_c,

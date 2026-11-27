@@ -17,7 +17,7 @@
 //!
 //! The JavaScript engine is the specification; nothing here re-derives a value.
 
-use synergy_drafthouse::{
+use drafthouse_engine::{
     natural_draft_pressure_pa, solve_natural_draft_counterflow, DriftCurvePoint,
     DriftEliminatorRecord, FillLimits, FillPressureCorrelation, FillRecord, NaturalDraftInput,
     TowerRecord, ZoneCorrelation,

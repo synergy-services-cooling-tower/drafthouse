@@ -9,7 +9,7 @@
 //! error. The parity harness keys off this status, and so does the wasm binding's envelope.
 
 use std::process::ExitCode;
-use synergy_drafthouse::cli::{self, Failure};
+use drafthouse_cli::{self as cli, Failure};
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();

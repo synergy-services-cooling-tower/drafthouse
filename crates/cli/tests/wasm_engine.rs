@@ -11,7 +11,7 @@
 //! feasible at the engine's default duty, which is what makes the worked sheet non-empty.
 
 use serde_json::Value;
-use synergy_drafthouse::cli::{self, Failure, USAGE};
+use drafthouse_cli::{self as cli, Failure, USAGE};
 
 const TOWER: &str = "id:IDCF-064,type:counterflow,fillAreaM2:64,airFreeAreaM2:64,driftAreaM2:61,inletAreaM2:32,stackRecoveryFactor:0.35,inletLossCoefficient:3,distributionLossCoefficient:4.4,supportLossCoefficient:2.1,plenumLossCoefficient:0.38,fixedPressureLossPa:10,sprayZoneHeightM:0.6,rainZoneHeightM:1.5,footprintM2:78,maxWaterMassFlowKgS:265,fillDepthOptionsM:1.2|1.5|1.8,compatibleFanIds:AX-500,sprayZone:0.16|3|2|-0.3|0.45,rainZone:0.13|3|2|-0.35|0.5";
 const FILL: &str = "id:FILM-OF25,compatibleTowerTypes:counterflow|crossflow,allowedWaterQualityClasses:clean|moderate,thermal:1.12|3|2|-0.31|0.44,pressure:61|3|2|0.14|1.72,limits:1.3|5.4|0.9|3.3|60";

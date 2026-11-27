@@ -12,7 +12,7 @@
 //!
 //! The JavaScript engine is the specification; nothing here re-derives a value.
 
-use synergy_drafthouse::{
+use drafthouse_engine::{
     check_fill_operating_envelope, drift_performance_at_velocity, fan_stack_discharge_pressure_pa,
     fill_pressure_drop_pa, fill_thermal_merkel_number, minor_loss_pressure_pa, psychrometric_state,
     resolve_airside_areas, system_pressure_breakdown, velocity_pressure_pa, zone_merkel_number,

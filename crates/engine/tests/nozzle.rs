@@ -12,7 +12,7 @@
 //!
 //! The JavaScript engine is the specification; nothing here re-derives a value.
 
-use synergy_drafthouse::{
+use drafthouse_engine::{
     nozzle_flow_m3_s, select_nozzle_arrangement, NozzleArrangementInput, NozzleRecord,
     NOZZLE_WATER_DENSITY_KG_M3,
 };

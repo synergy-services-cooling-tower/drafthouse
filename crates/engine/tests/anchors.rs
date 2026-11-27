@@ -16,7 +16,7 @@
 //!   under test.
 //! * `tests/merkel.test.js` — quadrature agreement and the cold-water inverse closure.
 
-use synergy_drafthouse::{
+use drafthouse_engine::{
     dew_point_from_humidity_ratio, humidity_ratio_from_relative_humidity,
     humidity_ratio_from_vapor_pressure, humidity_ratio_from_wet_bulb, merkel_demand,
     moist_air_density_kg_m3, moist_air_enthalpy_kj_kg_dry_air, psychrometric_state,

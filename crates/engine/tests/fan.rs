@@ -12,7 +12,7 @@
 //!
 //! The JavaScript engine is the specification; nothing here re-derives a value.
 
-use synergy_drafthouse::{
+use drafthouse_engine::{
     choose_standard_motor, estimate_airflow_from_fan_power, fan_efficiency_at_flow,
     fan_operating_limits, fan_pressure_pa_at_flow, fan_shaft_power_kw, fan_speed_ratio_limit,
     solve_fan_system_intersection, AirflowEstimateInput, FanCurvePoint, FanRecord,
@@ -240,7 +240,7 @@ fn motor_selection_walks_the_iec_size_table() {
 
     // The chosen size always covers the requirement, and the table is the reference's.
     assert_eq!(
-        synergy_drafthouse::STANDARD_MOTOR_SIZES_KW,
+        drafthouse_engine::STANDARD_MOTOR_SIZES_KW,
         [
             0.75, 1.1, 1.5, 2.2, 3.0, 4.0, 5.5, 7.5, 11.0, 15.0, 18.5, 22.0, 30.0, 37.0, 45.0,
             55.0, 75.0, 90.0, 110.0, 132.0, 160.0, 200.0, 250.0, 315.0
@@ -346,7 +346,7 @@ fn a_system_curve_the_fan_never_meets_is_refused() {
     // A system curve that cannot be evaluated is refused as well, from inside the scan.
     let error =
         solve_fan_system_intersection(&FanSystemIntersectionInput::new(&fan, 1.14), |_flow_m3_s| {
-            Err(synergy_drafthouse::DomainError::new("no system curve"))
+            Err(drafthouse_engine::DomainError::new("no system curve"))
         })
         .expect_err("a failing system curve must propagate");
     assert_eq!(error.message(), "no system curve");

@@ -1,0 +1,32 @@
+[package]
+name = "drafthouse-wasm"
+description = "The WASM ABI: ct_alloc, ct_call and ct_free over the text commands"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+drafthouse-cli = { path = "../cli" }
+
+[lints.rust]
+unsafe_code = "allow"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+undocumented_unsafe_blocks = "deny"
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+indexing_slicing = "deny"
+as_conversions = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+allow_attributes_without_reason = "deny"
+let_underscore_must_use = "deny"

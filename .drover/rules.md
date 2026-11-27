@@ -1,0 +1,1 @@
+- don't add an app action outside a crates/api command (enforced by: core/arch generated command union, ban on `postMessage` outside packages/engine)

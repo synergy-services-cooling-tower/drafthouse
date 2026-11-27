@@ -1,0 +1,31 @@
+/* Preview stand-in: the synergyservices.co.th design language as Blocks tokens, plus the cockpit's calm model tokens. Dark by default, `.light` on <html> for paper. Green marks only the picked part, the picked row, the live dot and the primary button. */
+@font-face{font-family:"Montserrat";font-style:normal;font-weight:400 700;font-display:block;src:url("fonts/montserrat-latin.woff2") format("woff2")}
+@font-face{font-family:"Noto Sans Thai";font-style:normal;font-weight:400 700;font-display:block;src:url("fonts/noto-sans-thai.woff2") format("woff2");unicode-range:U+0E01-0E5B,U+200C-200D,U+25CC}
+:root{
+--carbon-950:#0b100f;--carbon-900:#1d2824;--carbon-800:#2b3934;--green-900:#064e3b;--green-400:#34d399;--green-300:#6ee7b7;--haze:#9dbcaf;--paper:#eef3ef;--ink:#06251c;
+--t-xs:11px;--t-sm:13px;--t-md:16px;--t-lg:20px;--t-xl:28px;
+--s-1:4px;--s-2:8px;--s-3:16px;--s-4:32px;--radius:8px;
+--sans:"Montserrat","Noto Sans Thai",system-ui,sans-serif;--mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;
+color-scheme:dark;
+--bg:var(--carbon-950);--surface:var(--carbon-900);--surface-2:var(--carbon-800);--fg:#e4f2eb;--fg-quiet:var(--haze);--rule:#354740;
+--accent:var(--green-400);--accent-hi:var(--green-300);--on-accent:var(--carbon-950);
+--dock:rgb(22 27 26/.74);--dock-rule:rgb(255 255 255/.09);--blur:14px;--dot-alpha:.09;
+--canvas-1:#151918;--canvas-2:#0a0c0c;
+--model-face:#2a2f2e;--model-metal:#353b3a;--model-fill:#22282a;--model-fill-2:#2b3133;--model-fill-3:#262c29;--model-concrete:#3a3e3c;
+--edge:#f1f4f3;--dim:#8d9693;--num:#ffffff;--halo:var(--accent);
+--flow-hot:#fb923c;--flow-mid:#e7e5e4;--flow-cold:#60a5fa;--flow-air:#a5f3fc;
+--warn:#fbbf24;--bad:#f87171}
+.light{color-scheme:light;
+--bg:var(--paper);--surface:#fff;--surface-2:#e3ebe6;--fg:var(--ink);--fg-quiet:#52695f;--rule:#cbd9d0;
+--accent:#0b6b4f;--accent-hi:#13855c;--on-accent:#fff;
+--dock:rgb(255 255 255/.8);--dock-rule:rgb(6 37 28/.12);--dot-alpha:.1;
+--canvas-1:#f7f9f8;--canvas-2:#e4e9e6;
+--model-face:#e6e9e8;--model-metal:#d6dbd9;--model-fill:#dde2e1;--model-fill-2:#e9ecec;--model-fill-3:#d9dedb;--model-concrete:#cfd3d1;
+--edge:#2b302f;--dim:#7d8783;--num:var(--ink);
+--flow-hot:#c2410c;--flow-mid:#a8a29e;--flow-cold:#1d4ed8;--flow-air:#0e7490;
+--warn:#92600a;--bad:#b42318}
+*,::before,::after{box-sizing:border-box}
+*{margin:0}
+body{background:var(--bg);color:var(--fg);font:400 var(--t-md)/1.5 var(--sans);-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-decoration:none}
+button{font:inherit;color:inherit}

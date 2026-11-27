@@ -117,6 +117,11 @@ jobs:
       - name: Install wasm-pack
         run: cargo install wasm-pack --version 0.15.0 --locked
 
+      - name: Install the Linux system libraries the cockpit's native Bevy build links
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwayland-dev libxkbcommon-dev libasound2-dev libudev-dev
+
       - name: Cache cargo home and the cockpit's target directory
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:

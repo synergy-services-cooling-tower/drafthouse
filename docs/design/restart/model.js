@@ -1,5 +1,5 @@
 // Preview-only port of tower3d.md: the tower as a graphite three.js model with white edges, grey dimension lines and flat GA views. Not product code.
-import * as THREE from "three";
+import * as THREE from "../../../web/vendor/three.module.js";
 
 const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const col = (n) => new THREE.Color(css(n));

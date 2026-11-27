@@ -7,7 +7,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-blocks-cli = { git = "https://github.com/jirathip-dev/blocks", tag = "v2.0" }
+blocks-cli = { git = "https://github.com/jirathip-dev/blocks", tag = "v2.0", version = "0.1.0" }
 
 [[bin]]
 name = "blocks"

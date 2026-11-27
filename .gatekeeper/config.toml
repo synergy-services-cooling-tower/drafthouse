@@ -9,6 +9,9 @@ aarch64-apple-darwin = "8feed2b1fb09133a0a1bf6e3497d0dc5ca0645e7c260276d2cd13923
 [off]
 "core/cap" = "no line cap: drafthouse#1"
 
+[rust]
+unsafe_crates = ["drafthouse-wasm"]
+
 [ts]
 projects = []
 install = "npm ci --no-audit --no-fund"

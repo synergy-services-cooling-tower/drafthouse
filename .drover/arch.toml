@@ -1,4 +1,4 @@
-frozen = [".github/workflows/ci.yml"]
+frozen = [".github/workflows/ci.yml", "crates/cli/src/commands.rs"]
 
 [comments]
 policy = "strict"
@@ -46,3 +46,20 @@ reason = "an app action is a crates/api command, sent only through the engine cl
 pattern = "Math."
 paths = ["packages/wizard/src/**"]
 reason = "the wizard shows the engine's numbers and computes none"
+
+[[layer]]
+name = "engine"
+paths = ["crates/engine/src/**"]
+mods = ["drafthouse_engine"]
+may_use = []
+
+[[layer]]
+name = "cli"
+paths = ["crates/cli/src/**"]
+mods = ["drafthouse_cli"]
+may_use = ["engine"]
+
+[[layer]]
+name = "wasm"
+paths = ["crates/wasm/src/**"]
+may_use = ["cli"]

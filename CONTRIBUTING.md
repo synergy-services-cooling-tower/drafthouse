@@ -12,9 +12,9 @@ You are free to fork and modify under the terms of the [PolyForm Noncommercial L
 
 ## Before you rely on this
 
-Read `docs/LIMITATIONS.md` and `VALIDATION_RESULTS.md` first. In particular: the bundled
+Read `docs/engine/LIMITATIONS.md` first. In particular: the bundled
 component catalog is entirely synthetic, and the air-side model has never been compared against a
-real tower. The validation status of each area is recorded in `docs/VALIDATION.md` §8.
+real tower. The validation status of each area is recorded in `docs/engine/VALIDATION.md` §8.
 
 ## Commercial work
 

@@ -1,0 +1,15 @@
+[package]
+name = "drafthouse-engine"
+description = "The cooling-tower physics: psychrometrics, Merkel, air side, fans, water balance, selection"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+serde_json = "1"
+
+[lints]
+workspace = true

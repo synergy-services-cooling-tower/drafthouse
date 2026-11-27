@@ -1,0 +1,20 @@
+[package]
+name = "drafthouse-cli"
+description = "ct-engine: the frozen text commands that replay the recorded evidence"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+drafthouse-engine = { path = "../engine", version = "0.0.0" }
+
+[dev-dependencies]
+serde_json = "1"
+
+[[bin]]
+name = "ct-engine"
+path = "src/bin/ct-engine.rs"
+
+[lints]
+workspace = true

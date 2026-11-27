@@ -26,3 +26,10 @@ print_stdout = "deny"
 print_stderr = "deny"
 allow_attributes_without_reason = "deny"
 let_underscore_must_use = "deny"
+
+[profile.wasm]
+inherits = "release"
+opt-level = 3
+lto = true
+panic = "abort"
+strip = "debuginfo"

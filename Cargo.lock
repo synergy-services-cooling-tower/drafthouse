@@ -29,6 +29,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "drafthouse-cli"
+version = "0.0.0"
+dependencies = [
+ "drafthouse-engine",
+ "serde_json",
+]
+
+[[package]]
+name = "drafthouse-engine"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
+name = "drafthouse-wasm"
+version = "0.0.0"
+dependencies = [
+ "drafthouse-cli",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -1,0 +1,248 @@
+use drafthouse_engine::{
+    crossflow_convergence_study, saturated_temperature_from_enthalpy, solve_crossflow_grid,
+    CrossflowGridInput, CrossflowStudyInput,
+};
+
+fn case_input() -> CrossflowGridInput {
+    CrossflowGridInput::new(42.0, 33.0, 27.0, 200.0, 150.0, 1.6)
+}
+
+fn assert_close(actual: f64, expected: f64, relative: f64, label: &str) {
+    let scale = expected.abs().max(1.0);
+    let difference = (actual - expected).abs();
+    assert!(
+        difference / scale < relative,
+        "{label}: got {actual}, expected {expected} (|Δ| {difference})"
+    );
+}
+
+fn crossflow_vectors() -> [(&'static str, CrossflowGridInput, f64, f64, f64, f64); 4] {
+    [
+        (
+            "xf-base",
+            CrossflowGridInput::new(42.0, 33.0, 27.0, 200.0, 150.0, 1.6),
+            32.333_352,
+            8088.067,
+            36.38799,
+            0.098_917,
+        ),
+        (
+            "xf-low-transfer",
+            CrossflowGridInput::new(40.0, 30.0, 24.0, 200.0, 150.0, 0.8),
+            32.395_153,
+            6362.4565,
+            32.611_451,
+            0.059_272,
+        ),
+        (
+            "xf-high-transfer",
+            CrossflowGridInput::new(45.0, 35.0, 28.0, 250.0, 200.0, 2.4),
+            32.269_144,
+            13316.4595,
+            38.710_359,
+            0.154_465,
+        ),
+        (
+            "xf-temperate",
+            CrossflowGridInput::new(32.0, 20.0, 14.0, 180.0, 160.0, 1.4),
+            23.492_129,
+            6401.6276,
+            25.638_455,
+            0.066_315,
+        ),
+    ]
+}
+
+#[test]
+fn recorded_crossflow_vectors_reproduce() {
+    let vectors = crossflow_vectors();
+    for (id, input, cold_water_c, heat_transfer_kw, outlet_dry_bulb_c, error_c) in vectors {
+        let result = solve_crossflow_grid(&input).expect("the vector must solve");
+        assert_close(
+            result.cold_water_c,
+            cold_water_c,
+            1e-6,
+            &format!("{id} coldWaterC"),
+        );
+        assert_close(
+            result.heat_transfer_kw,
+            heat_transfer_kw,
+            1e-6,
+            &format!("{id} heatTransferKW"),
+        );
+        assert_close(
+            result.outlet_air_state.dry_bulb_c,
+            outlet_dry_bulb_c,
+            1e-6,
+            &format!("{id} outletDryBulbC"),
+        );
+        assert_close(
+            result
+                .grid_convergence
+                .estimated_discretization_error_c
+                .expect("Richardson extrapolation is on by default"),
+            error_c,
+            1e-6,
+            &format!("{id} estimatedDiscretizationErrorC"),
+        );
+    }
+}
+
+#[test]
+fn the_default_grid_is_grid_converged_against_a_much_finer_one() {
+    let result = solve_crossflow_grid(&case_input()).expect("default grid solves");
+    let reference =
+        solve_crossflow_grid(&case_input().with_cells(96, 96)).expect("fine grid solves");
+    assert!(
+        (result.cold_water_c - reference.cold_water_c).abs() < 0.01,
+        "default grid {} vs fine grid {}",
+        result.cold_water_c,
+        reference.cold_water_c
+    );
+    let error = result
+        .grid_convergence
+        .estimated_discretization_error_c
+        .expect("Richardson extrapolation is on by default");
+    assert!(error < 0.15, "reported discretisation error {error}");
+}
+
+#[test]
+fn the_discretisation_error_falls_as_the_grid_is_refined() {
+    let errors: Vec<f64> = [6usize, 12, 24, 48]
+        .into_iter()
+        .map(|cells| {
+            solve_crossflow_grid(&case_input().with_cells(cells, cells))
+                .expect("refinement solves")
+                .grid_convergence
+                .estimated_discretization_error_c
+                .expect("Richardson extrapolation is on by default")
+        })
+        .collect();
+    for pair in errors.windows(2) {
+        assert!(
+            pair[1] < pair[0],
+            "error did not fall from {} to {}",
+            pair[0],
+            pair[1]
+        );
+    }
+}
+
+#[test]
+fn the_crossflow_model_respects_its_thermodynamic_limits() {
+    let infinite = solve_crossflow_grid(&CrossflowGridInput {
+        available_merkel_number: 80.0,
+        ..case_input().with_cells(24, 24)
+    })
+    .expect("infinite area solves");
+    assert!(
+        infinite.cold_water_c > 27.0,
+        "water cannot be cooled below the entering wet bulb"
+    );
+    assert!(infinite.cold_water_c < 42.0);
+
+    let negligible = solve_crossflow_grid(&CrossflowGridInput {
+        available_merkel_number: 1e-4,
+        ..case_input().with_cells(24, 24)
+    })
+    .expect("negligible area solves");
+    assert!(
+        42.0 - negligible.cold_water_c < 0.05,
+        "with no transfer area the water must leave at inlet temperature, got {}",
+        negligible.cold_water_c
+    );
+}
+
+#[test]
+fn cooling_increases_monotonically_with_available_transfer() {
+    let mut previous = f64::INFINITY;
+    for available_merkel_number in [0.4, 0.8, 1.2, 1.6, 2.4] {
+        let cold_water_c = solve_crossflow_grid(&CrossflowGridInput {
+            available_merkel_number,
+            ..case_input().with_cells(20, 20)
+        })
+        .expect("the sweep solves")
+        .cold_water_c;
+        assert!(
+            cold_water_c < previous,
+            "Me={available_merkel_number} gave {cold_water_c}, not colder than {previous}"
+        );
+        previous = cold_water_c;
+    }
+}
+
+#[test]
+fn the_convergence_study_sees_a_first_order_scheme() {
+    let study = crossflow_convergence_study(&CrossflowStudyInput::new(case_input()))
+        .expect("the study solves");
+    let observed_order = study.observed_order.expect("the gaps are not degenerate");
+    assert!(
+        observed_order > 0.85 && observed_order < 1.25,
+        "observed order {observed_order} is not consistent with a first-order scheme"
+    );
+    assert!(
+        study.grid_convergence_index_pct < 1.0,
+        "GCI {} %",
+        study.grid_convergence_index_pct
+    );
+    let reported = solve_crossflow_grid(&case_input())
+        .expect("the reported solve works")
+        .cold_water_c;
+    assert!(
+        (reported - study.extrapolated_cold_water_c).abs() < 0.02,
+        "{reported} vs {}",
+        study.extrapolated_cold_water_c
+    );
+    assert_eq!(study.cells, [12, 24, 48]);
+}
+
+#[test]
+fn the_grid_and_the_inputs_are_each_refused_out_of_domain() {
+    let too_few_cells =
+        solve_crossflow_grid(&case_input().with_cells(1, 18)).expect_err("must refuse");
+    assert_eq!(
+        too_few_cells.message(),
+        "Crossflow grid requires at least 2 × 2 cells."
+    );
+    for bad in [
+        CrossflowGridInput {
+            water_mass_flow_kg_s: 0.0,
+            ..case_input()
+        },
+        CrossflowGridInput {
+            dry_air_mass_flow_kg_s: -1.0,
+            ..case_input()
+        },
+        CrossflowGridInput {
+            available_merkel_number: 0.0,
+            ..case_input()
+        },
+    ] {
+        assert!(
+            solve_crossflow_grid(&bad).is_err(),
+            "a non-positive input must refuse"
+        );
+    }
+}
+
+#[test]
+fn the_saturated_temperature_inversion_round_trips() {
+    use drafthouse_engine::{saturated_air_enthalpy_kj_kg_dry_air, PsychrometricOptions};
+    for temperature_c in [5.0, 20.0, 33.0, 60.0] {
+        let enthalpy = saturated_air_enthalpy_kj_kg_dry_air(
+            temperature_c,
+            101_325.0,
+            PsychrometricOptions::default(),
+        )
+        .expect("the enthalpy evaluates");
+        let inverted = saturated_temperature_from_enthalpy(enthalpy, 101_325.0, [-50.0, 80.0])
+            .expect("the inversion solves");
+        assert_close(inverted, temperature_c, 1e-6, "round trip");
+    }
+    let enthalpy_at_40 =
+        saturated_air_enthalpy_kj_kg_dry_air(40.0, 101_325.0, PsychrometricOptions::default())
+            .expect("the enthalpy evaluates");
+    assert!(
+        saturated_temperature_from_enthalpy(enthalpy_at_40, 101_325.0, [-50.0, 100.0]).is_err()
+    );
+}

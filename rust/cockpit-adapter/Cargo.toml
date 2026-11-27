@@ -13,7 +13,7 @@ crate-type = ["rlib"]
 [dependencies]
 # The engine. A path dependency, read-only: this crate implements the cockpit's contract over it
 # and changes nothing in it.
-synergy-drafthouse = { path = ".." }
+synergy-drafthouse = { path = "../../crates/engine", package = "drafthouse-engine" }
 # Required by the copied contract itself (`src/engine.rs` derives Serialize/Deserialize on its
 # I/O types). Nothing else in this crate serializes.
 serde = { version = "1", features = ["derive"] }
@@ -21,3 +21,5 @@ serde = { version = "1", features = ["derive"] }
 [dev-dependencies]
 # The parity test reads the cockpit's own recorded run, which is JSON.
 serde_json = "1"
+
+[workspace]

@@ -12,3 +12,4 @@ exports/
 # release workflow publishes it from a fresh build), `target/` is its cargo cache.
 cockpit/pkg/
 cockpit/target/
+target*/

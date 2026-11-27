@@ -1,5 +1,6 @@
 // Preview-only: fills the cockpit from the fixture and draws one state per URL. ?s=layers|cells|structure|parts|compare picks
-// the state, ?ga the GA sheet, ?refused the refused duty, ?sheet=inputs|build|ranking|calc|parts|compare the phone sheet, ?light, ?poster. Not product code.
+// the state, ?ga the GA sheet, ?refused the refused duty, ?sheet=inputs|build|ranking|calc|parts|compare the phone sheet, ?code=asce the ASCE 7 load code, ?light,
+// ?poster. Not product code.
 import { mountModel, mountGA } from "./model.js";
 
 const qs = new URLSearchParams(location.search), $ = (s) => document.querySelector(s);
@@ -64,21 +65,25 @@ const layerRow = ([id, d], i, { on = false, lift = false, snap = false } = {}) =
   return `<div class="ly ${on ? "on" : ""} ${lift ? "lift" : ""}"><i class="grip">⋮⋮</i><span class="n">${i + 1}</span><span class="in sel">${id}<i>▾</i></span><span class="x">×</span>
     <div class="rl"><span class="ticks" style="--d:${pct}">${Array.from({ length: n }, (_, j) => `<i class="${j < k ? "f" : ""}"></i>`).join("")}<b class="k"></b></span><span class="v">${d.toFixed(2)} m</span></div>${snap ? `<span class="snapn">${k} modules × ${f.stepM.toFixed(2)} m · snapped</span>` : ""}</div>`;
 };
-const struct = S === "structure" ? "steel" : "frp", cells = S === "cells" ? 3 : 1;
+const struct = S === "structure" ? "steel" : "frp", cells = S === "cells" ? 3 : 1, code = qs.get("code") === "asce" ? "asce" : "dpt";
+const site = {
+  dpt: [["Wind zone", "1 · 25 m/s"], ["Terrain", "A · open"], ["Importance", "1.0"], ["Province", "Rayong"], ["Site class", "D"]],
+  asce: [["Basic wind speed", "30 m/s"], ["Exposure", "C"], ["K<sub>zt</sub>", "1.00"], ["S<sub>s</sub> · S<sub>1</sub>", "0.12 · 0.05 g"], ["Site class", "D"]],
+}[code];
 const layers = layersOf(geom), depth = layers.reduce((s, [, d]) => s + d, 0);
 let rows;
 if (S === "layers" && phone && sheet === "build") rows = layerRow(layers[0], 0) + `<div class="ly slot"></div>` + layerRow(["SPLASH-GRID", 0.3], 1, { lift: true }) + layerRow(layers[2], 2);
 else rows = layers.map((l, i) => layerRow(l, i, { on: S === "layers" && i === 2, snap: S === "layers" && i === 2 })).join("");
 const groups = [`  <div class="grp"><span class="eyebrow">Cells</span>
     <div class="f"><label>Identical cells in a row</label><span class="stp ${S === "cells" ? "focus" : ""}"><span>−</span><b>${cells}</b><span>+</span></span></div>
-    <p class="note">${cells > 1 ? `<b>725 ÷ 3 = 241.7</b> m³/h a cell. The engine rates one cell and multiplies by 3.` : "The whole flow goes through one cell. Add cells to split it evenly."}</p></div>
+    <dl class="kv" style="margin-top:10px"><dt>Flow a cell</dt><dd>${(725 / cells).toFixed(1)} m³/h</dd><span></span></dl></div>
   <div class="grp"><span class="eyebrow">Structure</span>
     <div class="seg3">${[["frp", "FRP"], ["steel", "Steel"], ["concrete", "Concrete"]].map(([k, l]) => `<span class="${k === struct ? "on" : ""}">${ICON[k]}${l}</span>`).join("")}</div>
-    <dl class="kv" style="margin-top:10px"><dt>Basic wind speed</dt><dd>30 m/s</dd><span class="tag">site</span><dt>Seismic zone</dt><dd>2A</dd><span class="tag">site</span></dl></div>
+    <span class="eyebrow" style="display:block;margin:12px 0 8px">Load code</span><div class="seg3" style="grid-template-columns:repeat(2,1fr)">${[["dpt", "Thai DPT"], ["asce", "ASCE 7"]].map(([k, l]) => `<span class="${k === code ? "on" : ""}">${l}</span>`).join("")}</div>
+    <dl class="kv" style="margin-top:10px">${site.map(([t, v]) => `<dt>${t}</dt><dd>${v}</dd><span class="tag">site</span>`).join("")}</dl></div>
 `, `  <div class="grp"><div class="lyh"><span class="eyebrow">Fill layers · top first</span><b>${depth.toFixed(2)} m</b></div>${rows}
-    <span class="addly">+ Add layer</span>
-    <p class="note">Drag ⋮⋮ to reorder. Depth snaps to the fill's module: <b>0.30</b> film, <b>0.15</b> splash, <b>0.25</b> trickle.</p></div>`];
-$("#build").innerHTML = (phone ? [groups[1], groups[0]] : groups).join("");
+    <span class="addly">+ Add layer</span></div>`];
+$("#build").innerHTML = (phone && S !== "structure" ? [groups[1], groups[0]] : groups).join("");
 
 const base = RANKED[0];
 const cellsRank = [
@@ -97,7 +102,7 @@ const tr = (r, i) => S === "layers" && i > 0
 const rowsHtml = list.slice(0, phone ? 5 : (S === "parts" ? 6 : 7)).map(tr).join("");
 const total = { cells: 164, parts: 58 }[S] || 202;
 const rej = REJECTED.slice(0, 3).map(([t, n]) => `${t.toLowerCase()} <b>${n}</b>`).join(" · ");
-const table = `<table class="rk"><tr><th>#</th><th>Design</th><th>Margin</th><th>kW</th></tr>${rowsHtml}</table><div class="rej" style="border-top:1px solid var(--rule)"><a href="#">Show all ${total} ↓</a></div>${S === "parts" ? "" : `<div class="rej">Turned away, by check: ${rej} · 4 more checks.</div>`}`;
+const table = `<table class="rk"><tr><th>#</th><th>Design</th><th>Margin ↑</th><th>kW</th></tr>${rowsHtml}</table><div class="rej" style="border-top:1px solid var(--rule)"><a href="#">Show all ${total} ↓</a></div>${S === "parts" ? "" : `<div class="rej">Turned away, by check: ${rej} · 4 more checks.</div>`}`;
 const nums = {
   base: [["Cold water", "31.70", "°C"], ["Margin", "+0.30", "K"], ["Capability", "1.093", ""], ["Electrical", "44.9", "kW"], ["Make-up", "15.0", "m³/h"], ["Air side", "237.6", "Pa"], ["Heat out", "8,619", "kW"], ["Drift", "4.14", "ppm"], ["Footprint", "78", "m²"]],
   layers: [["Cold water", "31.58", "°C", "−0.12"], ["Margin", "+0.42", "K", "+0.12"], ["Capability", "1.131", "", "+0.038"], ["Electrical", "47.1", "kW", "+2.2"], ["Make-up", "15.0", "m³/h"], ["Air side", "252.8", "Pa", "+15.2"], ["Heat out", "8,672", "kW", "+53"], ["Drift", "4.14", "ppm"], ["Footprint", "78", "m²"]],
@@ -160,10 +165,14 @@ const steps = {
     ["1.6", "One cell rated", "The engine rates one cell at its share; the others are the same.", "Q<sub>cell</sub> = ṁ<sub>cell</sub> · c<sub>p</sub> · R", "66.67 × 4.183 × 10.00", "2,789 kW", "IDCF-021 at 241.7 m³/h"],
     ["1.7", "Row totals", "Power, make-up and footprint scale with N. Temperatures don't.", "P<sub>el</sub> = N · P<sub>el, cell</sub>", "3 × 15.60", "46.8 kW", "multiply, not re-rate", "hl"],
   ],
-  Structure: [
-    ["7.1", "Design wind pressure", "Wind pushes hardest at the top. The site's basic speed is scaled for height and exposure.", "q<sub>z</sub> = 0.613 · K<sub>z</sub> · K<sub>zt</sub> · V²", "0.613 × 1.04 × 1.00 × 30²", "574 Pa", "30 m/s · exposure C"],
-    ["7.2", "Wind on the casing", "The whole windward face, as a solid box.", "F = q<sub>z</sub> · G · C<sub>f</sub> · A", "0.574 × 0.85 × 1.3 × (8.60 × 8.20)", "44.7 kN", "seismic 35.4 kN · wind governs"],
-    ["7.3", "Corner column", "The worst member: wind shear and overturning land on the windward corner.", "N / φN<sub>c</sub> + M / φM<sub>b</sub> ≤ 1", "61.8 ÷ 731 + 17.9 ÷ 38.6", "0.55", "SHS 150 × 150 × 6 · S275", "hl"],
+  Structure: code === "dpt" ? [
+    ["7.1", "Reference velocity pressure", "DPT 1311, zone 1.", "q = ½ · ρ · V̄²", "0.5 × 1.25 × 25²", "390.6 Pa", "V̄ 25 m/s · 50-year"],
+    ["7.2", "Wind on the casing", "Windward face.", "F = I<sub>w</sub> · q · C<sub>e</sub> · C<sub>g</sub> · C<sub>p</sub> · A", "1.0 × 390.6 × 0.90 × 2.0 × 0.90 × 70.52", "44.6 kN", "seismic DPT 1301 35.4 kN · wind governs"],
+    ["7.3", "Corner column", "Worst member.", "N / φN<sub>c</sub> + M / φM<sub>b</sub> ≤ 1", "61.7 ÷ 731 + 17.9 ÷ 38.6", "0.55", "SHS 150 × 150 × 6 · S275", "hl"],
+  ] : [
+    ["7.1", "Design wind pressure", "ASCE 7, exposure C.", "q<sub>z</sub> = 0.613 · K<sub>z</sub> · K<sub>zt</sub> · V²", "0.613 × 1.04 × 1.00 × 30²", "574 Pa", "30 m/s · exposure C"],
+    ["7.2", "Wind on the casing", "Windward face.", "F = q<sub>z</sub> · G · C<sub>f</sub> · A", "0.574 × 0.85 × 1.3 × (8.60 × 8.20)", "44.7 kN", "seismic ASCE 7 35.4 kN · wind governs"],
+    ["7.3", "Corner column", "Worst member.", "N / φN<sub>c</sub> + M / φM<sub>b</sub> ≤ 1", "61.8 ÷ 731 + 17.9 ÷ 38.6", "0.55", "SHS 150 × 150 × 6 · S275", "hl"],
   ],
 };
 const chart = () => {
@@ -247,13 +256,12 @@ const lead = (from, el) => {
 const callouts = {
   fan: ["Fan · AX-500 · 8 blades", [["Diameter", "√(4 × 19.635 / π)", "5.00 m"], ["Speed", "chosen in 0.70 to 1.13", "88 %"], ["Electrical input", "40.97 ÷ (0.96 × 0.95)", "44.9 kW"]]],
   "fill:2": ["Fill layer 3 · SPLASH-GRID", [["Depth", "2 modules × 0.15", "0.30 m"], ["Transfer", "0.94 × 1.40<sup>−0.51</sup> × 0.30", "0.238"], ["Pressure drop", "share of 252.8 Pa", "17.6 Pa"]]],
-  frame: ["Frame · steel · 10 columns", [["Corner column", "SHS 150 × 150 × 6", "0.55"], ["Inlet brace", "L 75 × 75 × 6, X-braced", "0.71"], ["Wind on casing", "0.574 × 0.85 × 1.3 × 70.5", "44.7 kN"]]],
+  frame: ["Frame · steel · 10 columns", [["Corner column", "SHS 150 × 150 × 6", "0.55"], ["Inlet brace", "L 75 × 75 × 6, X-braced", "0.71"], ["Wind on casing", code === "dpt" ? "632.8 Pa × 70.5 m²" : "0.574 × 0.85 × 1.3 × 70.5", code === "dpt" ? "44.6 kN" : "44.7 kN"]]],
 };
 const callout = (k, x, y) => {
   const [h, rows2] = callouts[k];
-  return add(`<div class="dock callout" style="left:${x}px;top:${y}px"><span class="eyebrow">Picked part · click any part</span><h3>${h}</h3>
-    ${rows2.map(([a, f, r]) => `<div class="row"><span>${a}<div class="fx">${f}</div></span><span class="r">${r}</span></div>`).join("")}
-    <span class="q" style="font-size:11px">Its steps are open in the calc drawer ↓ · <b class="kbd">P</b> pin it</span></div>`);
+  return add(`<div class="dock callout" style="left:${x}px;top:${y}px"><span class="eyebrow">Picked part</span><h3>${h}</h3>
+    ${rows2.map(([a, f, r]) => `<div class="row"><span>${a}<div class="fx">${f}</div></span><span class="r">${r}</span></div>`).join("")}</div>`);
 };
 const hints = `<span><b>Drag</b> orbit</span><span><b>Scroll</b> zoom</span><span><b>Click</b> a part</span><span><b>1–4</b> views</span><span><b>P</b> pin</span><span><b>F</b> fit</span><span><b>⌘Z</b> undo</span>`;
 

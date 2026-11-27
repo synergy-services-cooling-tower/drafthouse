@@ -1,0 +1,4 @@
+growth = 10
+
+[cargo]
+blocks-cli = "`blocks check` at the Blocks pin, run by crates/blocks over the screen fixtures"

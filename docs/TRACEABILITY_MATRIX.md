@@ -5,7 +5,7 @@
 | Saturation pressure and moist-air state | `rust/src/psychrometrics.rs` (ported from the retired `src/core/psychrometrics.js`) | `rust/tests/{psychrometrics,anchors,vectors}.rs` | Reference-point and internal-consistency checks pass in the crate's suite |
 | Range, approach, effectiveness, heat rejection | `rust/src/water.rs` | `rust/tests/selection.rs` and the parity harness | Ported; dedicated duty tests still recommended |
 | Merkel demand | `rust/src/merkel.rs` (`merkel_demand`) | `rust/tests/{merkel,vectors}.rs` | Simpson/Tchebycheff agreement and the recorded vectors pass in the crate's suite |
-| CWT from available `KaV/L` | `rust/src/merkel.rs` (`solve_cold_water_temperature`) | `rust/tests/merkel.rs` | Known-point recovery and monotonicity checked in the crate's suite |
+| CWT from available `KaV/L` | `rust/src/merkel.rs` (`solve_cold_water_temperature`) | `rust/tests/anchors.rs` | Known-point recovery and monotonicity checked in the crate's suite |
 | Whole-tower characteristic | `rust/src/capability.rs` | `rust/tests/capability.rs` | The characteristic fit is exercised through the capability path |
 | Characteristic capability | `rust/src/capability.rs` | `rust/tests/capability.rs`, parity harness | Identical design/test gives 100% |
 | Capability uncertainty | `rust/src/capability.rs` (`capability-mc`) | `rust/tests/capability.rs`, recorded baseline rows | Seed repeatability; not code-prescribed uncertainty |

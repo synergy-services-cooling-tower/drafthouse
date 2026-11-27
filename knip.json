@@ -1,0 +1,3 @@
+{
+  "ignore": ["rust/**", "scripts/**", "web/geometry.js", "docs/design/**"]
+}

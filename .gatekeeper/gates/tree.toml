@@ -1,0 +1,33 @@
+about = "every catalog/ file is marked SYNTHETIC / NOT VENDOR DATA and names no money field; the tree holds no model, texture or environment file"
+fix = "mark the catalog file synthetic and drop the money field, or remove the 3D asset: the tower is drawn from the engine's geometry"
+budget_secs = 30
+setup = ["node"]
+run = """
+node --input-type=module -e '
+import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+const files = execFileSync("git", ["ls-files", "-z"], { encoding: "utf8" }).split("\\0").filter(Boolean);
+const money = /cost|price|currency|capex|discount|lifecycle|money|usd|thb|penalty/i;
+const asset = /\\.(glb|gltf|obj|fbx|stl|dae|3ds|blend|usdz?|ply|hdr|exr|ktx2?|basis|dds|tga)$/i;
+const found = [];
+const catalogs = files.filter((f) => f.startsWith("catalog/"));
+if (catalogs.length === 0) found.push("catalog/ holds no file");
+for (const file of catalogs) {
+  if (!file.endsWith(".json")) { found.push(`${file}: not a JSON catalog`); continue; }
+  const catalog = JSON.parse(readFileSync(file, "utf8"));
+  if (catalog.status !== "SYNTHETIC / NOT VENDOR DATA") found.push(`${file}: status is not SYNTHETIC / NOT VENDOR DATA`);
+  const walk = (value, at) => {
+    if (Array.isArray(value)) value.forEach((item, i) => walk(item, `${at}[${i}]`));
+    else if (value && typeof value === "object") for (const [key, item] of Object.entries(value)) {
+      if (money.test(key)) found.push(`${file}: money field ${at}.${key}`);
+      walk(item, `${at}.${key}`);
+    }
+  };
+  walk(catalog, "$");
+}
+for (const file of files) if (asset.test(file)) found.push(`${file}: a model, texture or environment file`);
+for (const line of found) console.log(line);
+console.log(`tree: ${catalogs.length} catalog file(s), ${files.length} tracked files, ${found.length} finding(s)`);
+process.exit(found.length ? 1 : 0);
+'
+"""

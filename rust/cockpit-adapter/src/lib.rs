@@ -7,7 +7,7 @@
 //!
 //! # The contract is a byte copy of the cockpit's file
 //!
-//! `src/engine.rs` is the cockpit's `cockpit/contract/src/engine.rs` copied byte for byte
+//! `src/engine.rs` is the retired cockpit's contract file copied byte for byte
 //! (imported from the private design pass at commit `815d832`, plus issue #59's `nominalRpm` field on the fan
 //! record) - 13010 bytes, sha256
 //! `c955238548fd51a62c7a33687d47bf05608e64062502df53d0d66b0c74bf27fe`, git blob
@@ -38,10 +38,8 @@
 #[rustfmt::skip]
 pub mod engine;
 pub mod fixture_engine;
-/// Issue #137: the cockpit's one number formatter, compiled here from the cockpit's own file so the worked
-/// steps' substitutions and the screens' read-outs print every number the same way.
+/// Issue #137: the one number formatter the worked steps' substitutions print every number with.
 #[allow(dead_code)]
-#[path = "../../../cockpit/src/numfmt.rs"]
 mod numfmt;
 mod real_engine;
 

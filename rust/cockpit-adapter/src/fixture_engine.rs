@@ -10,7 +10,7 @@
 //! exists so that the verbatim contract copy resolves `crate::fixture_engine::FixtureFile`. It is
 //! deliberately opaque: restating the cockpit's fixture-file schema here would be a second copy of a
 //! record this crate does not read, and a silently-wrong stand-in besides. The cockpit's own type
-//! stays with the cockpit (`cockpit/src/fixture_engine.rs` in the designer's checkout).
+//! stayed with the retired cockpit.
 
 /// The cockpit's fixture file. Never constructed in this crate; see the module docs.
 #[derive(Clone, Debug, PartialEq)]

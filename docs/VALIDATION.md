@@ -112,7 +112,7 @@ row, and stay empty until a licensed CTI ToolKit run fills them**, with the Tool
 recorded. The two `KaV_L_*` columns are this engine's own output under the two inlet-enthalpy
 conventions; they are not CTI output and must not be read as a comparison. The same statement is
 carried at the top of the CSV itself so that a reader of the file does not have to infer it from
-blank cells. The CSV was produced by `scripts/generate-vectors.mjs`, which was retired with the
+blank cells. The CSV was produced by the vector generator script, which was retired with the
 JavaScript reference (issue #40 slice 4); it is now frozen evidence — do not edit by hand.
 
 For each controlled comparison, record:

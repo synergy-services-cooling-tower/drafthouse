@@ -975,8 +975,8 @@ function build() {
   }
   cargo(['build', '--manifest-path', CRATE_MANIFEST]);
   if (WASM_ENGINE) {
-    // The recorded wasm build command (`rust/README.md`, `docs/WASM_ENGINE.md`), the same
-    // one the hosted workflow runs.
+    // The recorded wasm build command (`rust/README.md`), the same
+    // one local/parity runs.
     cargo(['build', '--manifest-path', CRATE_MANIFEST, '--target', 'wasm32-unknown-unknown', '--profile', 'wasm', '--lib']);
   }
 }
@@ -1014,8 +1014,7 @@ function main() {
     console.log('WASM BINDING SECTION: NOT COMPARED — its rows diffed rust/wasm/binding.mjs\'s data-only');
     console.log('surface against the JavaScript reference, a JavaScript surface with no engine reply, so');
     console.log('they have no recorded counterpart. The binding itself is exercised by the wasm leg above');
-    console.log('(every reply it produces is cross-checked against the native binary) and by the pinned');
-    console.log('bytes `npm run bundle-check` re-derives and `npm run deploy-check` records.');
+    console.log('(every reply it produces is cross-checked against the native binary).');
     console.log('='.repeat(100));
   }
 

@@ -1,0 +1,14 @@
+about = "the legacy set keeps building under today's checks: in rust/ cargo fmt, clippy -D warnings and cargo test --workspace on its own toolchain; web/geometry.js holds its v0.4.3 bytes"
+fix = "a dangling path means a PR deleted or moved a file the legacy set still builds from: delete or re-point that user in the same PR; never edit web/geometry.js"
+budget_secs = 900
+setup = ["rust"]
+run = """
+set -eu
+echo "e69f322ee8755e3e91783897b1a985331456bc1e475fd1b32bfe7796de6d0434  web/geometry.js" | shasum -a 256 -c
+cd rust
+export CARGO_TARGET_DIR="$PWD/target"
+if [ -n "${CI:-}" ]; then rustup toolchain install; fi
+cargo fmt --check
+cargo clippy --locked --all-targets -- -D warnings
+cargo test --locked --workspace
+"""

@@ -1,6 +1,6 @@
 //! The contract-drift gate (#57 scope 3): the copied contract against the cockpit's own bytes.
 //!
-//! `src/engine.rs` is a byte copy of the cockpit's `cockpit/contract/src/engine.rs` (imported from
+//! `src/engine.rs` is a byte copy of the retired cockpit's contract file (imported from
 //! the private design pass at commit `815d832730b944607afc7aac07f5bea610c8c07c`, plus issue #59's `nominalRpm`
 //! field on the fan record): 13010 bytes, git blob
 //! `418ecf8cb46fbf2cc8de51d066e146815c03904f`, sha256
@@ -9,15 +9,11 @@
 //! fails here naming the drift. `src/lib.rs` documents why the `mod` declaration carries
 //! `#[rustfmt::skip]`: `cargo fmt` would otherwise rewrite the file and break this pin.
 //!
-//! Three checks, strongest first, and no silent skips:
+//! Two checks, strongest first, and no silent skips:
 //!
-//! 1. the copy's bytes against the cockpit's own file in this repository, when the cockpit checkout
-//!    is present next to it (`../cockpit/contract/src/engine.rs`);
-//! 2. the copy's git blob hash against the pin - this is the check that runs everywhere, including a
-//!    CI checkout with no second checkout next to it;
-//! 3. the copy's byte length, and its sha256 when the host has a `shasum`/`sha256sum` helper.
+//! 1. the copy's git blob hash against the pin;
+//! 2. the copy's byte length, and its sha256 when the host has a `shasum`/`sha256sum` helper.
 
-use std::path::PathBuf;
 use std::process::Command;
 
 /// The copy, as the adapter compiles it.
@@ -40,13 +36,13 @@ fn the_copy_is_the_pinned_source_bytes() {
         CONTRACT.len()
     );
 
-    // 2. The blob hash: the identity that travels with the copy itself.
+    // 1. The blob hash: the identity that travels with the copy itself.
     match git_blob_hash(CONTRACT_PATH) {
         Ok(blob) => assert_eq!(
             blob, PIN_BLOB,
             "the copied contract drifted from the private design pass {SOURCE_COMMIT}: git blob {blob} is not \
              the pinned {PIN_BLOB}. The contract is a byte copy of the cockpit's \
-             cockpit/contract/src/engine.rs and nothing in it may be edited, reformatted or renamed \
+             contract file and nothing in it may be edited, reformatted or renamed \
              - if the cockpit's contract moved, re-copy the file, re-pin both digests here and in \
              src/lib.rs, and re-run the parity test"
         ),
@@ -56,33 +52,7 @@ fn the_copy_is_the_pinned_source_bytes() {
         ),
     }
 
-    // 1. The cockpit's own file, when this checkout sits next to the adapter's crate.
-    match cockpit_contract() {
-        Some((path, bytes)) => {
-            if bytes == CONTRACT.as_bytes() {
-                println!(
-                    "the cockpit's contract checked: {} ({} bytes) holds the pinned bytes",
-                    path.display(),
-                    bytes.len()
-                );
-            } else {
-                eprintln!(
-                    "NOT VERIFIABLE against the cockpit's contract: {} holds {} bytes against the \
-                     pinned {PIN_BYTES}, so the copy is not that file's bytes; the copy's own \
-                     identity was checked above and is what this crate compiles",
-                    path.display(),
-                    bytes.len()
-                );
-            }
-        }
-        None => eprintln!(
-            "NOT VERIFIABLE on this host: no cockpit checkout found next to this crate \
-             (set `COCKPIT_DIR` to point at one); the pinned blob above is the identity check that \
-             remains"
-        ),
-    }
-
-    // 3. The sha256, when the host can compute one.
+    // 2. The sha256, when the host can compute one.
     match sha256_of(CONTRACT_PATH) {
         Some((digest, helper)) => assert_eq!(
             digest, PIN_SHA256,
@@ -132,24 +102,4 @@ fn sha256_of(path: &str) -> Option<(String, &'static str)> {
         }
     }
     None
-}
-
-/// The cockpit's own contract file, when this checkout sits next to the adapter's crate:
-/// `<repo>/cockpit/contract/src/engine.rs`. `COCKPIT_DIR` overrides the location.
-fn cockpit_contract() -> Option<(PathBuf, Vec<u8>)> {
-    let path = match std::env::var_os("COCKPIT_DIR") {
-        Some(dir) => PathBuf::from(dir)
-            .join("contract")
-            .join("src")
-            .join("engine.rs"),
-        None => PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("..")
-            .join("..")
-            .join("cockpit")
-            .join("contract")
-            .join("src")
-            .join("engine.rs"),
-    };
-    let bytes = std::fs::read(&path).ok()?;
-    Some((path, bytes))
 }

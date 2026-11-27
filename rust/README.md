@@ -147,8 +147,7 @@ and the two refusals (`At least two interpolation points are required.`,
 ## What is not ported
 
 Natural draft, the characteristic/performance capability tables, the worked-steps renderer,
-and the sample catalog data (the catalog records live in `../src/data/sampleCatalog.js` and are
-handed to this crate, never fetched by it). The reference's selection **economics** are not
+and the sample catalog data (catalog records are handed to this crate, never fetched by it). The reference's selection **economics** are not
 ported by decision, not by omission — see the ranking section above. No UI concerns and no
 egui. The wasm build arrived with issue #24 (below) and is a second *build* of this crate, not
 a second engine.
@@ -159,8 +158,7 @@ The engine compiles for `wasm32-unknown-unknown` with no dependency and no bindi
 generator. `src/cli.rs` holds the command surface once; `src/bin/ct-engine.rs` is its process
 shell and `src/wasm.rs` — compiled only for the wasm target — is a three-function C ABI over
 it, so the two builds cannot drift into two parsers. `../rust/wasm/binding.mjs` is the thin
-JavaScript binding: data in, data out, no DOM, no geometry, no markup. The full story, the
-ABI, the binding's API and the equivalence check are in `../docs/WASM_ENGINE.md`.
+JavaScript binding: data in, data out, no DOM, no geometry, no markup.
 
 ## The catalog-record validator (issue #5)
 
@@ -208,7 +206,7 @@ record.
 
 ### The reference catalog's four commercial fields
 
-The bundled `src/data/sampleCatalog.js` carries the reference engine's four commercial
+The retired reference catalog carried the reference engine's four commercial
 fields (`baseCost` on towers, `costPerM3` on fills, `costPerM2` on drift eliminators,
 `cost` on fans), and the schema prose shows them. The machine schema does **not** declare
 them, for a reason of this repository's own making: `tests/selection.rs::no_money_ish_identifier_exists_anywhere_in_the_port`
@@ -270,7 +268,7 @@ node scripts/parity/run.mjs --engine wasm  # build and diff the wasm build as we
 
 `--engine wasm` builds the wasm artifact, runs this whole suite through it
 (`rust/wasm/binding.mjs`) against the reference, and cross-checks every reply against the
-binary; see `../docs/WASM_ENGINE.md`.
+binary.
 
 The wasm build on its own:
 

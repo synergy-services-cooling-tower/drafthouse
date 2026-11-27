@@ -1,0 +1,48 @@
+frozen = [".github/workflows/ci.yml"]
+
+[comments]
+policy = "strict"
+except = ["rust/**", "web/geometry.js", "scripts/**"]
+
+[[collect]]
+dir = ".gatekeeper/gates"
+glob = "*.toml"
+
+[[ban]]
+pattern = "TODO"
+paths = ["crates/**", "packages/**", "apps/**", "tools/**"]
+reason = "no TODO comment, with or without an issue number: unfinished work is an issue"
+
+[[ban]]
+pattern = "unsafe "
+paths = ["crates/*/src/**"]
+except = ["crates/wasm/src/lib.rs"]
+reason = "the ABI is the only unsafe code"
+
+[[ban]]
+pattern = "serde"
+paths = ["crates/engine/src/**"]
+reason = "the physics has no dependency; its tests may read JSON with serde_json"
+
+[[ban]]
+pattern = "from \"three"
+paths = ["packages/**", "apps/**"]
+except = ["packages/tower3d/**"]
+reason = "Three.js lives in the tower chunk only"
+
+[[ban]]
+pattern = "from \"@drafthouse/tower3d"
+paths = ["packages/**", "apps/**"]
+except = ["packages/tower3d/**"]
+reason = "the tower is imported on demand: import(), never a static import"
+
+[[ban]]
+pattern = "postMessage"
+paths = ["packages/**", "apps/**"]
+except = ["packages/engine/src/**"]
+reason = "an app action is a crates/api command, sent only through the engine client's generated call"
+
+[[ban]]
+pattern = "Math."
+paths = ["packages/wizard/src/**"]
+reason = "the wizard shows the engine's numbers and computes none"

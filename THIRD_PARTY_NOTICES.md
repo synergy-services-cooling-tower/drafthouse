@@ -2,21 +2,14 @@
 
 ## Bundled code
 
-The prototype is dependency-free and does not bundle CTI Toolkit, MRL software, PsychroLib, IAPWS source code, manufacturer selection code, or supplier product curves.
+The engine crate is dependency-free and does not bundle CTI Toolkit, MRL software, PsychroLib, IAPWS source code, manufacturer selection code, or supplier product curves.
 
 The psychrometric implementation was independently written from published ASHRAE-style equations and checked conceptually against the open-source PsychroLib documentation. See `docs/REFERENCES.md`.
 
-### three.js (the 3D companion panel)
+### Build and gate tools
 
-The parts panel renders with **three.js r186 (`0.186.0`)**, vendored as committed local ES modules and imported natively — no CDN, no npm dependency and no build step:
-
-- `web/vendor/three.module.js` — SHA-256 `9052042d676cb0fdc1ddfefe193053f34b7ac0513a616fdac4535d49987812ea`
-- `web/vendor/three.core.js` — SHA-256 `9edde002b066a9a05676a6127f67735b62baf399bdea529f2f7e31657da769e6`
-- `web/vendor/three-LICENSE.txt` — SHA-256 `8b378ebe60e2fe500158cb0ac71cb5e8b7d92953c2abcc63a0eb90499653b5bc`
-
-Licence: **MIT**, Copyright © 2010-2026 three.js authors. The MIT text is vendored alongside the files as `web/vendor/three-LICENSE.txt`. `three.module.js` imports `./three.core.js`, so both files ship together.
-
-The panel's own modules (`web/panel.js`, `web/geometry.js`, `web/numbers.js`, `web/panel-ui.js`, `web/viewer.js`, `web/panel.css`) are original to this repository and carry the same PolyForm Noncommercial 1.0.0 licence as the rest of it (see `LICENSE`).
+`crates/blocks` builds the `blocks check` tool from the Blocks repository (MIT) at a pinned tag. It is a check
+run in CI and is in no shipped file. `.gatekeeper/run` fetches the pinned gatekeeper binary and checks its sha256.
 
 ## Referenced standards and software
 

@@ -22,7 +22,7 @@ use crate::engine::{
 
 /// Millimetres of water gauge per pascal: the cockpit's second total-pressure unit.
 ///
-/// `1 / 9.80665` is the cockpit baseline's own constant (`cockpit/src/fixture_engine.rs`); the
+/// `1 / 9.80665` is the retired cockpit baseline's own constant; the
 /// conversion is a display unit, not a second pressure model.
 const MMWG_PER_PA: f64 = 1.0 / 9.80665;
 

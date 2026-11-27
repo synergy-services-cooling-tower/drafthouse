@@ -6,15 +6,10 @@ description = "Cooling-tower engine core in Rust. Ported slice 1: psychrometrics
 license = "PolyForm-Noncommercial-1.0.0"
 publish = false
 
-# Issue #58: the cockpit is **not** a member of this workspace - it is its own workspace at
-# `cockpit/` (it carries its own `[profile]` tables, which a member's manifest cannot), so this
-# file, its lock and the pinned engine artifact are exactly what they were before the import.
-#
 # Issue #57: the cockpit adapter (`cockpit-adapter/`) is the second crate of this workspace, so
 # `cargo test` / `cargo clippy --all-targets` / `cargo fmt --check` cover both from `rust/`. The
-# engine package stays the root package, so every recorded command in this file, in
-# `scripts/bundle.mjs` and in `.github/workflows/validate.yml` — all of which pass
-# `--manifest-path rust/Cargo.toml` — keeps resolving to the same package and profile.
+# engine package stays the root package, so the parity harness's `--manifest-path rust/Cargo.toml`
+# keeps resolving to the same package and profile.
 [workspace]
 members = ["cockpit-adapter"]
 

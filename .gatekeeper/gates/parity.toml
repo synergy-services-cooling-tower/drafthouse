@@ -1,0 +1,25 @@
+about = "validation/ is byte-identical, then the 299 recorded steps (11,524 quantities) replay through ct-engine natively and, where the wasm32 target is installed (always in CI), through the WASM build cross-checked against native"
+fix = "never edit validation/; a quantity out of tolerance is an engine change: find what moved it in rust/src and undo it"
+budget_secs = 900
+setup = ["rust", "node"]
+run = """
+set -eu
+shasum -a 256 -c <<'PIN'
+7a27327823f73110fba03af93be6150511d40bf7ae3eadf2700263809e835cd6  validation/cti-comparison-matrix.csv
+3b37fa78947c4aee8ce33720006a447e5b9ea47576aabee6e87bfe72fe679726  validation/regression-baseline.json
+05fa937f0bee8e2a15befdc07f860eb3eda400725be5954dc36eff2943bda92e  validation/test-vectors.json
+PIN
+[ "$(ls validation | wc -l | tr -d ' ')" = 3 ] || { echo "validation/ holds a file the pin does not name"; exit 1; }
+export CARGO_TARGET_DIR="$PWD/rust/target"
+if [ -n "${CI:-}" ]; then (cd rust && rustup toolchain install && rustup target add wasm32-unknown-unknown); fi
+(cd rust && cargo build --locked --bin ct-engine)
+node scripts/parity/run.mjs --no-build
+if (cd rust && rustup target list --installed | grep -qx wasm32-unknown-unknown); then
+  (cd rust && cargo build --locked --target wasm32-unknown-unknown --profile wasm --lib)
+  node scripts/parity/run.mjs --engine wasm --no-build
+elif [ -n "${CI:-}" ]; then
+  echo "parity: the wasm32 target is missing in CI"; exit 1
+else
+  echo "parity: wasm leg skipped, no wasm32 target on this host (CI runs it)"
+fi
+"""

@@ -2,7 +2,7 @@
 name = "cockpit-adapter"
 version = "0.4.3"
 edition = "2021"
-description = "The cockpit's Engine contract over the real cooling-tower engine (#57): the contract file is a byte copy of the cockpit's cockpit/src/engine.rs, and the implementation runs a cockpit EngineInput through the engine crate's own selection path."
+description = "The cockpit's Engine contract over the real cooling-tower engine (#57): the contract file is a byte copy of the retired cockpit's contract file, and the implementation runs a cockpit EngineInput through the engine crate's own selection path."
 license = "PolyForm-Noncommercial-1.0.0"
 publish = false
 

@@ -1,0 +1,15 @@
+name: ci
+on:
+  push:
+    branches: [main, staging]
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    uses: jirathip-dev/gatekeeper/.github/workflows/gates.yml@06e8d388ab1ff2baece5dfe881f2cd1c1dcba9d7 # v1.5.0
+    secrets:
+      private-names: ${{ secrets.PRIVATE_NAMES }}

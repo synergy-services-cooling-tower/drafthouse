@@ -9,7 +9,7 @@ Sources, quoted per test:
   balance on the 4200 m² shell, and the taller shell drawing more air. The tower there is a
   literal, quoted verbatim below.
 * `validation/test-vectors.json` (family `naturalDraft`) — the two recorded catalog-cell
-  cases are replayed in `rust/tests/vectors.rs`.
+  cases are replayed in `crates/engine/tests/vectors.rs`.
 * `src/core/naturalDraft.js` — the draft-height guard and its message, the
   `airFreeAreaM2 ?? fillAreaM2` face area, the 480-sample scan (`prefer: 'first'`, 1e-6 Pa
   residual), the `chebyshev4` cold-water solve and the bare `catch` that lets a refusing
@@ -24,7 +24,7 @@ The JavaScript engine is the specification; nothing here re-derives a value.
 ### `fn documented_tower`
 
 The tower of `tests/crossflow-natural.test.js` (the draft height travels beside the record
-in this port: see `rust/src/natural_draft.rs`).
+in this port: see `crates/engine/src/natural_draft.rs`).
 
 ### `fn film_vf38`
 

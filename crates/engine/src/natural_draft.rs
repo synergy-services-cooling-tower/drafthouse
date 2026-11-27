@@ -47,11 +47,11 @@ pub struct NaturalDraftInput<'a> {
 }
 
 impl<'a> NaturalDraftInput<'a> {
-    /// The arguments the reference requires — the three records and the four condition values — with every default argument applied.
     #[allow(
         clippy::too_many_arguments,
-        reason = "the reference constructor takes these positional arguments"
+        reason = "the reference's positional arguments"
     )]
+    /// The arguments the reference requires — the three records and the four condition values — with every default argument applied.
     #[must_use]
     pub fn new(
         tower: &'a TowerRecord,

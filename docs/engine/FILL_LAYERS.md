@@ -182,12 +182,12 @@ it and its own transfer number. The fill total step that follows is the layers' 
 
 | file | what it owns |
 |---|---|
-| `rust/src/layers.rs` | `FillLayer`, `FillStack`, `LayerTerms`, `FillLayerResult`, resolution and its refusals, `check_stack_operating_envelope` |
-| `rust/src/airside.rs` | `layered_system_pressure_breakdown` (the layered breakdown); `system_pressure_breakdown` is its one-layer case |
-| `rust/src/selection.rs` | `fill_stacks` variants, `fill_layers` on a candidate, the layered candidate physics |
-| `rust/src/cli.rs` | the `layers` command, the stack spelling reader, `fillStacks`, `fillLayers`, the per-layer worked steps |
-| `rust/src/validate.rs` | the schema's optional `fillStacks` field |
-| `rust/tests/layers.rs` | the layered contract's own suite |
+| `crates/engine/src/layers.rs` | `FillLayer`, `FillStack`, `LayerTerms`, `FillLayerResult`, resolution and its refusals, `check_stack_operating_envelope` |
+| `crates/engine/src/airside.rs` | `layered_system_pressure_breakdown` (the layered breakdown); `system_pressure_breakdown` is its one-layer case |
+| `crates/engine/src/selection.rs` | `fill_stacks` variants, `fill_layers` on a candidate, the layered candidate physics |
+| `crates/cli/src/lib.rs` | the `layers` command, the stack spelling reader, `fillStacks`, `fillLayers`, the per-layer worked steps |
+| `crates/engine/src/validate.rs` | the schema's optional `fillStacks` field |
+| `crates/cli/tests/layers.rs` | the layered contract's own suite |
 | `validation/test-vectors.json` (family `fillLayers`) | the recorded layered cases — additions alongside the existing families |
 
 The layer cases in `validation/test-vectors.json` are recorded regression vectors, i.e. they

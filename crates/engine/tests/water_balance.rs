@@ -89,15 +89,15 @@ fn water_balance_conserves_makeup_equals_evaporation_plus_drift_plus_blowdown() 
 
 #[test]
 fn the_worked_water_balance_of_the_design_cell_closes() {
-    const OUTLET_HUMIDITY_RATIO: f64 = 0.042764593386655496;
+    const OUTLET_HUMIDITY_RATIO: f64 = 0.042_764_593_386_655_496;
     let inlet = psychrometric_state(PsychrometricStateInput::from_wet_bulb(33.0, 27.0)).unwrap();
-    assert_eq!(inlet.humidity_ratio, 0.0202263990025044);
+    assert_eq!(inlet.humidity_ratio, 0.020_226_399_002_504_4);
     let evaporation_kg_s =
         evaporation_from_air_mass_balance(200.0 / 1.5, inlet.humidity_ratio, OUTLET_HUMIDITY_RATIO)
             .unwrap();
     agrees(
         evaporation_kg_s,
-        3.0050925845534797,
+        3.005_092_584_553_479_7,
         "worked evaporationKgS",
     );
     let balance = cooling_tower_water_balance(
@@ -108,10 +108,14 @@ fn the_worked_water_balance_of_the_design_cell_closes() {
     .unwrap();
     agrees(
         balance.blowdown_kg_s,
-        0.9996975281844933,
+        0.999_697_528_184_493_3,
         "worked blowdownKgS",
     );
-    agrees(balance.makeup_kg_s, 4.006790112737972, "worked makeupKgS");
+    agrees(
+        balance.makeup_kg_s,
+        4.006_790_112_737_972,
+        "worked makeupKgS",
+    );
     let evaporation_pct = 100.0 * balance.evaporation_kg_s / 200.0;
     assert!(
         evaporation_pct > 1.0 && evaporation_pct < 2.5,

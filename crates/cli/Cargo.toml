@@ -7,7 +7,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-drafthouse-engine = { path = "../engine" }
+drafthouse-engine = { path = "../engine", version = "0.0.0" }
 
 [dev-dependencies]
 serde_json = "1"

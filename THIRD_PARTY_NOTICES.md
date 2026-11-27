@@ -4,7 +4,7 @@
 
 The engine crate is dependency-free and does not bundle CTI Toolkit, MRL software, PsychroLib, IAPWS source code, manufacturer selection code, or supplier product curves.
 
-The psychrometric implementation was independently written from published ASHRAE-style equations and checked conceptually against the open-source PsychroLib documentation. See `docs/REFERENCES.md`.
+The psychrometric implementation was independently written from published ASHRAE-style equations and checked conceptually against the open-source PsychroLib documentation. See `docs/engine/REFERENCES.md`.
 
 ### Build and gate tools
 

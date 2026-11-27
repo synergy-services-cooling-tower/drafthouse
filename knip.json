@@ -1,3 +1,14 @@
 {
-  "ignore": ["rust/**", "scripts/**", "web/geometry.js", "docs/design/**"]
+  "entry": [
+    "tools/parity/run.mjs"
+  ],
+  "ignore": [
+    "rust/**",
+    "scripts/**",
+    "web/geometry.js",
+    "docs/design/**"
+  ],
+  "ignoreBinaries": [
+    "rustc"
+  ]
 }

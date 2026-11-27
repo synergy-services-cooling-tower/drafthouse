@@ -10,7 +10,7 @@ publish.workspace = true
 crate-type = ["cdylib"]
 
 [dependencies]
-drafthouse-cli = { path = "../cli" }
+drafthouse-cli = { path = "../cli", version = "0.0.0" }
 
 [lints.rust]
 unsafe_code = "allow"

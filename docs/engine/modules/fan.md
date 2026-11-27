@@ -10,7 +10,7 @@ air density and the affinity laws at the operating speed ratio. The recorded cur
 ratio-1.0 curve; the affinity exponents this module applies are named constants
 ([`FLOW_AFFINITY_EXPONENT`], [`PRESSURE_AFFINITY_EXPONENT`], and the shaft power they imply,
 [`SHAFT_POWER_AFFINITY_EXPONENT`]), and the engineering statement with its source is recorded
-in `docs/CTI_MRL_MAPPING.md`.
+in `docs/engine/CTI_MRL_MAPPING.md`.
 
 Out-of-domain input returns a [`DomainError`] rather than a clamped value: a curve with
 fewer than two points, a non-positive reference density, speed ratio or air density, and a
@@ -23,7 +23,7 @@ non-positive interpolated efficiency are all refused.
 Flow ∝ n: the fan-affinity exponent of the recorded curve's **flow** leg.
 
 One turn of the same curve at speed ratio `n` carries `n` times the flow. Source: the AMCA
-references in `docs/REFERENCES.md`, recorded against the engine in `docs/CTI_MRL_MAPPING.md`.
+references in `docs/engine/REFERENCES.md`, recorded against the engine in `docs/engine/CTI_MRL_MAPPING.md`.
 
 ### `const PRESSURE_AFFINITY_EXPONENT`
 

@@ -9,7 +9,7 @@ Sources, quoted per test:
   recovers the flow, and a matching test point evaluates to 100 % capability. The grid is
   `src/data/samplePerformanceCurves.js`, quoted in `sample_grid` below.
 * `validation/test-vectors.json` (family `performanceCurve`) — the two recorded cases are
-  replayed in `rust/tests/vectors.rs`.
+  replayed in `crates/engine/tests/vectors.rs`.
 * `src/core/performanceCurve.js` — the 1e-9 corner tolerance, the `clampEnds: false`
   extrapolation, the 8-record bounds floor, the 400-sample inverse scan and both refusal
   messages.

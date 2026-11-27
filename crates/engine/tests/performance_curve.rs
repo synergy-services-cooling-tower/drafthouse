@@ -113,7 +113,7 @@ fn a_point_outside_the_grid_is_flagged_and_extrapolated_not_clamped() {
 fn an_incomplete_corner_is_refused_naming_the_corner() {
     let records: Vec<PerformanceCurveRecord> = sample_grid()
         .into_iter()
-        .filter(|record| !(record.wet_bulb_c == 24.0 && record.range_c == 10.0))
+        .filter(|record| !(same(record.wet_bulb_c, 24.0) && same(record.range_c, 10.0)))
         .collect();
     let error = predict_cold_water_from_performance_curves(&records, 25.5, 11.0, 180.0)
         .expect_err("must refuse");
@@ -158,8 +158,8 @@ fn the_bounds_report_the_axis_ranges_of_the_grid() {
 fn the_corner_match_tolerance_is_the_reference_onee_nine() {
     let grid = sample_grid();
     let mut nudged = grid.clone();
-    for record in nudged.iter_mut() {
-        if record.wet_bulb_c == 24.0 && record.range_c == 10.0 {
+    for record in &mut nudged {
+        if same(record.wet_bulb_c, 24.0) && same(record.range_c, 10.0) {
             record.wet_bulb_c += 5e-10;
         }
     }
@@ -170,8 +170,8 @@ fn the_corner_match_tolerance_is_the_reference_onee_nine() {
     assert!((matched.cold_water_c - exact.cold_water_c).abs() < 1e-6);
 
     let mut missed = grid;
-    for record in missed.iter_mut() {
-        if record.wet_bulb_c == 24.0 && record.range_c == 10.0 {
+    for record in &mut missed {
+        if same(record.wet_bulb_c, 24.0) && same(record.range_c, 10.0) {
             record.wet_bulb_c += 2e-9;
         }
     }
@@ -195,4 +195,8 @@ fn the_inverse_scan_stays_inside_the_flow_bounds_it_reports() {
     let solved =
         predict_water_flow_from_performance_curves(&records, 27.0, 10.0, 34.0).expect("solves");
     assert!(solved.water_flow_kg_s >= 120.0 && solved.water_flow_kg_s <= 280.0);
+}
+
+fn same(a: f64, b: f64) -> bool {
+    a.partial_cmp(&b) == Some(std::cmp::Ordering::Equal)
 }

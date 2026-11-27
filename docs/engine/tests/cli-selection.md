@@ -12,7 +12,7 @@ Sources, quoted per test:
   `src/data/sampleCatalog.js`; all coefficients are illustrative synthetic data).
 * issue #1's measured table (18 September 2026) — the four-objective anchors on the
   bundled catalog; the capacity and capability-ratio numbers were measured from the
-  reference engine's own functions at this commit (`scripts/parity/run.mjs` recomputes
+  reference engine's own functions at this commit (`tools/parity/run.mjs` recomputes
   them independently on every run).
 
 The JavaScript engine is the specification; nothing here re-derives a physics value.
@@ -50,7 +50,7 @@ The inverse solve, pinned. The case: the single-cell catalog's least-over-capaci
 reference's default duty. The expected 225.32138116657734 was measured with the reference
 engine's own functions (2026-09-19, `solveFanSystemIntersection` + `solveColdWaterTemperature`
 per flow, then `solveBracketedRoot` on water mass flow, tolerance 1e-9 / xTolerance 1e-6 —
-the same bracketed bisection `scripts/parity/run.mjs` performs), and the harness reproduces
+the same bracketed bisection `tools/parity/run.mjs` performs), and the harness reproduces
 it for every candidate of the bundled catalog. The winner's identity is reproducible from
 the selection itself.
 

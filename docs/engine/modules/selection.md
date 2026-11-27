@@ -12,12 +12,12 @@ state. What deliberately diverges from the reference — and from nothing else:
 * **No economics.** The reference computes `candidateEconomics()` and sorts by it first;
   this port has no commercial field anywhere, reads none of the catalog's rate fields and
   produces no economics. The superseded reference ranking is documented in
-  `rust/README.md`, not silently overwritten.
+  `docs/engine/README.md`, not silently overwritten.
 * **The ranking is the run's declared objective.** Duty and thermal margin are
   constraints, never sort keys. The four objectives are [`Objective`]; the default is
   least over-capacity — the smallest unit that meets the duty with the required margin,
   i.e. the smallest [`SelectionCandidate::capacity_kg_s`] (the water flow the unit holds
-  at the required cold-water temperature). See `rust/README.md` for why the sort key is
+  at the required cold-water temperature). See `docs/engine/README.md` for why the sort key is
   the capacity rather than the reported capability ratio.
 * **Two quantities are reported per candidate that the reference never computed**:
   `capacityKgS` (an inverse solve at fixed cold-water temperature on the candidate's own
@@ -34,7 +34,7 @@ byte-identical. They are marked as such below; no physics is invented.
 ### `const SELECTION_WARNING`
 
 The warning the reference returns, minus its economics clause: this port reads no rate
-data, so it cannot promise anything about it. Documented in `rust/README.md`.
+data, so it cannot promise anything about it. Documented in `docs/engine/README.md`.
 
 ### `fn js_max`
 
@@ -170,7 +170,7 @@ Parse the spelling; an unknown string is the caller's usage error.
 
 The reference's `defaultSelectionRequirements()`, minus the six inputs that only fed its
 economics (the energy and water rates, annual maintenance, analysis period and present-value
-rate, and the operating hours); `rust/README.md` names them.
+rate, and the operating hours); `docs/engine/README.md` names them.
 
 ### `pub water_mass_flow_kg_s: f64,`
 

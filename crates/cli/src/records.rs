@@ -22,7 +22,7 @@ pub(crate) fn fill_stack(option: &str, raw: &str) -> Result<FillStack, Failure> 
             )));
         }
         let mut parts = rest.split('@');
-        let depth = parts.next().expect("split yields at least one part");
+        let depth = parts.next().unwrap_or_default();
         let thermal = parts.next();
         let pressure = parts.next();
         if depth.is_empty() || parts.next().is_some() {
@@ -379,7 +379,7 @@ pub(crate) fn selection_tower(spec: &Spec) -> Result<SelectionTower, Failure> {
             .map(|part| parse_number(part, "--towers fillDepthOptionsM"))
             .collect::<Result<Vec<f64>, Failure>>()?,
         fill_stacks: spec
-            .list("fillStacks")?
+            .list("fillStacks")
             .iter()
             .map(|entry| fill_stack("--towers fillStacks", entry))
             .collect::<Result<Vec<FillStack>, Failure>>()?,
@@ -449,7 +449,7 @@ pub(crate) fn fill_physics(spec: &Spec) -> Result<FillRecord, Failure> {
             max_dry_air_loading_kg_m2_s: parse_number(max_dry_air, &limits_option)?,
             max_water_temperature_c: parse_number(max_temperature, &limits_option)?,
         },
-        allowed_water_quality_classes: spec.list("allowedWaterQualityClasses")?,
+        allowed_water_quality_classes: spec.list("allowedWaterQualityClasses"),
     })
 }
 
@@ -495,12 +495,12 @@ pub(crate) fn selection_fan(spec: &Spec) -> Result<SelectionFan, Failure> {
         });
     }
     let speed_ratio = spec.required_list("allowedSpeedRatio")?;
-    if speed_ratio.len() != 2 {
+    let [lower_speed_ratio, upper_speed_ratio] = speed_ratio.as_slice() else {
         return Err(Failure::Usage(format!(
             "--fans allowedSpeedRatio expects lower|upper, got {:?}",
             speed_ratio.join("|")
         )));
-    }
+    };
     let pressure_basis = match spec.get("pressureBasis") {
         None => None,
         Some("total") => Some(FanPressureBasis::Total),
@@ -521,8 +521,8 @@ pub(crate) fn selection_fan(spec: &Spec) -> Result<SelectionFan, Failure> {
             curve,
         },
         allowed_speed_ratio: [
-            parse_number(&speed_ratio[0], "--fans allowedSpeedRatio")?,
-            parse_number(&speed_ratio[1], "--fans allowedSpeedRatio")?,
+            parse_number(lower_speed_ratio, "--fans allowedSpeedRatio")?,
+            parse_number(upper_speed_ratio, "--fans allowedSpeedRatio")?,
         ],
         nominal_rpm: spec.number("nominalRpm")?,
         drive_efficiency: spec.required("driveEfficiency")?,
@@ -602,14 +602,13 @@ pub(crate) const CATALOG_LISTS: [CatalogList; 5] = [
 pub(crate) fn validate_catalog_records(cli: &Cli) -> Result<[usize; 5], Failure> {
     let mut counts = [0_usize; 5];
     let mut violations = Vec::new();
-    for (index, list) in CATALOG_LISTS.iter().enumerate() {
+    for (count, list) in counts.iter_mut().zip(CATALOG_LISTS.iter()) {
         let specs = record_list(cli, list.option)?;
-        counts[index] = specs.len();
+        *count = specs.len();
         for (position, spec) in specs.iter().enumerate() {
             let label = spec
                 .get("id")
-                .map(str::to_string)
-                .unwrap_or_else(|| format!("#{}", position + 1));
+                .map_or_else(|| format!("#{}", position + 1), str::to_string);
             let pairs: Vec<(&str, &str)> = spec
                 .pairs
                 .iter()
@@ -627,7 +626,7 @@ pub(crate) fn validate_catalog_records(cli: &Cli) -> Result<[usize; 5], Failure>
         Err(Failure::Usage(
             violations
                 .iter()
-                .map(|violation| violation.message())
+                .map(drafthouse_engine::Violation::message)
                 .collect::<Vec<String>>()
                 .join("\n"),
         ))

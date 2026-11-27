@@ -60,7 +60,7 @@ Public web sources were checked on 13 August 2026. Paid standards and commercial
 16. **AMCA — “Straightening Out Fan Curves.”** Public guidance on duty points, pressure, power, density/speed information, motor overload and installation effects.  
     https://www.amca.org/educate/articles-and-technical-papers/amca-inmotion-articles/straightening-out-fan-curves.html
 
-18. **Chart Industries (Hudson Products Corporation) — R. C. Monroe, “Fans Key to Optimum Cooling-Tower Design.”** Paper presented to the Cooling Technology Institute annual meeting, New Orleans, 1974. States the basic fan law for axial cooling-tower fans — `CFM = f(rpm)¹`, `TP = f(rpm)²`, `HP = f(rpm)³` — and the tip-speed practice U.S. designs are usually held to (12 000 ft/min standard; 10 000 ft/min in the worked example). Cited by `docs/CTI_MRL_MAPPING.md` for the affinity exponents and used for the rated-speed datum the fan records carry (`nominalRpm`); checked 23 September 2026.  
+18. **Chart Industries (Hudson Products Corporation) — R. C. Monroe, “Fans Key to Optimum Cooling-Tower Design.”** Paper presented to the Cooling Technology Institute annual meeting, New Orleans, 1974. States the basic fan law for axial cooling-tower fans — `CFM = f(rpm)¹`, `TP = f(rpm)²`, `HP = f(rpm)³` — and the tip-speed practice U.S. designs are usually held to (12 000 ft/min standard; 10 000 ft/min in the worked example). Cited by `docs/engine/CTI_MRL_MAPPING.md` for the affinity exponents and used for the rated-speed datum the fan records carry (`nominalRpm`); checked 23 September 2026.  
     https://files.chartindustries.com/hudson/Fans-Key-to-Cooling-Tower-Design.pdf
 
 ## 6. Cooling-tower water balance

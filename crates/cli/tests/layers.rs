@@ -3,7 +3,7 @@ use drafthouse_engine::{
     check_stack_operating_envelope, fill_pressure_drop_pa, fill_thermal_merkel_number,
     layered_system_pressure_breakdown, resolve_fill_layers, system_pressure_breakdown,
     DriftCurvePoint, DriftEliminatorRecord, FanCurvePoint, FanPressureBasis, FanRecord, FillLayer,
-    FillLimits, FillPressureCorrelation, FillRecord, FillStack, LayeredBreakdown,
+    FillLayerResult, FillLimits, FillPressureCorrelation, FillRecord, FillStack, LayeredBreakdown,
     LayeredBreakdownInput, SystemPressureBreakdown, SystemPressureBreakdownInput, TowerRecord,
     ZoneCorrelation,
 };
@@ -11,8 +11,8 @@ use serde_json::Value;
 
 const VECTOR_TOLERANCE: f64 = 1e-6;
 
-const DRY_AIR_DENSITY: f64 = 1.116703643908769;
-const MOIST_AIR_DENSITY: f64 = 1.1392905373780184;
+const DRY_AIR_DENSITY: f64 = 1.116_703_643_908_769;
+const MOIST_AIR_DENSITY: f64 = 1.139_290_537_378_018_4;
 
 fn agrees(actual: f64, expected: f64, label: &str) {
     let scale = expected.abs().max(1.0);
@@ -265,16 +265,16 @@ fn a_one_layer_stack_reproduces_the_recorded_airside_vector() {
         1.0,
     );
     let breakdown = &result.breakdown;
-    agrees(breakdown.total_pa, 332.801889, "airside-160 totalPa");
-    agrees(breakdown.fill_pa, 163.320834, "airside-160 fillPa");
+    agrees(breakdown.total_pa, 332.801_889, "airside-160 totalPa");
+    agrees(breakdown.fill_pa, 163.320_834, "airside-160 fillPa");
     agrees(
         breakdown.fill_merkel_number,
-        1.921084,
+        1.921_084,
         "airside-160 fillMerkelNumber",
     );
     agrees(
         breakdown.available_merkel_number,
-        2.258391,
+        2.258_391,
         "airside-160 availableMerkelNumber",
     );
     assert_eq!(result.fill_layers[0].pressure_drop_pa, breakdown.fill_pa);
@@ -294,10 +294,10 @@ fn two_layers_of_the_same_fill_split_the_single_fill_terms_by_depth() {
     ]);
     let result = stacked(&stack, &[fill], 160.0, 200.0, 1.0, 1.0);
     assert_eq!(result.fill_layers.len(), 2);
-    agrees(result.breakdown.fill_pa, 163.320834, "split fillPa total");
+    agrees(result.breakdown.fill_pa, 163.320_834, "split fillPa total");
     agrees(
         result.breakdown.fill_merkel_number,
-        1.921084,
+        1.921_084,
         "split fillMerkelNumber total",
     );
     let [upper, lower] = &result.fill_layers[..] else {
@@ -350,14 +350,7 @@ fn a_mixed_stack_sums_its_layers_in_physical_order() {
     let [upper, lower] = &result.fill_layers[..] else {
         panic!("two layers");
     };
-    assert_eq!(upper.fill_id, "FILM-OF25");
-    assert_eq!(upper.depth_m, 0.45);
-    assert_eq!(lower.fill_id, "FILM-VF38");
-    assert_eq!(lower.depth_m, 0.9);
-    assert_eq!(stack.label(), "FILM-OF25@0.45+FILM-VF38@0.9");
-    assert_eq!(stack.total_depth_m(), 1.35);
-    assert_eq!(stack.identity(), (stack.label(), 1.35));
-
+    assert_mixed_stack_identity(&stack, upper, lower);
     let expected_pressure = |fill: &FillRecord, depth_m: f64| {
         fill_pressure_drop_pa(
             fill,
@@ -403,6 +396,20 @@ fn a_mixed_stack_sums_its_layers_in_physical_order() {
     assert_eq!(lower.thermal, *fills[1].thermal.as_ref().unwrap());
     assert_eq!(upper.limits, fills[0].limits);
     assert_eq!(lower.limits, fills[1].limits);
+}
+
+fn assert_mixed_stack_identity(
+    stack: &FillStack,
+    upper: &FillLayerResult,
+    lower: &FillLayerResult,
+) {
+    assert_eq!(upper.fill_id, "FILM-OF25");
+    assert_eq!(upper.depth_m, 0.45);
+    assert_eq!(lower.fill_id, "FILM-VF38");
+    assert_eq!(lower.depth_m, 0.9);
+    assert_eq!(stack.label(), "FILM-OF25@0.45+FILM-VF38@0.9");
+    assert_eq!(stack.total_depth_m(), 1.35);
+    assert_eq!(stack.identity(), (stack.label(), 1.35));
 }
 
 #[test]
@@ -536,7 +543,7 @@ fn a_layer_outside_its_fills_limits_is_refused_by_name() {
     let terms = resolve_fill_layers(&stack, &fills).expect("the fixture stack resolves");
     let water_loading = 5.8;
     let failures =
-        check_stack_operating_envelope(&terms, water_loading, 1.7448494436074515, None, None);
+        check_stack_operating_envelope(&terms, water_loading, 1.744_849_443_607_451_5, None, None);
     assert_eq!(
         failures.len(),
         1,
@@ -549,7 +556,7 @@ fn a_layer_outside_its_fills_limits_is_refused_by_name() {
     let with_claims = check_stack_operating_envelope(
         &terms,
         water_loading,
-        1.7448494436074515,
+        1.744_849_443_607_451_5,
         Some(70.0),
         Some("dirty"),
     );
@@ -590,14 +597,18 @@ fn recorded_stack(spelling: &str) -> FillStack {
     )
 }
 
-#[test]
-fn the_recorded_fill_layer_vectors_reproduce() {
+fn recorded_vectors() -> Value {
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../../validation/test-vectors.json"
     );
     let text = std::fs::read_to_string(path).unwrap_or_else(|error| panic!("read {path}: {error}"));
-    let file: Value = serde_json::from_str(&text).unwrap_or_else(|error| panic!("parse: {error}"));
+    serde_json::from_str(&text).unwrap_or_else(|error| panic!("parse: {error}"))
+}
+
+#[test]
+fn the_recorded_fill_layer_vectors_reproduce() {
+    let file = recorded_vectors();
     let cases = file["families"]["fillLayers"]
         .as_array()
         .expect("the fillLayers family is an array");
@@ -636,27 +647,7 @@ fn the_recorded_fill_layer_vectors_reproduce() {
                 .expect("availableMerkelNumber"),
             &format!("{id} availableMerkelNumber"),
         );
-        let layers = expected["layers"].as_array().expect("layers");
-        assert_eq!(layers.len(), result.fill_layers.len(), "{id}");
-        for (index, layer) in layers.iter().enumerate() {
-            let got = &result.fill_layers[index];
-            assert_eq!(
-                got.position,
-                layer["position"].as_u64().expect("position") as usize
-            );
-            assert_eq!(got.fill_id, layer["fillId"].as_str().expect("fillId"));
-            assert_eq!(got.depth_m, layer["depthM"].as_f64().expect("depthM"));
-            agrees(
-                got.pressure_drop_pa,
-                layer["pressureDropPa"].as_f64().expect("pressureDropPa"),
-                &format!("{id} layer {} pressureDropPa", got.position),
-            );
-            agrees(
-                got.merkel_number,
-                layer["merkelNumber"].as_f64().expect("merkelNumber"),
-                &format!("{id} layer {} merkelNumber", got.position),
-            );
-        }
+        check_recorded_layers(id, expected, &result);
         agrees(
             result
                 .fill_layers
@@ -677,6 +668,30 @@ fn the_recorded_fill_layer_vectors_reproduce() {
         ],
         "the recorded layered cases, in the file's order"
     );
+}
+
+fn check_recorded_layers(id: &str, expected: &Value, result: &LayeredBreakdown) {
+    let layers = expected["layers"].as_array().expect("layers");
+    assert_eq!(layers.len(), result.fill_layers.len(), "{id}");
+    for (index, layer) in layers.iter().enumerate() {
+        let got = &result.fill_layers[index];
+        assert_eq!(
+            got.position,
+            usize::try_from(layer["position"].as_u64().expect("position")).expect("position")
+        );
+        assert_eq!(got.fill_id, layer["fillId"].as_str().expect("fillId"));
+        assert_eq!(got.depth_m, layer["depthM"].as_f64().expect("depthM"));
+        agrees(
+            got.pressure_drop_pa,
+            layer["pressureDropPa"].as_f64().expect("pressureDropPa"),
+            &format!("{id} layer {} pressureDropPa", got.position),
+        );
+        agrees(
+            got.merkel_number,
+            layer["merkelNumber"].as_f64().expect("merkelNumber"),
+            &format!("{id} layer {} merkelNumber", got.position),
+        );
+    }
 }
 
 const TOWER_SPEC: &str = "fillAreaM2:64,airFreeAreaM2:64,driftAreaM2:61,inletAreaM2:32,\
@@ -730,12 +745,12 @@ fn common_args() -> Vec<String> {
         "1.2",
     ]
     .iter()
-    .map(|argument| argument.to_string())
+    .map(ToString::to_string)
     .collect()
 }
 
 fn run(args: &[&str]) -> Value {
-    let args: Vec<String> = args.iter().map(|argument| argument.to_string()).collect();
+    let args: Vec<String> = args.iter().map(ToString::to_string).collect();
     let json = cli::run(&args).expect("the command answers");
     serde_json::from_str(&json).expect("a JSON reply")
 }
@@ -758,32 +773,7 @@ fn the_rate_command_reports_every_layer_and_the_combined_total() {
     assert_eq!(reply["stackLabel"], "FILM-OF25@0.45+FILM-VF38@0.9");
     assert_eq!(reply["totalDepthM"], 1.35);
     let layers = reply["layers"].as_array().expect("layers is an array");
-    assert_eq!(layers.len(), 2);
-    assert_eq!(layers[0]["position"], 1);
-    assert_eq!(layers[0]["label"], "FILM-OF25@0.45");
-    assert_eq!(layers[0]["fillId"], "FILM-OF25");
-    assert_eq!(layers[0]["depthM"], 0.45);
-    assert_eq!(layers[1]["position"], 2);
-    assert_eq!(layers[1]["label"], "FILM-VF38@0.9");
-    assert_eq!(layers[1]["fillId"], "FILM-VF38");
-    assert_eq!(layers[1]["depthM"], 0.9);
-    assert_eq!(layers[1]["thermal"]["coefficientPerM"], 0.94);
-    assert_eq!(layers[1]["pressure"]["coefficientPaPerM"], 43.0);
-    assert_eq!(layers[1]["limits"]["maxWaterLoadingKgM2S"], 6.2);
-    assert_eq!(layers[0]["thermalMultiplier"], 1.0);
-    assert_eq!(layers[0]["effectivePressureMultiplier"], 1.0);
-    assert_eq!(
-        layers[0]["volumetricAirFlowM3S"],
-        layers[1]["volumetricAirFlowM3S"]
-    );
-    assert_eq!(
-        layers[0]["waterLoadingKgM2S"],
-        layers[1]["waterLoadingKgM2S"]
-    );
-    assert_eq!(
-        layers[0]["dryAirLoadingKgM2S"],
-        layers[1]["dryAirLoadingKgM2S"]
-    );
+    assert_rate_layers(layers);
     let layer_sum =
         layers[0]["merkelNumber"].as_f64().unwrap() + layers[1]["merkelNumber"].as_f64().unwrap();
     let layer_pressure_sum = layers[0]["pressureDropPa"].as_f64().unwrap()
@@ -815,6 +805,35 @@ fn the_rate_command_reports_every_layer_and_the_combined_total() {
     assert!(reply["airside"]["sprayZoneMerkelNumber"].as_f64().unwrap() > 0.0);
     assert!(reply["airside"]["rainZoneMerkelNumber"].as_f64().unwrap() > 0.0);
     assert!(reply["airside"]["driftPa"].as_f64().unwrap() > 0.0);
+}
+
+fn assert_rate_layers(layers: &[Value]) {
+    assert_eq!(layers.len(), 2);
+    assert_eq!(layers[0]["position"], 1);
+    assert_eq!(layers[0]["label"], "FILM-OF25@0.45");
+    assert_eq!(layers[0]["fillId"], "FILM-OF25");
+    assert_eq!(layers[0]["depthM"], 0.45);
+    assert_eq!(layers[1]["position"], 2);
+    assert_eq!(layers[1]["label"], "FILM-VF38@0.9");
+    assert_eq!(layers[1]["fillId"], "FILM-VF38");
+    assert_eq!(layers[1]["depthM"], 0.9);
+    assert_eq!(layers[1]["thermal"]["coefficientPerM"], 0.94);
+    assert_eq!(layers[1]["pressure"]["coefficientPaPerM"], 43.0);
+    assert_eq!(layers[1]["limits"]["maxWaterLoadingKgM2S"], 6.2);
+    assert_eq!(layers[0]["thermalMultiplier"], 1.0);
+    assert_eq!(layers[0]["effectivePressureMultiplier"], 1.0);
+    assert_eq!(
+        layers[0]["volumetricAirFlowM3S"],
+        layers[1]["volumetricAirFlowM3S"]
+    );
+    assert_eq!(
+        layers[0]["waterLoadingKgM2S"],
+        layers[1]["waterLoadingKgM2S"]
+    );
+    assert_eq!(
+        layers[0]["dryAirLoadingKgM2S"],
+        layers[1]["dryAirLoadingKgM2S"]
+    );
 }
 
 #[test]

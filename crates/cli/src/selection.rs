@@ -3,8 +3,8 @@ use crate::json::{json_array, number, object, optional_number};
 use crate::json_string;
 use crate::objects::{airside_object, layer_object};
 use drafthouse_engine::{
-    CatalogMetadata, NozzleArrangement, Objective, PsychrometricState, SelectionCandidate,
-    SelectionRequirements,
+    CatalogMetadata, FanSystemIntersection, NozzleArrangement, Objective, PsychrometricState,
+    SelectionCandidate, SelectionRequirements, WaterBalance,
 };
 
 pub(crate) fn selection_inputs_object(
@@ -174,8 +174,6 @@ pub(crate) fn rejection_summary_object(summary: &[(String, usize)]) -> String {
 
 pub(crate) fn candidate_object(candidate: &SelectionCandidate) -> String {
     let thermal = &candidate.thermal;
-    let fan = &candidate.fan_operating_point;
-    let balance = &candidate.water_balance;
     let nozzle = &candidate.nozzle;
     object(&[
         ("rank", candidate.rank.to_string()),
@@ -184,16 +182,7 @@ pub(crate) fn candidate_object(candidate: &SelectionCandidate) -> String {
         ("driftId", json_string(&candidate.drift_eliminator_id)),
         ("fanId", json_string(&candidate.fan_id)),
         ("fillDepthM", number(candidate.fill_depth_m)),
-        (
-            "fillLayers",
-            json_array(
-                &candidate
-                    .fill_layers
-                    .iter()
-                    .map(layer_object)
-                    .collect::<Vec<String>>(),
-            ),
-        ),
+        ("fillLayers", fill_layers_array(candidate)),
         ("speedRatio", number(candidate.speed_ratio)),
         ("model", json_string(thermal.model)),
         ("coldWaterC", number(thermal.cold_water_c)),
@@ -231,25 +220,43 @@ pub(crate) fn candidate_object(candidate: &SelectionCandidate) -> String {
         ("airside", airside_object(&candidate.airside)),
         (
             "fanOperatingPoint",
-            object(&[
-                ("flowM3S", number(fan.flow_m3_s)),
-                ("fanPressurePa", number(fan.fan_pressure_pa)),
-                ("systemPressurePa", number(fan.system_pressure_pa)),
-                ("efficiency", number(fan.efficiency)),
-                ("shaftPowerKW", number(fan.shaft_power_kw)),
-                ("residualPa", number(fan.residual_pa)),
-            ]),
+            fan_point_object(&candidate.fan_operating_point),
         ),
         (
             "waterBalance",
-            object(&[
-                ("evaporationKgS", number(balance.evaporation_kg_s)),
-                ("driftKgS", number(balance.drift_kg_s)),
-                ("blowdownKgS", number(balance.blowdown_kg_s)),
-                ("makeupKgS", number(balance.makeup_kg_s)),
-            ]),
+            water_balance_object(&candidate.water_balance),
         ),
         ("nozzle", nozzle_arrangement_object(nozzle)),
+    ])
+}
+
+fn fill_layers_array(candidate: &SelectionCandidate) -> String {
+    json_array(
+        &candidate
+            .fill_layers
+            .iter()
+            .map(layer_object)
+            .collect::<Vec<String>>(),
+    )
+}
+
+fn fan_point_object(fan: &FanSystemIntersection) -> String {
+    object(&[
+        ("flowM3S", number(fan.flow_m3_s)),
+        ("fanPressurePa", number(fan.fan_pressure_pa)),
+        ("systemPressurePa", number(fan.system_pressure_pa)),
+        ("efficiency", number(fan.efficiency)),
+        ("shaftPowerKW", number(fan.shaft_power_kw)),
+        ("residualPa", number(fan.residual_pa)),
+    ])
+}
+
+fn water_balance_object(balance: &WaterBalance) -> String {
+    object(&[
+        ("evaporationKgS", number(balance.evaporation_kg_s)),
+        ("driftKgS", number(balance.drift_kg_s)),
+        ("blowdownKgS", number(balance.blowdown_kg_s)),
+        ("makeupKgS", number(balance.makeup_kg_s)),
     ])
 }
 
@@ -305,7 +312,8 @@ pub(crate) fn orders_object(run: &drafthouse_engine::SelectionRun) -> String {
             let identities = run
                 .order_for(*objective)
                 .iter()
-                .map(|index| json_string(&candidate_identity(&run.candidates[*index])))
+                .filter_map(|index| run.candidates.get(*index))
+                .map(|candidate| json_string(&candidate_identity(candidate)))
                 .collect::<Vec<String>>();
             format!(
                 "{}:{}",

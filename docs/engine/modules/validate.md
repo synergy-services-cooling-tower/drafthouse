@@ -2,7 +2,7 @@
 
 The fail-closed catalog-record validator (issue #5).
 
-`../docs/CATALOG_SCHEMA.md` describes the component catalog in prose. This module is that
+`docs/engine/CATALOG_SCHEMA.md` describes the component catalog in prose. This module is that
 prose as data: for every record type it declares every field, whether the field is
 required, and what its value must be. The `ct-engine` CLI validates catalog records with
 this table before the selector may rank anything; a future front end (the HTML side
@@ -20,7 +20,7 @@ Fail-closed means each of these is a refusal that names the record and the field
   is outside its declared set, or a row/list has the wrong length.
 
 The schema is the port's own record shape: the fields `selection.js` feeds the selector,
-plus the catalog fields `../docs/CATALOG_SCHEMA.md` declares that the port does not read
+plus the catalog fields `docs/engine/CATALOG_SCHEMA.md` declares that the port does not read
 (`name`, `draftType`, `effectiveDraftHeightM`, `geometry`, `material`). Fields the schema
 does not declare are refused; `README.md` records that decision, including the reference
 catalog's commercial fields.
@@ -29,7 +29,7 @@ catalog's commercial fields.
 
 ### `enum RecordKind`
 
-The five record types `docs/CATALOG_SCHEMA.md` declares.
+The five record types `docs/engine/CATALOG_SCHEMA.md` declares.
 
 ### `const ALL`
 

@@ -40,7 +40,7 @@ fn select_args() -> Vec<String> {
         "3",
     ]
     .iter()
-    .map(|argument| argument.to_string())
+    .map(ToString::to_string)
     .collect()
 }
 
@@ -149,7 +149,7 @@ fn worked_steps_follow_the_worked_js_shape_and_are_data_only() {
             .collect::<Vec<String>>();
         keys.sort();
         let mut expected = STEP_FIELDS.to_vec();
-        expected.sort();
+        expected.sort_unstable();
         assert_eq!(
             keys, expected,
             "a step carries exactly the worked.js fields"
@@ -282,7 +282,7 @@ fn the_reply_envelope_carries_the_status_the_binary_would_exit_with() {
         ]),
         Err(Failure::Domain(_))
     ));
-    assert!(!USAGE.is_empty());
+    assert!(!USAGE.is_empty(), "the usage text is not empty");
 }
 
 #[test]

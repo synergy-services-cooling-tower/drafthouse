@@ -2,7 +2,7 @@
 
 > **Retired code references.** The `src/core/**` paths in the mapping table are the JavaScript
 > reference implementation, deleted in issue #40 slice 4; the ported implementation is the Rust crate
-> (`rust/src/**`; module-by-module map in `rust/README.md`), and the citations are kept as the port's
+> (`rust/src/**`; module-by-module map in `docs/engine/README.md`), and the citations are kept as the port's
 > provenance. The last commit containing the reference is recorded in the private decision record (D17).
 
 ## Purpose
@@ -103,17 +103,17 @@ Q ∝ n        ΔP ∝ n²        Pshaft ∝ n³
 - **Source.** Hudson Products Corporation, R. C. Monroe, *Fans Key to Optimum Cooling-Tower
   Design* (paper presented to the Cooling Technology Institute annual meeting, New Orleans, 1974;
   published by Chart Industries) states the basic fan law for axial cooling-tower fans as
-  `CFM = f(rpm)¹`, `TP = f(rpm)²`, `HP = f(rpm)³`. [`docs/REFERENCES.md`](REFERENCES.md) item 18.
+  `CFM = f(rpm)¹`, `TP = f(rpm)²`, `HP = f(rpm)³`. [`docs/engine/REFERENCES.md`](REFERENCES.md) item 18.
   The AMCA references there (items 15-16) identify the same affinity-law changes in airflow,
   pressure and power with speed and density.
-- **In the engine.** The recorded curve **is** the ratio-1.0 curve. `rust/src/fan.rs` applies the
+- **In the engine.** The recorded curve **is** the ratio-1.0 curve. `crates/engine/src/fan.rs` applies the
   three exponents as named constants (`FLOW_AFFINITY_EXPONENT`, `PRESSURE_AFFINITY_EXPONENT`, and
   the power leg `SHAFT_POWER_AFFINITY_EXPONENT`, which is the flow leg times the pressure leg —
   the engine stores no power curve and computes the shaft power from the recorded curve's own
   airflow, pressure and efficiency). The speed at which the curve is published is the record's own
   `nominalRpm`, so the rpm behind a ratio is `speedRatio × nominalRpm`; the record's
   `allowedSpeedRatio` band is its validity window, and a ratio outside it is refused **by name**
-  (`rust/src/selection.rs::FanSpeedRatioLimit`) rather than clamped into the band.
+  (`crates/engine/src/selection.rs::FanSpeedRatioLimit`) rather than clamped into the band.
 - **Not a validation claim.** The engine is ported and drift-guarded, not validated: the source
   above states the relation the port implements, and nothing here claims the model, the synthetic
   curves or any result have been qualified against test data.

@@ -7,7 +7,7 @@ request can be refused, and each carries the exit status the binary reports for 
 because the parity harness and the wasm binding both key off that status rather than off
 a message.
 
-The parity harness (`scripts/parity/run.mjs`) drives this over the recorded
+The parity harness (`tools/parity/run.mjs`) drives this over the recorded
 inputs and diffs its JSON against the JavaScript reference engine; with `--engine wasm`
 it drives the same commands through the wasm build instead of the binary. JSON keys use
 the JavaScript names on purpose: the harness compares the two engine outputs field by
@@ -40,7 +40,7 @@ The physics refuses this input.
 ### `fn reply`
 
 Run one command and wrap the outcome as the reply envelope a caller that is not a
-process reads — the wasm export (`rust/src/wasm.rs`, driven by `rust/wasm/binding.mjs`).
+process reads — the wasm export (`crates/wasm/src/lib.rs`, driven by `tools/parity/binding.mjs`).
 The value is the same JSON the binary prints; a refusal becomes the `status`/`error`
 pair the binary reports through its exit status and stderr, so both surfaces agree on
 what "refused" means.
@@ -272,7 +272,7 @@ selector does not read is a usage error, which is why the projection has to be e
 ### `fn requirements_object`
 
 The resolved requirements, in the reference's field names minus the inputs that only fed
-its economics (see `rust/README.md`).
+its economics (see `docs/engine/README.md`).
 
 ### `fn candidate_object`
 
@@ -352,7 +352,7 @@ multiplier. There is no third field: the selector reads only these two.
 
 ### `struct CatalogList`
 
-The five record lists of the `select` catalog, in `docs/CATALOG_SCHEMA.md`'s order: the
+The five record lists of the `select` catalog, in `docs/engine/CATALOG_SCHEMA.md`'s order: the
 option the records arrive under, the JSON key `validate-catalog` reports them as, and the
 record type each list must satisfy.
 

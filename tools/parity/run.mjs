@@ -42,6 +42,14 @@ import { fileURLToPath } from 'node:url';
 
 import { createEngine } from './binding.mjs';
 
+function say(line) {
+  process.stdout.write(`${line}\n`);
+}
+
+function warn(line) {
+  process.stderr.write(`${line}\n`);
+}
+
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const TARGET = resolve(root, process.env.CARGO_TARGET_DIR ?? 'target');
 const ENGINE = join(TARGET, 'debug', 'ct-engine');
@@ -57,7 +65,7 @@ const NO_BUILD = process.argv.includes('--no-build');
 const engineFlag = process.argv.indexOf('--engine');
 const ENGINE_KIND = engineFlag === -1 ? 'native' : process.argv[engineFlag + 1];
 if (!['native', 'wasm'].includes(ENGINE_KIND)) {
-  console.error(`--engine expects native or wasm, got ${ENGINE_KIND}`);
+  warn(`--engine expects native or wasm, got ${ENGINE_KIND}`);
   process.exit(2);
 }
 const WASM_ENGINE = ENGINE_KIND === 'wasm';
@@ -86,15 +94,15 @@ const WASM_ARTIFACT = join(TARGET, 'wasm32-unknown-unknown', 'wasm', 'drafthouse
 const referenceFlag = process.argv.indexOf('--reference');
 const REFERENCE_MODE = referenceFlag === -1 ? 'auto' : process.argv[referenceFlag + 1];
 if (!['auto', 'frozen'].includes(REFERENCE_MODE)) {
-  console.error(`--reference expects auto or frozen, got ${REFERENCE_MODE}`);
-  console.error('the live JavaScript reference was retired (issue #40 slice 4); the recorded regression baseline is the only comparison partner');
+  warn(`--reference expects auto or frozen, got ${REFERENCE_MODE}`);
+  warn('the live JavaScript reference was retired (issue #40 slice 4); the recorded regression baseline is the only comparison partner');
   process.exit(2);
 }
 if (process.argv.includes('--write-baseline')) {
-  console.error('--write-baseline is retired: the recorded regression baseline holds the values the');
-  console.error('JavaScript reference produced at capture, and that reference is no longer in this tree');
-  console.error('(issue #40 slice 4). It is frozen evidence — a value moves only with a cited external');
-  console.error('correction (see validation/regression-baseline.json documentation and the private decision record D17).');
+  warn('--write-baseline is retired: the recorded regression baseline holds the values the');
+  warn('JavaScript reference produced at capture, and that reference is no longer in this tree');
+  warn('(issue #40 slice 4). It is frozen evidence — a value moves only with a cited external');
+  warn('correction (see validation/regression-baseline.json documentation and the private decision record D17).');
   process.exit(2);
 }
 
@@ -299,8 +307,8 @@ const failures = [];
 let currentSection = '';
 function section(title) {
   currentSection = title;
-  console.log('');
-  console.log(`== ${title} ==`);
+  say('');
+  say(`== ${title} ==`);
 }
 
 function pad(text, width) {
@@ -323,7 +331,7 @@ function row({ caseId, quantity, js, rust, abs, rel, tolerance, pass, note, verd
   if (pass !== null) {
     totals[pass ? 'passed' : 'failed'] += 1;
   }
-  console.log(
+  say(
     [
       pad(caseId, 40),
       pad(quantity, 36),
@@ -624,7 +632,7 @@ function documentedOrder(candidates, objectiveName) {
       || a.candidate.totalPa - b.candidate.totalPa
       || a.candidate.capabilityRatio - b.candidate.capabilityRatio
       || a.candidate.capacityKgS - b.candidate.capacityKgS
-      || (identity(a.candidate) < identity(b.candidate) ? -1 : identity(a.candidate) > identity(b.candidate) ? 1 : 0)
+      || orderText(identity(a.candidate), identity(b.candidate))
       || a.index - b.index
     ))
     .map((entry) => identity(entry.candidate));
@@ -648,15 +656,15 @@ function pathValue(value, path, index = null) {
   let current = value;
   for (const step of String(path).split('.')) {
     const match = /^([^[\]]*)((?:\[\d*\])*)$/.exec(step);
-    if (match === null) return undefined;
+    if (match === null) return;
     const [, key, indexes] = match;
     if (key) {
-      if (current === null || current === undefined) return undefined;
+      if (current === null || current === undefined) return;
       current = current[key];
     }
     for (const token of indexes.match(/\[\d*\]/g) ?? []) {
       const position = token === '[]' ? index : Number(token.slice(1, -1));
-      if (current === null || current === undefined || position === null || position === undefined) return undefined;
+      if (current === null || current === undefined || position === null || position === undefined) return;
       current = current[position];
     }
   }
@@ -712,7 +720,7 @@ function extractActual(reply, extract, entry) {
   if (how === 'candidate-field' || how === 'candidate-metrics') {
     const candidate = (pathValue(reply, 'results', null) ?? [])
       .find((item) => selectionIdentity(item) === extract.identity);
-    if (candidate === undefined) return undefined;
+    if (candidate === undefined) return;
     if (how === 'candidate-field') return pathValue(candidate, extract.path, null);
     return selectionMetrics(candidate)[extract.quantity];
   }
@@ -791,17 +799,28 @@ const BASELINE_PREDICATES = {
 /** `--reference frozen`: check the engine under test against the recorded regression baseline alone. */
 let stepsReplayed = 0;
 
+function orderText(left, right) {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
+function shareOf(value, limit) {
+  if (limit !== 0) return value / limit;
+  return value === 0 ? 0 : Infinity;
+}
+
 function baselineParity() {
   if (!existsSync(BASELINE_PATH)) {
-    console.error(`${BASELINE_PATH} does not exist; it is the recorded regression baseline this mode checks against.`);
-    console.error('It is recorded evidence from the JavaScript reference, which this tree no longer holds (issue #40 slice 4).');
+    warn(`${BASELINE_PATH} does not exist; it is the recorded regression baseline this mode checks against.`);
+    warn('It is recorded evidence from the JavaScript reference, which this tree no longer holds (issue #40 slice 4).');
     process.exit(2);
   }
   const baseline = JSON.parse(readFileSync(BASELINE_PATH, 'utf8'));
-  console.log(`  baseline:  ${BASELINE_PATH} (format ${baseline.format})`);
-  console.log(`  recorded:  commit ${baseline.provenance.capturedAtCommit}, ${baseline.counts.quantities} entries`);
-  console.log('  live leg:  RETIRED — the JavaScript reference is no longer in this tree (issue #40 slice 4); no live comparison ran, and none can be skipped into a pass');
-  console.log('');
+  say(`  baseline:  ${BASELINE_PATH} (format ${baseline.format})`);
+  say(`  recorded:  commit ${baseline.provenance.capturedAtCommit}, ${baseline.counts.quantities} entries`);
+  say('  live leg:  RETIRED — the JavaScript reference is no longer in this tree (issue #40 slice 4); no live comparison ran, and none can be skipped into a pass');
+  say('');
   const recordedSkips = (baseline.skips ?? []).map((entry) => `${entry.caseId} / ${entry.quantity}`);
   for (const caseId of new Set(recordedSkips)) {
     row({
@@ -862,7 +881,7 @@ function baselineParity() {
       if (entry.kind === 'predicate') {
         const predicate = BASELINE_PREDICATES[entry.predicate?.how];
         if (predicate === undefined) {
-          console.error(`the baseline names a predicate the harness does not replay: ${entry.predicate?.how} (${entry.caseId} / ${entry.quantity})`);
+          warn(`the baseline names a predicate the harness does not replay: ${entry.predicate?.how} (${entry.caseId} / ${entry.quantity})`);
           process.exit(2);
         }
         const outcome = predicate(entry, engine.value);
@@ -910,8 +929,8 @@ function baselineParity() {
           const abs = Math.abs(js - rust);
           const rel = js === 0 ? Infinity : abs / Math.abs(js);
           const used = Math.min(
-            tolerance.abs === 0 ? (abs === 0 ? 0 : Infinity) : abs / tolerance.abs,
-            tolerance.rel === 0 ? (rel === 0 ? 0 : Infinity) : rel / tolerance.rel,
+            shareOf(abs, tolerance.abs),
+            shareOf(rel, tolerance.rel),
           );
           if (!(used <= 1)) failed = true;
           if (worst === null || used > worst.used) worst = { js, rust, abs, rel, used };
@@ -933,7 +952,7 @@ function baselineParity() {
       try {
         actual = extractActual(engine.value, entry.extract, entry);
       } catch (error) {
-        console.error(`the baseline cannot be replayed: ${error.message} (${entry.caseId} / ${entry.quantity})`);
+        warn(`the baseline cannot be replayed: ${error.message} (${entry.caseId} / ${entry.quantity})`);
         process.exit(2);
       }
       if (entry.kind === 'number') {
@@ -944,7 +963,7 @@ function baselineParity() {
         const expected = entry.value === 'null' ? null : undefined;
         compareQuantity(entry.caseId, entry.quantity, expected, actual, { abs: 0, rel: 0 });
       } else {
-        console.error(`the baseline names an entry kind the harness does not replay: ${entry.kind} (${entry.caseId} / ${entry.quantity})`);
+        warn(`the baseline names an entry kind the harness does not replay: ${entry.kind} (${entry.caseId} / ${entry.quantity})`);
         process.exit(2);
       }
     }
@@ -956,11 +975,11 @@ function baselineParity() {
 function cargo(args) {
   const result = spawnSync('cargo', args, { cwd: root, stdio: ['ignore', 'inherit', 'inherit'] });
   if (result.error) {
-    console.error(`cargo could not run: ${result.error.message}`);
+    warn(`cargo could not run: ${result.error.message}`);
     process.exit(2);
   }
   if (result.status !== 0) {
-    console.error(`cargo ${args.join(' ')} failed (exit ${result.status})`);
+    warn(`cargo ${args.join(' ')} failed (exit ${result.status})`);
     process.exit(2);
   }
 }
@@ -970,7 +989,7 @@ function build() {
     const required = WASM_ENGINE ? [WASM_ARTIFACT] : [ENGINE];
     for (const artifact of required) {
       if (!existsSync(artifact)) {
-        console.error(`--no-build given but ${artifact} does not exist; run without --no-build.`);
+        warn(`--no-build given but ${artifact} does not exist; run without --no-build.`);
         process.exit(2);
       }
     }
@@ -986,37 +1005,37 @@ function main() {
 
   const nodeVersion = spawnSync('node', ['--version'], { encoding: 'utf8' }).stdout.trim();
   const rustVersion = spawnSync('rustc', ['--version'], { encoding: 'utf8' }).stdout.trim();
-  console.log('parity harness — recorded regression baseline vs Rust port');
-  console.log(`  cases:    ${root}`);
+  say('parity harness — recorded regression baseline vs Rust port');
+  say(`  cases:    ${root}`);
   if (WASM_ENGINE) {
     wasmEngine = createEngine(readFileSync(WASM_ARTIFACT));
-    console.log(`  engine:   wasm — ${WASM_ARTIFACT}`);
-    console.log('  binding:  tools/parity/binding.mjs (data only)');
-    console.log(`  cross-check: ${existsSync(ENGINE) ? ENGINE : 'native binary absent — wasm answers are not cross-checked'}`);
+    say(`  engine:   wasm — ${WASM_ARTIFACT}`);
+    say('  binding:  tools/parity/binding.mjs (data only)');
+    say(`  cross-check: ${existsSync(ENGINE) ? ENGINE : 'native binary absent — wasm answers are not cross-checked'}`);
   } else {
-    console.log(`  engine:   ${ENGINE}`);
+    say(`  engine:   ${ENGINE}`);
   }
-  console.log(`  node:     ${nodeVersion}`);
-  console.log(`  rustc:    ${rustVersion || 'unknown'}`);
-  console.log(`  vectors:  validation/test-vectors.json — ${vectors.status}`);
-  console.log('  rule:     pass when |Δ| <= abs OR |Δ|/|baseline| <= rel');
-  console.log('  note:     values are printed to 9 significant digits; the diff uses full precision');
-  console.log('  baseline: the recorded regression baseline — the only comparison partner');
-  console.log('  live leg: RETIRED — the JavaScript reference is no longer in this tree (issue #40 slice 4);');
-  console.log('            no live comparison ran, and none can be skipped into a pass');
-  console.log('  tolerances:');
+  say(`  node:     ${nodeVersion}`);
+  say(`  rustc:    ${rustVersion || 'unknown'}`);
+  say(`  vectors:  validation/test-vectors.json — ${vectors.status}`);
+  say('  rule:     pass when |Δ| <= abs OR |Δ|/|baseline| <= rel');
+  say('  note:     values are printed to 9 significant digits; the diff uses full precision');
+  say('  baseline: the recorded regression baseline — the only comparison partner');
+  say('  live leg: RETIRED — the JavaScript reference is no longer in this tree (issue #40 slice 4);');
+  say('            no live comparison ran, and none can be skipped into a pass');
+  say('  tolerances:');
   for (const [quantity, tolerance] of Object.entries(TOLERANCES)) {
-    console.log(`    ${pad(quantity, 34)} ${formatTolerance(tolerance)}`);
+    say(`    ${pad(quantity, 34)} ${formatTolerance(tolerance)}`);
   }
 
   if (WASM_ENGINE) {
-    console.log('');
-    console.log('='.repeat(100));
-    console.log('WASM BINDING SECTION: NOT COMPARED — its rows diffed tools/parity/binding.mjs\'s data-only');
-    console.log('surface against the JavaScript reference, a JavaScript surface with no engine reply, so');
-    console.log('they have no recorded counterpart. The binding itself is exercised by the wasm leg above');
-    console.log('(every reply it produces is cross-checked against the native binary).');
-    console.log('='.repeat(100));
+    say('');
+    say('='.repeat(100));
+    say('WASM BINDING SECTION: NOT COMPARED — its rows diffed tools/parity/binding.mjs\'s data-only');
+    say('surface against the JavaScript reference, a JavaScript surface with no engine reply, so');
+    say('they have no recorded counterpart. The binding itself is exercised by the wasm leg above');
+    say('(every reply it produces is cross-checked against the native binary).');
+    say('='.repeat(100));
   }
 
   const baseline = baselineParity();
@@ -1025,30 +1044,30 @@ function main() {
   if (recorded !== compared) {
     const detail = `the baseline records ${recorded} engine quantities but this run compared ${compared}`;
     if (failures.length === 0) {
-      console.error(detail);
+      warn(detail);
       process.exit(2);
     }
-    console.log(`note: ${detail} — a step-level refusal replaced its per-quantity rows (see the failures below)`);
+    say(`note: ${detail} — a step-level refusal replaced its per-quantity rows (see the failures below)`);
   }
 
-  console.log('');
-  console.log(`replayed ${stepsReplayed} of ${baseline.steps.length} recorded steps`);
-  console.log(`compared ${totals.passed + totals.failed} quantities: ${totals.passed} pass, ${totals.failed} fail`);
-  console.log('baseline: the recorded regression baseline (validation/regression-baseline.json) — the only comparison partner; the live JavaScript leg is RETIRED');
+  say('');
+  say(`replayed ${stepsReplayed} of ${baseline.steps.length} recorded steps`);
+  say(`compared ${totals.passed + totals.failed} quantities: ${totals.passed} pass, ${totals.failed} fail`);
+  say('baseline: the recorded regression baseline (validation/regression-baseline.json) — the only comparison partner; the live JavaScript leg is RETIRED');
   if (WASM_ENGINE) {
-    console.log(`wasm vs native: ${crossCheck.calls} replies compared — ${crossCheck.identical} identical to the last bit, ${crossCheck.within} alike within ${CROSS_CHECK_TOLERANCE.rel}, ${crossCheck.beyond} beyond`);
+    say(`wasm vs native: ${crossCheck.calls} replies compared — ${crossCheck.identical} identical to the last bit, ${crossCheck.within} alike within ${CROSS_CHECK_TOLERANCE.rel}, ${crossCheck.beyond} beyond`);
     if (crossCheck.calls > 0) {
-      console.log(`  worst cross-build deviation: abs ${crossCheck.worstAbsolute} / rel ${crossCheck.worstRelative} — ${crossCheck.worstUsed} of the ${CROSS_CHECK_TOLERANCE.rel} tolerance (${crossCheck.worstCase})`);
+      say(`  worst cross-build deviation: abs ${crossCheck.worstAbsolute} / rel ${crossCheck.worstRelative} — ${crossCheck.worstUsed} of the ${CROSS_CHECK_TOLERANCE.rel} tolerance (${crossCheck.worstCase})`);
     }
     if (crossCheck.calls === 0) {
-      console.log('  (no native binary beside the artifact, so the cross-check did not run)');
+      say('  (no native binary beside the artifact, so the cross-check did not run)');
     }
   }
   if (failures.length) {
-    console.log('');
-    console.log('out of tolerance:');
+    say('');
+    say('out of tolerance:');
     for (const failure of failures) {
-      console.log(
+      say(
         `  [${failure.section}] ${failure.caseId} / ${failure.quantity}:`
         + ` baseline=${formatValue(failure.js)} engine=${formatValue(failure.rust)}`
         + ` abs=${failure.abs === null ? '-' : failure.abs} rel=${failure.rel === null ? '-' : failure.rel}`
@@ -1058,6 +1077,6 @@ function main() {
     }
     process.exit(1);
   }
-  console.log('every quantity is within tolerance');
+  say('every quantity is within tolerance');
 }
 main();

@@ -2,7 +2,7 @@
 
 > **Retired code references.** The `Code:` lines below cite the JavaScript reference implementation
 > (`src/core/**`), retired in issue #40 slice 4; the ported implementation of every method is the Rust
-> crate — the module-by-module map is in `rust/README.md`, and the crate's suites (`rust/tests/*.rs`)
+> crate — the module-by-module map is in `docs/engine/README.md`, and the crate's suites (`rust/tests/*.rs`)
 > carry the checks that were the JavaScript tests. The citations are kept as the port's provenance;
 > the last commit containing the reference is recorded in the private decision record (D17).
 
@@ -276,8 +276,8 @@ correlation. The contract, its refusals and its data surface are in
 Thermal and pressure multipliers are intentionally separate because fouling may reduce transfer while increasing resistance. A layer carries its own pair on top of the run's (the water-quality factors):
 the effective multiplier of a layer is the product of the two.
 
-Code: `fillThermalMerkelNumber()` and `fillPressureDropPa()` in `rust/src/airside.rs` (ported from the
-retired `src/core/airside.js`), and the layered stack in `rust/src/layers.rs`.
+Code: `fillThermalMerkelNumber()` and `fillPressureDropPa()` in `crates/engine/src/airside.rs` (ported from the
+retired `src/core/airside.js`), and the layered stack in `crates/engine/src/layers.rs`.
 
 No universal coefficients exist. Real data must come from controlled tested curves or correlations and remain inside their validated domains.
 

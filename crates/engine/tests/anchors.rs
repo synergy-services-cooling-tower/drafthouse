@@ -1,3 +1,4 @@
+use drafthouse_engine::numeric::count_as_f64;
 use drafthouse_engine::{
     dew_point_from_humidity_ratio, humidity_ratio_from_relative_humidity,
     humidity_ratio_from_vapor_pressure, humidity_ratio_from_wet_bulb, merkel_demand,
@@ -38,13 +39,13 @@ const ASHRAE_SATURATION_PRESSURE_PA: [(f64, f64); 7] = [
 ];
 
 const ASHRAE_SATURATED_AIR: [(f64, f64, f64); 7] = [
-    (0.0, 0.003790, 9.473),
-    (10.0, 0.007661, 29.348),
-    (20.0, 0.014758, 57.555),
-    (25.0, 0.020173, 76.504),
-    (30.0, 0.027329, 100.006),
-    (40.0, 0.049141, 166.346),
-    (50.0, 0.086863, 275.65),
+    (0.0, 0.003_790, 9.473),
+    (10.0, 0.007_661, 29.348),
+    (20.0, 0.014_758, 57.555),
+    (25.0, 0.020_173, 76.504),
+    (30.0, 0.027_329, 100.006),
+    (40.0, 0.049_141, 166.346),
+    (50.0, 0.086_863, 275.65),
 ];
 
 const ASHRAE_OVER_ICE_PA: [(f64, f64); 5] = [
@@ -159,7 +160,7 @@ fn the_simplified_path_at_30_c_and_50_rh_is_internally_consistent() {
         humidity_ratio_from_relative_humidity(30.0, 0.5, 101_325.0, simplified()).unwrap();
     close(
         humidity_ratio,
-        0.0133102,
+        0.013_310_2,
         2e-7,
         "simplified humidity ratio:",
     );
@@ -408,7 +409,7 @@ const MERKEL_CASES: [MerkelCase; 5] = [
 
 fn reference_merkel(case: MerkelCase, convention: InletEnthalpyConvention) -> f64 {
     let pressure_pa = 101_325.0;
-    let cp = water_specific_heat_kj_kg_k((case.hot_water_c + case.cold_water_c) / 2.0, 0.0);
+    let cp = water_specific_heat_kj_kg_k(f64::midpoint(case.hot_water_c, case.cold_water_c), 0.0);
     let inlet_enthalpy = match convention {
         InletEnthalpyConvention::CtiSaturatedWetBulb => {
             saturated_air_enthalpy_kj_kg_dry_air(case.wet_bulb_c, pressure_pa, options()).unwrap()
@@ -424,10 +425,10 @@ fn reference_merkel(case: MerkelCase, convention: InletEnthalpyConvention) -> f6
             moist_air_enthalpy_kj_kg_dry_air(case.dry_bulb_c, humidity_ratio)
         }
     };
-    let h = (case.hot_water_c - case.cold_water_c) / REFERENCE_STEPS as f64;
+    let h = (case.hot_water_c - case.cold_water_c) / count_as_f64(REFERENCE_STEPS);
     let mut sum = 0.0;
     for i in 0..=REFERENCE_STEPS {
-        let water_temperature_c = case.cold_water_c + i as f64 * h;
+        let water_temperature_c = case.cold_water_c + count_as_f64(i) * h;
         let potential =
             saturated_air_enthalpy_kj_kg_dry_air(water_temperature_c, pressure_pa, options())
                 .unwrap()

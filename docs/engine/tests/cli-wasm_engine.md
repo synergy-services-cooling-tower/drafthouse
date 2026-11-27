@@ -6,7 +6,7 @@ The engine surface the wasm export adds (issue #24): the `inputs` and `worked` k
 `cli::run` is the engine both the `ct-engine` binary and the wasm export call, so this
 data contract is testable natively, without a wasm runtime. The wasm-specific half — the
 C ABI (`src/wasm.rs`), the artifact and the JS binding's catalog projection — is
-exercised by the parity harness under `--engine wasm` (`scripts/parity/run.mjs`).
+exercised by the parity harness under `--engine wasm` (`tools/parity/run.mjs`).
 
 The records below are one tower, fill, drift eliminator, fan and nozzle from the bundled
 catalog, in the `key:value` spec form the CLI parses; the selection they produce is

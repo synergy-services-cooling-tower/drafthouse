@@ -80,7 +80,7 @@ about 3.35 K at −10 °C, 1.55 K at −20 °C, 0.62 K at −30 °C and 0.22 K a
 ratio of 1e-7 and a relative humidity of 0.04 % instead of refusing the pair. The independent
 derivation reproduces the same negative value, so the limit belongs to the published relation rather
 than to this implementation, but silently returning an impossible state is a gap: the pair should be
-refused. `rust/tests/anchors.rs` (and, before the reference retired, `tests/psychrometrics-cold-pressure.test.js`)
+refused. `crates/engine/tests/anchors.rs` (and, before the reference retired, `tests/psychrometrics-cold-pressure.test.js`)
 records the current behaviour so that any future change is a visible decision.
 
 The water-vapour enhancement factor uses the pressure-only Buck (1981) approximation rather than the

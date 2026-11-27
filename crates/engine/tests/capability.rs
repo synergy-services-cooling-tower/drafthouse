@@ -6,7 +6,7 @@ use drafthouse_engine::{
 };
 
 fn condition() -> CapabilityCondition {
-    CapabilityCondition::new(200.0, 133.3333333, 42.0, 32.0, 27.0, 33.0).with_pressure(101_325.0)
+    CapabilityCondition::new(200.0, 133.333_333_3, 42.0, 32.0, 27.0, 33.0).with_pressure(101_325.0)
 }
 
 fn capability_input(
@@ -29,8 +29,8 @@ fn identical_design_and_test_conditions_evaluate_to_one_hundred_percent() {
         "capabilityPct {}",
         result.capability_pct
     );
-    assert_eq!(result.design_water_to_dry_air_ratio, 200.0 / 133.3333333);
-    assert_eq!(result.test_water_to_dry_air_ratio, 200.0 / 133.3333333);
+    assert_eq!(result.design_water_to_dry_air_ratio, 200.0 / 133.333_333_3);
+    assert_eq!(result.test_water_to_dry_air_ratio, 200.0 / 133.333_333_3);
 }
 
 #[test]
@@ -54,12 +54,12 @@ fn the_default_exponent_applies_when_the_input_omits_it() {
 fn a_warmer_test_cold_water_declines_and_a_cooler_one_gains_capability() {
     let worse = evaluate_characteristic_capability(&capability_input(
         condition(),
-        CapabilityCondition::new(200.0, 133.3333333, 42.0, 33.0, 27.0, 33.0),
+        CapabilityCondition::new(200.0, 133.333_333_3, 42.0, 33.0, 27.0, 33.0),
     ))
     .expect("evaluates");
     let better = evaluate_characteristic_capability(&capability_input(
         condition(),
-        CapabilityCondition::new(200.0, 133.3333333, 42.0, 31.0, 27.0, 33.0),
+        CapabilityCondition::new(200.0, 133.333_333_3, 42.0, 31.0, 27.0, 33.0),
     ))
     .expect("evaluates");
     assert!(worse.capability_pct < 100.0, "{}", worse.capability_pct);
@@ -83,7 +83,7 @@ fn a_positive_exponent_is_refused_after_both_conditions_are_validated() {
     assert!(message(&error).starts_with("A whole-tower"));
     let error = evaluate_characteristic_capability(&CharacteristicCapabilityInput::new(
         condition(),
-        CapabilityCondition::new(200.0, 133.3333333, 42.0, 27.0, 27.0, 33.0),
+        CapabilityCondition::new(200.0, 133.333_333_3, 42.0, 27.0, 27.0, 33.0),
     ))
     .expect_err("the temperature ordering is checked before the exponent");
     assert_eq!(
@@ -95,14 +95,14 @@ fn a_positive_exponent_is_refused_after_both_conditions_are_validated() {
 #[test]
 fn a_condition_with_a_non_finite_field_is_refused_naming_it() {
     let error = evaluate_characteristic_capability(&capability_input(
-        CapabilityCondition::new(200.0, 133.3333333, 42.0, 32.0, f64::NAN, 33.0),
+        CapabilityCondition::new(200.0, 133.333_333_3, 42.0, 32.0, f64::NAN, 33.0),
         condition(),
     ))
     .expect_err("NaN wet bulb must be refused");
     assert_eq!(message(&error), "design.wetBulbC is required.");
     let error = evaluate_characteristic_capability(&capability_input(
         condition(),
-        CapabilityCondition::new(f64::INFINITY, 133.3333333, 42.0, 32.0, 27.0, 33.0),
+        CapabilityCondition::new(f64::INFINITY, 133.333_333_3, 42.0, 32.0, 27.0, 33.0),
     ))
     .expect_err("infinite flow must be refused");
     assert_eq!(message(&error), "test.waterMassFlowKgS is required.");
@@ -134,8 +134,8 @@ fn the_curves_span_the_reference_window_and_carry_both_ordinates() {
 
 #[test]
 fn a_case_with_a_pinch_in_the_curve_window_drops_the_infeasible_points() {
-    let design = CapabilityCondition::new(200.0, 133.3333333, 42.0, 32.5, 27.0, 33.0);
-    let test = CapabilityCondition::new(200.0, 133.3333333, 42.0, 32.0, 27.0, 33.0);
+    let design = CapabilityCondition::new(200.0, 133.333_333_3, 42.0, 32.5, 27.0, 33.0);
+    let test = CapabilityCondition::new(200.0, 133.333_333_3, 42.0, 32.0, 27.0, 33.0);
     let result = evaluate_characteristic_capability(&capability_input(design, test))
         .expect("the projection itself evaluates");
     assert_eq!(result.curves.len(), 78);
@@ -152,11 +152,11 @@ fn a_case_with_a_pinch_in_the_curve_window_drops_the_infeasible_points() {
 #[test]
 fn the_seeded_generator_draws_the_javascript_stream() {
     let expected = [
-        0.6771502960473299_f64,
-        0.19265692122280598,
-        0.5313839064911008,
-        0.1654723146930337,
-        0.08778517786413431,
+        0.677_150_296_047_329_9_f64,
+        0.192_656_921_222_805_98,
+        0.531_383_906_491_100_8,
+        0.165_472_314_693_033_7,
+        0.087_785_177_864_134_31,
     ];
     let mut random = create_seeded_random(17.0);
     for (index, value) in expected.iter().enumerate() {
@@ -164,9 +164,9 @@ fn the_seeded_generator_draws_the_javascript_stream() {
     }
     let mut random = create_seeded_random(17.0);
     let expected_gaussian = [
-        0.31131072930854836_f64,
-        0.5695513541368098,
-        0.14988441715048012,
+        0.311_310_729_308_548_36_f64,
+        0.569_551_354_136_809_8,
+        0.149_884_417_150_480_12,
     ];
     for (index, value) in expected_gaussian.iter().enumerate() {
         let draw = gaussian_random(&mut || random.next_value());
@@ -183,7 +183,7 @@ fn percentile_matches_the_reference_definition() {
     let values = [3.0, 1.0, 4.0, 1.0, 5.0, 9.0, 2.0, 6.0];
     assert_eq!(percentile(&values, 0.025), 1.0);
     assert_eq!(percentile(&values, 0.5), 3.5);
-    assert_eq!(percentile(&values, 0.975), 8.475000000000001);
+    assert_eq!(percentile(&values, 0.975), 8.475_000_000_000_001);
     assert!(percentile(&[], 0.5).is_nan());
     assert_eq!(percentile(&values, -1.0), 1.0);
     assert_eq!(percentile(&values, 2.0), 9.0);

@@ -67,9 +67,9 @@ fn agrees(actual: f64, expected: f64, label: &str) {
 fn the_recorded_fan_vectors_reproduce() {
     let fan = ax_500();
     let cases: [(f64, [f64; 4]); 3] = [
-        (0.78, [129.727648, 178.048732, 0.824671, 28.008568]),
-        (0.90, [151.814388, 230.904670, 0.824079, 42.537957]),
-        (1.00, [170.031780, 280.741854, 0.823742, 57.949011]),
+        (0.78, [129.727_648, 178.048_732, 0.824_671, 28.008_568]),
+        (0.90, [151.814_388, 230.904_670, 0.824_079, 42.537_957]),
+        (1.00, [170.031_780, 280.741_854, 0.823_742, 57.949_011]),
     ];
     for (speed_ratio, expected) in cases {
         let result = solve(&fan, 1.14, speed_ratio);
@@ -146,7 +146,9 @@ fn a_curve_reading_uses_the_density_ratio_and_the_square_of_the_speed_ratio() {
 #[test]
 fn an_efficiency_reading_clamps_at_the_curve_ends() {
     let fan = ax_500();
-    assert!((fan_efficiency_at_flow(&fan, 130.0, 0.9).unwrap() - 0.8288888888888888).abs() < 1e-12);
+    assert!(
+        (fan_efficiency_at_flow(&fan, 130.0, 0.9).unwrap() - 0.828_888_888_888_888_8).abs() < 1e-12
+    );
     assert_eq!(fan_efficiency_at_flow(&fan, 9999.0, 1.0).unwrap(), 0.67);
     assert_eq!(fan_efficiency_at_flow(&fan, 1.0, 1.0).unwrap(), 0.63);
 }
@@ -156,7 +158,7 @@ fn shaft_power_is_flow_times_pressure_over_efficiency() {
     let fan = ax_500();
     let shaft_power = fan_shaft_power_kw(&fan, 130.0, 200.0, 0.9).unwrap();
     assert!(
-        (shaft_power - 31.367292225201076).abs() < 1e-9,
+        (shaft_power - 31.367_292_225_201_076).abs() < 1e-9,
         "{shaft_power}"
     );
     let efficiency = fan_efficiency_at_flow(&fan, 130.0, 0.9).unwrap();
@@ -173,7 +175,10 @@ fn an_airflow_estimate_follows_the_affinity_law() {
         actual_air_density_kg_m3: 1.14,
     })
     .unwrap();
-    assert!((estimate - 166.5320550502368).abs() < 1e-9, "{estimate}");
+    assert!(
+        (estimate - 166.532_055_050_236_8).abs() < 1e-9,
+        "{estimate}"
+    );
     let identity = estimate_airflow_from_fan_power(AirflowEstimateInput {
         reference_volumetric_flow_m3_s: 150.0,
         reference_fan_power_kw: 40.0,
@@ -189,7 +194,7 @@ fn an_airflow_estimate_follows_the_affinity_law() {
 #[test]
 fn motor_selection_walks_the_iec_size_table() {
     let small = choose_standard_motor(0.1, 0.96, 1.1).unwrap();
-    assert!((small.required_motor_output_kw - 0.11458333333333334).abs() < 1e-15);
+    assert!((small.required_motor_output_kw - 0.114_583_333_333_333_34).abs() < 1e-15);
     assert_eq!(small.selected_motor_kw, Some(0.75));
 
     let mid = choose_standard_motor(30.0, 0.96, 1.1).unwrap();
@@ -197,7 +202,7 @@ fn motor_selection_walks_the_iec_size_table() {
     assert_eq!(mid.selected_motor_kw, Some(37.0));
 
     let large = choose_standard_motor(300.0, 0.97, 1.15).unwrap();
-    assert!((large.required_motor_output_kw - 355.67010309278345).abs() < 1e-9);
+    assert!((large.required_motor_output_kw - 355.670_103_092_783_45).abs() < 1e-9);
     assert_eq!(large.selected_motor_kw, None);
     let at_the_top = choose_standard_motor(275.0, 0.96, 1.1).unwrap();
     assert!(at_the_top.required_motor_output_kw > 315.0);
@@ -406,9 +411,9 @@ fn ratio_one_reproduces_the_recorded_curve_exactly() {
 fn ratio_078_matches_the_fixtures_recorded_operating_point() {
     let fan = ax_500();
     let result = solve(&fan, 1.14, 0.78);
-    agrees(result.flow_m3_s, 129.727648, "0.78 flowM3S");
-    agrees(result.fan_pressure_pa, 178.048732, "0.78 fanPressurePa");
-    agrees(result.shaft_power_kw, 28.008568, "0.78 shaftPowerKW");
+    agrees(result.flow_m3_s, 129.727_648, "0.78 flowM3S");
+    agrees(result.fan_pressure_pa, 178.048_732, "0.78 fanPressurePa");
+    agrees(result.shaft_power_kw, 28.008_568, "0.78 shaftPowerKW");
     let rpm = ax_500_selection()
         .rpm_at_speed_ratio(0.78)
         .expect("the record states a rated speed");
@@ -432,7 +437,7 @@ fn the_power_leg_is_the_third_power_of_the_speed_ratio_from_the_recorded_curve()
                 relative < 1e-12,
                 "flow {reference_flow} ratio {ratio}: power {power} != n^3 x {reference_power} = {expected}"
             );
-            if ratio != 1.0 {
+            if !same(ratio, 1.0) {
                 let square_law = reference_power * ratio.powf(PRESSURE_AFFINITY_EXPONENT);
                 assert!(
                     (power - square_law).abs() > 1e-6 * square_law.abs(),
@@ -475,4 +480,8 @@ fn an_out_of_band_ratio_is_a_named_limit_and_the_rpm_is_the_records_own_datum() 
     no_datum.nominal_rpm = None;
     assert_eq!(no_datum.rpm_at_speed_ratio(0.78), None);
     assert!(no_datum.speed_ratio_limit(1.50).is_some());
+}
+
+fn same(a: f64, b: f64) -> bool {
+    a.partial_cmp(&b) == Some(std::cmp::Ordering::Equal)
 }

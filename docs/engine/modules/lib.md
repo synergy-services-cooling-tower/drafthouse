@@ -2,7 +2,7 @@
 
 Cooling-tower engine core, Rust port — slices 1 to 4.
 
-This crate mirrors the JavaScript reference engine in `../src` (barrel: `src/index.js`)
+This crate mirrors the retired JavaScript reference engine (barrel: `src/index.js`)
 for the ported slices only:
 
 * [`psychrometrics`] — ASHRAE-style moist-air properties from dry bulb/wet bulb or dry
@@ -38,7 +38,7 @@ for the ported slices only:
   (`waterDensityKgM3`, `heatRejectionKW`, `volumetricFlowM3SFromMassFlow`,
   `estimateOutletAirState`); see the module header for why they live there.
 * [`validate`] — the fail-closed catalog-record validator (issue #5): the machine schema
-  of the five catalog record types as data (`docs/CATALOG_SCHEMA.md` as code), and the
+  of the five catalog record types as data (`docs/engine/CATALOG_SCHEMA.md` as code), and the
   refusals that keep a mistyped, missing or non-finite field out of a ranking.
 * [`numeric`] — the quadrature and root-finding primitives the slices need.
 
@@ -47,7 +47,7 @@ The JavaScript engine is the specification, not a work item.
 
 The library has no dependencies outside the standard library; see `README.md` for the
 JavaScript-to-Rust name mapping and for the parity harness
-(`node scripts/parity/run.mjs`).
+(`node tools/parity/run.mjs`).
 
 Two more modules are not part of the physics: [`cli`] is the JSON command surface shared
 by the `ct-engine` binary and the wasm export, and [`wasm`] (built only for

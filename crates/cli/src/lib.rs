@@ -120,12 +120,14 @@ impl From<drafthouse_engine::DomainError> for Failure {
     }
 }
 
+/// # Errors `Failure` when the command is unknown, an option is unusable, or the engine refuses.
 pub fn run(args: &[String]) -> Result<String, Failure> {
     let (command, cli) = Cli::parse(args)?;
     commands::dispatch(&command, &cli)
 }
 
 /// Run one command and wrap the outcome as the reply envelope a caller that is not a process reads — the wasm export (`crates/wasm`).
+#[must_use]
 pub fn reply(args: &[String]) -> String {
     match run(args) {
         Ok(value) => format!("{{\"ok\":true,\"value\":{value}}}"),
@@ -141,6 +143,7 @@ pub fn reply(args: &[String]) -> String {
 }
 
 /// One JSON string literal, escaped the way both the binary's stderr and the wasm envelope need it (the reference `JSON.stringify` set of escapes).
+#[must_use]
 pub fn json_string(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len() + 2);
     escaped.push('"');
@@ -151,8 +154,11 @@ pub fn json_string(value: &str) -> String {
             '\n' => escaped.push_str("\\n"),
             '\r' => escaped.push_str("\\r"),
             '\t' => escaped.push_str("\\t"),
-            character if (character as u32) < 0x20 => {
-                escaped.push_str(&format!("\\u{:04x}", character as u32));
+            character if u32::from(character) < 0x20 => {
+                let code = u32::from(character);
+                escaped.push_str("\\u00");
+                escaped.push(char::from_digit(code >> 4, 16).unwrap_or('0'));
+                escaped.push(char::from_digit(code & 0xf, 16).unwrap_or('0'));
             }
             character => escaped.push(character),
         }

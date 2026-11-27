@@ -361,11 +361,11 @@ fn vector_drift_de_3p_10() -> DriftEliminatorRecord {
 
 #[test]
 fn natural_draft_vectors_reproduce() {
-    let file = vectors();
+    let vectors_file = vectors();
     let tower = vector_tower_idcf_064();
     let fill = vector_fill_vf38();
     let drift_eliminator = vector_drift_de_3p_10();
-    for case in file["families"]["naturalDraft"].as_array().unwrap() {
+    for case in vectors_file["families"]["naturalDraft"].as_array().unwrap() {
         let inputs = &case["inputs"];
         let result = solve_natural_draft_counterflow(&NaturalDraftInput {
             tower: &tower,
@@ -421,66 +421,86 @@ fn performance_curve_vectors_reproduce() {
         let expected = &case["expected"];
         let id = id(case);
         if let Some(expected_cold_water) = expected["coldWaterC"].as_f64() {
-            let prediction = predict_cold_water_from_performance_curves(
-                &records,
-                number(inputs, "wetBulbC"),
-                number(inputs, "rangeC"),
-                number(inputs, "waterFlowKgS"),
-            )
-            .unwrap_or_else(|error| panic!("{id}: {error}"));
-            agrees(
-                prediction.cold_water_c,
-                expected_cold_water,
-                &format!("{id} coldWaterC"),
-            );
-            assert_eq!(
-                prediction.extrapolated,
-                expected["extrapolated"].as_bool().unwrap(),
-                "{id} extrapolated"
-            );
-            assert!(performance_curve_bounds(&records).is_ok());
+            check_cold_water_prediction(id, inputs, expected, &records, expected_cold_water);
         }
         if let Some(expected_flow) = expected["waterFlowKgS"].as_f64() {
-            let solved = predict_water_flow_from_performance_curves(
-                &records,
-                number(inputs, "wetBulbC"),
-                number(inputs, "rangeC"),
-                number(inputs, "coldWaterC"),
-            )
-            .unwrap_or_else(|error| panic!("{id}: {error}"));
-            agrees(
-                solved.water_flow_kg_s,
-                expected_flow,
-                &format!("{id} waterFlowKgS"),
-            );
-            agrees(
-                solved.predicted_cold_water_c,
-                number(expected, "predictedColdWaterC"),
-                &format!("{id} predictedColdWaterC"),
-            );
-            let capability = evaluate_performance_curve_capability(
-                &records,
-                number(inputs, "wetBulbC"),
-                number(inputs, "rangeC"),
-                number(inputs, "coldWaterC"),
-                number(inputs, "adjustedTestWaterFlowKgS"),
-            )
-            .unwrap_or_else(|error| panic!("{id}: {error}"));
-            agrees(
-                capability.capability_pct,
-                number(expected, "capabilityPct"),
-                &format!("{id} capabilityPct"),
-            );
-            agrees(
-                capability.predicted_cold_water_at_adjusted_flow_c,
-                number(expected, "predictedColdWaterAtAdjustedFlowC"),
-                &format!("{id} predictedColdWaterAtAdjustedFlowC"),
-            );
-            agrees(
-                capability.leaving_water_deviation_c,
-                number(expected, "leavingWaterDeviationC"),
-                &format!("{id} leavingWaterDeviationC"),
-            );
+            check_flow_and_capability(id, inputs, expected, &records, expected_flow);
         }
     }
+}
+
+fn check_flow_and_capability(
+    id: &str,
+    inputs: &Value,
+    expected: &Value,
+    records: &[PerformanceCurveRecord],
+    expected_flow: f64,
+) {
+    let solved = predict_water_flow_from_performance_curves(
+        records,
+        number(inputs, "wetBulbC"),
+        number(inputs, "rangeC"),
+        number(inputs, "coldWaterC"),
+    )
+    .unwrap_or_else(|error| panic!("{id}: {error}"));
+    agrees(
+        solved.water_flow_kg_s,
+        expected_flow,
+        &format!("{id} waterFlowKgS"),
+    );
+    agrees(
+        solved.predicted_cold_water_c,
+        number(expected, "predictedColdWaterC"),
+        &format!("{id} predictedColdWaterC"),
+    );
+    let capability = evaluate_performance_curve_capability(
+        records,
+        number(inputs, "wetBulbC"),
+        number(inputs, "rangeC"),
+        number(inputs, "coldWaterC"),
+        number(inputs, "adjustedTestWaterFlowKgS"),
+    )
+    .unwrap_or_else(|error| panic!("{id}: {error}"));
+    agrees(
+        capability.capability_pct,
+        number(expected, "capabilityPct"),
+        &format!("{id} capabilityPct"),
+    );
+    agrees(
+        capability.predicted_cold_water_at_adjusted_flow_c,
+        number(expected, "predictedColdWaterAtAdjustedFlowC"),
+        &format!("{id} predictedColdWaterAtAdjustedFlowC"),
+    );
+    agrees(
+        capability.leaving_water_deviation_c,
+        number(expected, "leavingWaterDeviationC"),
+        &format!("{id} leavingWaterDeviationC"),
+    );
+}
+
+fn check_cold_water_prediction(
+    id: &str,
+    inputs: &Value,
+    expected: &Value,
+    records: &[PerformanceCurveRecord],
+    expected_cold_water: f64,
+) {
+    let prediction = predict_cold_water_from_performance_curves(
+        records,
+        number(inputs, "wetBulbC"),
+        number(inputs, "rangeC"),
+        number(inputs, "waterFlowKgS"),
+    )
+    .unwrap_or_else(|error| panic!("{id}: {error}"));
+    agrees(
+        prediction.cold_water_c,
+        expected_cold_water,
+        &format!("{id} coldWaterC"),
+    );
+    assert_eq!(
+        prediction.extrapolated,
+        expected["extrapolated"].as_bool().unwrap(),
+        "{id} extrapolated"
+    );
+    assert!(performance_curve_bounds(records).is_ok());
 }

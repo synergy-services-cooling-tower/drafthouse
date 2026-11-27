@@ -1,7 +1,7 @@
 # synergy-drafthouse (Rust) — ported slices 1 to 4
 
-The Rust engine for this repository. **The JavaScript engine in `../src` remains the
-reference**: this crate is judged by the parity harness (`../scripts/parity/run.mjs`), not by
+The Rust engine for this repository, now `crates/engine`, `crates/cli` and `crates/wasm`. **The retired
+JavaScript engine's recorded baseline is the reference**: this crate is judged by the parity harness (`tools/parity/run.mjs`), not by
 its own opinion of the physics. Four vertical slices are ported so far, each with external
 anchors and recorded vectors:
 
@@ -11,7 +11,7 @@ anchors and recorded vectors:
 * **slice 4** — crossflow grid, convergent-nozzle hydraulics and component selection.
 
 The catalog-record validator from issue #5 is not a slice of the reference port: it is
-`docs/CATALOG_SCHEMA.md` as machine-enforced data, and it is documented in its own section
+`docs/engine/CATALOG_SCHEMA.md` as machine-enforced data, and it is documented in its own section
 below.
 
 ## What is ported
@@ -134,7 +134,7 @@ objectives.
 Two quantities are new because the reference never needed them: `capacity` (bracketed root on
 water mass flow, re-solving the air-side at each flow) and `capabilityRatio` (available KaV/L
 over required KaV/L at the duty; for crossflow, a root on `availableMerkelNumber`). Both are
-solved with the already-ported `solveBracketedRoot`, and `scripts/parity/run.mjs` recomputes
+solved with the already-ported `solveBracketedRoot`, and `tools/parity/run.mjs` recomputes
 them from the reference engine's own functions and diffs them per candidate.
 
 `interpolate1D(points, x, xKey, yKey, { clampEnds })` becomes
@@ -157,12 +157,12 @@ a second engine.
 The engine compiles for `wasm32-unknown-unknown` with no dependency and no binding
 generator. `src/cli.rs` holds the command surface once; `src/bin/ct-engine.rs` is its process
 shell and `src/wasm.rs` — compiled only for the wasm target — is a three-function C ABI over
-it, so the two builds cannot drift into two parsers. `../rust/wasm/binding.mjs` is the thin
+it, so the two builds cannot drift into two parsers. `tools/parity/binding.mjs` is the thin
 JavaScript binding: data in, data out, no DOM, no geometry, no markup.
 
 ## The catalog-record validator (issue #5)
 
-`docs/CATALOG_SCHEMA.md` was prose with nothing enforcing it: a mistyped, missing or
+`docs/engine/CATALOG_SCHEMA.md` was prose with nothing enforcing it: a mistyped, missing or
 non-finite field became `undefined`/`NaN` and flowed into a ranking. `src/validate.rs` is
 that schema as data — one table per record type (`tower`, `fill`, `drift-eliminator`, `fan`,
 `nozzle`) declaring every field, whether it is required, and what its value must be — and
@@ -261,13 +261,13 @@ cargo test 2>&1 | grep -E 'Running tests/|Running unittests|^running [0-9]+ test
 Parity harness, from the repository root, one command:
 
 ```sh
-node scripts/parity/run.mjs                # builds the crate, then diffs both engines
-node scripts/parity/run.mjs --no-build     # reuse an existing rust/target/debug/ct-engine
-node scripts/parity/run.mjs --engine wasm  # build and diff the wasm build as well (issue #24)
+node tools/parity/run.mjs                # builds the crate, then diffs both engines
+node tools/parity/run.mjs --no-build     # reuse an existing rust/target/debug/ct-engine
+node tools/parity/run.mjs --engine wasm  # build and diff the wasm build as well (issue #24)
 ```
 
 `--engine wasm` builds the wasm artifact, runs this whole suite through it
-(`rust/wasm/binding.mjs`) against the reference, and cross-checks every reply against the
+(`tools/parity/binding.mjs`) against the reference, and cross-checks every reply against the
 binary.
 
 The wasm build on its own:

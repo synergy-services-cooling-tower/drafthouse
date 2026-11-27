@@ -238,7 +238,7 @@ fn a_tower_without_a_draft_height_is_refused_before_any_physics() {
 fn the_draft_term_is_the_reference_buoyancy_product() {
     assert_eq!(
         natural_draft_pressure_pa(170.0, 1.15, 1.13),
-        33.34261000000003
+        33.342_610_000_000_03
     );
     assert_eq!(natural_draft_pressure_pa(0.0, 1.2, 1.1), 0.0);
     assert!(natural_draft_pressure_pa(100.0, 1.1, 1.2) < 0.0);

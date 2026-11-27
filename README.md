@@ -12,8 +12,8 @@ engine is **ported and drift-guarded, not validated**: every pull request replay
 > **Validation status:** this software has been checked against ASHRAE property tables and for
 > internal consistency. It has **not** been compared against CTI ToolKit, published cooling-tower
 > benchmarks, or measured tower data. The air-side model and the component catalog have never met
-> reality. See [`docs/VALIDATION.md`](docs/VALIDATION.md) §8 and
-> [`VALIDATION_RESULTS.md`](VALIDATION_RESULTS.md) for what is and is not established.
+> reality. See [`docs/engine/VALIDATION.md`](docs/engine/VALIDATION.md) §8 for what is and is not
+> established; the `local/parity` gate's report is the current result.
 
 > **Engineering status:** educational/prototyping software. It is not CTI Toolkit, does not reproduce paid CTI standards, is not MRL source code, and is not a CTI-certified rating program. The bundled tower, fill, drift-eliminator, fan, nozzle, material, and cost records are synthetic. Contractual acceptance, certified ratings, guarantees, procurement, and field modifications require licensed standards, controlled manufacturer data, and independent validation.
 
@@ -76,9 +76,12 @@ These functions demonstrate publicly described mechanics only. They do **not** i
 
 | Path | What it is |
 |---|---|
-| `rust/` | the engine crate, the `ct-engine` binary, the WASM build and the cockpit adapter: the legacy set, moved into `crates/` issue by issue |
-| `crates/` | the root Cargo workspace; `crates/blocks` runs `blocks check` at the Blocks pin |
-| `scripts/parity/run.mjs` | the replay of the recorded baseline, native and WASM |
+| `crates/engine` | the physics, with no dependency |
+| `crates/cli` | `ct-engine`: the frozen text commands that replay the recorded evidence |
+| `crates/wasm` | the WASM ABI over the text commands |
+| `crates/blocks` | `blocks check` at the Blocks pin |
+| `rust/cockpit-adapter/` | the legacy cockpit adapter, built against `crates/engine` until `rate` replaces it |
+| `tools/parity/run.mjs` | the replay of the recorded baseline, native and WASM |
 | `web/geometry.js` | the tower geometry in JavaScript, kept byte for byte until the engine owns it |
 | `catalog/synthetic.json` | the one synthetic catalog |
 | `validation/` | the recorded vectors and baseline, never edited |
@@ -92,20 +95,19 @@ just check                 # every gate CI runs, the same as a lane's done check
 just gate local/parity     # one gate: here the 299 recorded steps
 ```
 
-Requirements: Node.js 20 or newer and Rust; `rust/rust-toolchain.toml` and `rust-toolchain.toml` pin the two
-toolchains. The WASM leg of `local/parity` needs the `wasm32-unknown-unknown` target and always runs in CI.
+Requirements: Node.js 20 or newer and Rust; `rust-toolchain.toml` pins the toolchain. The WASM leg of `local/parity` needs the `wasm32-unknown-unknown` target and always runs in CI.
 
 ## Documentation
 
-- [The engine (crate, binary, WASM build)](rust/README.md)
-- [Engineering methods and equations](docs/ENGINEERING_METHODS.md)
-- [Worked synthetic example](docs/CALCULATION_EXAMPLE.md)
-- [CTI Toolkit and MRL mapping](docs/CTI_MRL_MAPPING.md)
-- [Component catalog schema](docs/CATALOG_SCHEMA.md)
-- [Traceability matrix](docs/TRACEABILITY_MATRIX.md)
-- [Validation and uncertainty plan](docs/VALIDATION.md)
-- [References and provenance](docs/REFERENCES.md)
-- [Limitations and production gaps](docs/LIMITATIONS.md)
+- [The engine (crate, binary, WASM build)](docs/engine/README.md)
+- [Engineering methods and equations](docs/engine/ENGINEERING_METHODS.md)
+- [Worked synthetic example](docs/engine/CALCULATION_EXAMPLE.md)
+- [CTI Toolkit and MRL mapping](docs/engine/CTI_MRL_MAPPING.md)
+- [Component catalog schema](docs/engine/CATALOG_SCHEMA.md)
+- [Traceability matrix](docs/engine/TRACEABILITY_MATRIX.md)
+- [Validation and uncertainty plan](docs/engine/VALIDATION.md)
+- [References and provenance](docs/engine/REFERENCES.md)
+- [Limitations and production gaps](docs/engine/LIMITATIONS.md)
 - [The restart: architecture](docs/architecture/restart/README.md) and [design](docs/design/restart/README.md)
 
 ## License and external material

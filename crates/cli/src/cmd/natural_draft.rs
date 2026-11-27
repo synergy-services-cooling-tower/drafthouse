@@ -3,7 +3,7 @@ use crate::json::{number, object};
 use crate::objects::{air_state_object, airside_object};
 use crate::records::{drift_record, fill_record, tower_record};
 use crate::{json_string, Failure};
-use drafthouse_engine::NaturalDraftInput;
+use drafthouse_engine::{ColdWaterTemperatureResult, NaturalDraftInput, OutletAirState};
 
 pub(crate) const MODEL_NATURAL_DRAFT: &str =
     "simplified coupled natural-draft counterflow (demonstration only)";
@@ -43,35 +43,34 @@ pub(crate) fn natural_draft(cli: &Cli) -> Result<String, Failure> {
         ("draftPressurePa", number(result.draft_pressure_pa)),
         ("residualPa", number(result.residual_pa)),
         ("airside", airside_object(&result.airside)),
-        (
-            "thermal",
-            object(&[
-                ("coldWaterC", number(result.thermal.cold_water_c)),
-                ("approachC", number(result.thermal.approach_c)),
-                ("rangeC", number(result.thermal.range_c)),
-                (
-                    "requiredMerkelNumber",
-                    number(result.thermal.required_merkel_number),
-                ),
-                ("cpWaterKJkgK", number(result.thermal.cp_water_kj_kg_k)),
-            ]),
-        ),
-        (
-            "outlet",
-            object(&[
-                ("dryBulbC", number(result.outlet.dry_bulb_c)),
-                ("wetBulbC", number(result.outlet.wet_bulb_c)),
-                ("relativeHumidity", number(result.outlet.relative_humidity)),
-                ("humidityRatio", number(result.outlet.humidity_ratio)),
-                (
-                    "enthalpyKJkgDryAir",
-                    number(result.outlet.enthalpy_kj_kg_dry_air),
-                ),
-                ("pressurePa", number(result.outlet.pressure_pa)),
-            ]),
-        ),
+        ("thermal", thermal_object(&result.thermal)),
+        ("outlet", outlet_object(&result.outlet)),
         ("inletAirState", air_state_object(&result.inlet_air_state)),
         ("evaporationKgS", number(result.evaporation_kg_s)),
         ("caveat", json_string(CAVEAT_NATURAL_DRAFT)),
     ]))
+}
+
+fn thermal_object(thermal: &ColdWaterTemperatureResult) -> String {
+    object(&[
+        ("coldWaterC", number(thermal.cold_water_c)),
+        ("approachC", number(thermal.approach_c)),
+        ("rangeC", number(thermal.range_c)),
+        (
+            "requiredMerkelNumber",
+            number(thermal.required_merkel_number),
+        ),
+        ("cpWaterKJkgK", number(thermal.cp_water_kj_kg_k)),
+    ])
+}
+
+fn outlet_object(outlet: &OutletAirState) -> String {
+    object(&[
+        ("dryBulbC", number(outlet.dry_bulb_c)),
+        ("wetBulbC", number(outlet.wet_bulb_c)),
+        ("relativeHumidity", number(outlet.relative_humidity)),
+        ("humidityRatio", number(outlet.humidity_ratio)),
+        ("enthalpyKJkgDryAir", number(outlet.enthalpy_kj_kg_dry_air)),
+        ("pressurePa", number(outlet.pressure_pa)),
+    ])
 }

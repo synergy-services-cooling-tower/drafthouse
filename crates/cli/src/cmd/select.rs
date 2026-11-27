@@ -7,12 +7,43 @@ use crate::selection::{
 };
 use crate::worked::selection_worked_object;
 use crate::{json_string, Failure};
-use drafthouse_engine::{Objective, SelectionInput, SelectionRequirements};
+use drafthouse_engine::{Objective, SelectionInput, SelectionRequirements, SelectionRun};
 
 pub(crate) fn select(cli: &Cli) -> Result<String, Failure> {
     validate_catalog_records(cli)?;
     let catalog = selection_catalog(cli)?;
-    let objective = match cli.values.get("--objective") {
+    let objective = objective(cli)?;
+    let requirements = requirements(cli)?;
+    let max_results = cli.integer("--max-results", 30)?;
+
+    let input = SelectionInput::new(&catalog)
+        .with_objective(objective)
+        .with_max_results(max_results)
+        .with_requirements(requirements);
+    let run = drafthouse_engine::run_selection(&input)?;
+
+    let mut fields = run_fields(&run, max_results);
+    if cli.has("--all-orders") {
+        fields.push((
+            "candidates",
+            json_array(
+                &run.candidates
+                    .iter()
+                    .map(compact_candidate_object)
+                    .collect::<Vec<String>>(),
+            ),
+        ));
+        fields.push(("orders", orders_object(&run)));
+    }
+    if let Some(recommended) = run.candidates.first() {
+        fields.push(("inputs", selection_inputs_object(cli, &run, recommended)));
+        fields.push(("worked", selection_worked_object(&run, recommended)));
+    }
+    Ok(object(&fields))
+}
+
+fn objective(cli: &Cli) -> Result<Objective, Failure> {
+    Ok(match cli.values.get("--objective") {
         None => Objective::default(),
         Some(raw) => Objective::parse(raw).ok_or_else(|| {
             let allowed = Objective::ALL
@@ -22,7 +53,10 @@ pub(crate) fn select(cli: &Cli) -> Result<String, Failure> {
                 .join("|");
             Failure::Usage(format!("--objective expects {allowed}, got {raw:?}"))
         })?,
-    };
+    })
+}
+
+fn requirements(cli: &Cli) -> Result<SelectionRequirements, Failure> {
     let mut requirements = SelectionRequirements::default();
     if let Some(value) = cli.number("--water")? {
         requirements.water_mass_flow_kg_s = value;
@@ -46,7 +80,7 @@ pub(crate) fn select(cli: &Cli) -> Result<String, Failure> {
         requirements.salinity_g_kg = value;
     }
     if let Some(value) = cli.values.get("--quality-class") {
-        requirements.water_quality_class = value.clone();
+        requirements.water_quality_class.clone_from(value);
     }
     if let Some(value) = cli.number("--cycles")? {
         requirements.cycles_of_concentration = value;
@@ -72,14 +106,10 @@ pub(crate) fn select(cli: &Cli) -> Result<String, Failure> {
             .map(|part| parse_number(part, "--speed-ratios"))
             .collect::<Result<Vec<f64>, Failure>>()?;
     }
-    let max_results = cli.integer("--max-results", 30)?;
+    Ok(requirements)
+}
 
-    let input = SelectionInput::new(&catalog)
-        .with_objective(objective)
-        .with_max_results(max_results)
-        .with_requirements(requirements);
-    let run = drafthouse_engine::run_selection(&input)?;
-
+fn run_fields(run: &SelectionRun, max_results: usize) -> Vec<(&'static str, String)> {
     let capacities_resolved = run
         .candidates
         .iter()
@@ -88,7 +118,7 @@ pub(crate) fn select(cli: &Cli) -> Result<String, Failure> {
         })
         .count();
 
-    let mut fields: Vec<(&str, String)> = vec![
+    vec![
         ("objective", json_string(run.objective.as_str())),
         ("requirements", requirements_object(&run.requirements)),
         ("catalog", catalog_object(&run.catalog_metadata)),
@@ -116,22 +146,5 @@ pub(crate) fn select(cli: &Cli) -> Result<String, Failure> {
                     .collect::<Vec<String>>(),
             ),
         ),
-    ];
-    if cli.has("--all-orders") {
-        fields.push((
-            "candidates",
-            json_array(
-                &run.candidates
-                    .iter()
-                    .map(compact_candidate_object)
-                    .collect::<Vec<String>>(),
-            ),
-        ));
-        fields.push(("orders", orders_object(&run)));
-    }
-    if let Some(recommended) = run.candidates.first() {
-        fields.push(("inputs", selection_inputs_object(cli, &run, recommended)));
-        fields.push(("worked", selection_worked_object(&run, recommended)));
-    }
-    Ok(object(&fields))
+    ]
 }

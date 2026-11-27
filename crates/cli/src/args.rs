@@ -12,24 +12,19 @@ impl Cli {
         let mut values = HashMap::new();
         let mut switches = HashSet::new();
         let mut command = None;
-        let mut index = 0;
-        while index < args.len() {
-            let argument = &args[index];
+        let mut arguments = args.iter().peekable();
+        while let Some(argument) = arguments.next() {
             if let Some(key) = argument.strip_prefix("--") {
-                let next = args.get(index + 1);
-                match next {
-                    Some(value) if !value.starts_with("--") => {
+                match arguments.next_if(|value| !value.starts_with("--")) {
+                    Some(value) => {
                         values.insert(format!("--{key}"), value.clone());
-                        index += 2;
                     }
-                    _ => {
+                    None => {
                         switches.insert(format!("--{key}"));
-                        index += 1;
                     }
                 }
             } else if command.is_none() {
                 command = Some(argument.clone());
-                index += 1;
             } else {
                 return Err(Failure::Usage(format!("unexpected argument: {argument}")));
             }
@@ -137,15 +132,15 @@ impl Spec {
             .map(|(_, value)| value.as_str())
     }
 
-    pub(crate) fn list(&self, key: &str) -> Result<Vec<String>, Failure> {
+    pub(crate) fn list(&self, key: &str) -> Vec<String> {
         match self.get(key) {
-            None => Ok(Vec::new()),
-            Some(raw) => Ok(raw.split('|').map(str::to_string).collect()),
+            None => Vec::new(),
+            Some(raw) => raw.split('|').map(str::to_string).collect(),
         }
     }
 
     pub(crate) fn required_list(&self, key: &str) -> Result<Vec<String>, Failure> {
-        let values = self.list(key)?;
+        let values = self.list(key);
         if values.is_empty() {
             return Err(Failure::Usage(format!("{} needs {key}", self.option)));
         }

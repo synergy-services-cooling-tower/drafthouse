@@ -207,7 +207,7 @@ fn agrees(actual: f64, expected: f64, label: &str) {
 
 #[test]
 fn velocity_pressure_and_minor_loss_follow_the_definition() {
-    let density = 1.1392905373780184;
+    let density = 1.139_290_537_378_018_4;
     let velocity = 4.0625;
     let velocity_pressure = velocity_pressure_pa(density, velocity);
     assert_eq!(velocity_pressure, 0.5 * density * velocity.powi(2));
@@ -215,32 +215,52 @@ fn velocity_pressure_and_minor_loss_follow_the_definition() {
         minor_loss_pressure_pa(3.0, density, velocity),
         3.0 * velocity_pressure
     );
-    assert!((velocity_pressure - 9.40137211019947).abs() < 1e-12);
-    assert!((minor_loss_pressure_pa(3.0, density, velocity) - 28.20411633059841).abs() < 1e-9);
+    assert!((velocity_pressure - 9.401_372_110_199_47).abs() < 1e-12);
+    assert!((minor_loss_pressure_pa(3.0, density, velocity) - 28.204_116_330_598_41).abs() < 1e-9);
 }
+
+const AIRSIDE_CASES: [(f64, [f64; 7]); 3] = [
+    (
+        100.0,
+        [
+            145.340_817,
+            72.770_477,
+            21.622_951,
+            16.688_826,
+            5.614_696,
+            9.604_086,
+            1.830_925,
+        ],
+    ),
+    (
+        130.0,
+        [
+            229.193_862,
+            114.271_462,
+            35.721_311,
+            28.204_116,
+            9.488_837,
+            16.230_905,
+            2.058_431,
+        ],
+    ),
+    (
+        160.0,
+        [
+            332.801_889,
+            163.320_834,
+            54.655_738,
+            42.723_395,
+            14.373_623,
+            24.586_460,
+            2.258_391,
+        ],
+    ),
+];
 
 #[test]
 fn the_recorded_airside_vectors_reproduce() {
-    let cases: [(f64, [f64; 7]); 3] = [
-        (
-            100.0,
-            [
-                145.340817, 72.770477, 21.622951, 16.688826, 5.614696, 9.604086, 1.830925,
-            ],
-        ),
-        (
-            130.0,
-            [
-                229.193862, 114.271462, 35.721311, 28.204116, 9.488837, 16.230905, 2.058431,
-            ],
-        ),
-        (
-            160.0,
-            [
-                332.801889, 163.320834, 54.655738, 42.723395, 14.373623, 24.586460, 2.258391,
-            ],
-        ),
-    ];
+    let cases = AIRSIDE_CASES;
     let fan = ax_500();
     for (flow, expected) in cases {
         let result = breakdown_at(flow, Some(&fan));
@@ -264,25 +284,25 @@ fn the_recorded_airside_vectors_reproduce() {
         }
         agrees(
             result.fill_merkel_number,
-            [1.562189, 1.753351, 1.921084][[100.0, 130.0, 160.0]
+            [1.562_189, 1.753_351, 1.921_084][[100.0, 130.0, 160.0]
                 .iter()
-                .position(|f| *f == flow)
+                .position(|f| same(*f, flow))
                 .unwrap()],
             &format!("{flow} m³/s fillMerkelNumber"),
         );
         agrees(
             result.spray_zone_merkel_number,
-            [0.089183, 0.100359, 0.110188][[100.0, 130.0, 160.0]
+            [0.089_183, 0.100_359, 0.110_188][[100.0, 130.0, 160.0]
                 .iter()
-                .position(|f| *f == flow)
+                .position(|f| same(*f, flow))
                 .unwrap()],
             &format!("{flow} m³/s sprayZoneMerkelNumber"),
         );
         agrees(
             result.rain_zone_merkel_number,
-            [0.179553, 0.204722, 0.227119][[100.0, 130.0, 160.0]
+            [0.179_553, 0.204_722, 0.227_119][[100.0, 130.0, 160.0]
                 .iter()
-                .position(|f| *f == flow)
+                .position(|f| same(*f, flow))
                 .unwrap()],
             &format!("{flow} m³/s rainZoneMerkelNumber"),
         );
@@ -494,12 +514,12 @@ fn a_drift_performance_reading_interpolates_and_extrapolates_both_curves() {
 fn the_fill_correlations_reproduce_the_reference_values() {
     let fill = film_of25();
     let water_loading = 3.125;
-    let dry_air_loading = 2.268304276689687;
+    let dry_air_loading = 2.268_304_276_689_687;
     let merkel =
         fill_thermal_merkel_number(&fill, 1.5, water_loading, dry_air_loading, 1.0).unwrap();
     let pressure = fill_pressure_drop_pa(&fill, 1.5, water_loading, dry_air_loading, 1.0).unwrap();
-    assert!((merkel - 1.7533505058419276).abs() < 1e-12);
-    assert!((pressure - 114.27146227407496).abs() < 1e-9);
+    assert!((merkel - 1.753_350_505_841_927_6).abs() < 1e-12);
+    assert!((pressure - 114.271_462_274_074_96).abs() < 1e-9);
     let damped = fill_pressure_drop_pa(&fill, 1.5, water_loading, dry_air_loading, 1.35).unwrap();
     assert!((damped - 1.35 * pressure).abs() < 1e-9);
     let degraded =
@@ -518,7 +538,7 @@ fn the_envelope_accepts_a_clean_fill_inside_its_limits() {
         water_quality_class: "clean",
     });
     assert!(envelope.ok);
-    assert!(envelope.failures.is_empty());
+    assert!(envelope.failures.is_empty(), "the envelope holds");
 }
 
 #[test]
@@ -797,4 +817,8 @@ fn the_defaults_of_the_breakdown_match_the_reference_option_defaults() {
     assert_eq!(result.spray_zone_merkel_number, 0.0);
     assert_eq!(result.rain_zone_merkel_number, 0.0);
     assert_eq!(result.available_merkel_number, result.fill_merkel_number);
+}
+
+fn same(a: f64, b: f64) -> bool {
+    a.partial_cmp(&b) == Some(std::cmp::Ordering::Equal)
 }

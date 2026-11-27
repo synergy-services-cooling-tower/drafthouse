@@ -2,7 +2,6 @@ use crate::args::Cli;
 use crate::cmd;
 use crate::Failure;
 
-/// The frozen text commands: each name and the command it runs.
 pub(crate) fn dispatch(command: &str, cli: &Cli) -> Result<String, Failure> {
     match command {
         "psy" => cmd::psy::psy(cli),

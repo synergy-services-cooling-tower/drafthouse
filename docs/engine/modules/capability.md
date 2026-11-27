@@ -89,7 +89,7 @@ One point of the reported design-demand / test-characteristic curve pair.
 ### `struct CharacteristicCapability`
 
 The object `evaluateCharacteristicCapability` returns, field for field (minus the two the
-harness reads as text: `method` and `disclaimer` are in `rust/src/cli.rs`, which renders
+harness reads as text: `method` and `disclaimer` are in `crates/cli/src/lib.rs`, which renders
 them, so this struct carries the physics).
 
 ### `fn evaluate_characteristic_capability`

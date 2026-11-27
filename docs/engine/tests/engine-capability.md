@@ -8,7 +8,7 @@ Sources, quoted per test:
 * `tests/capability.test.js` — identical design and test conditions evaluate to 100 %
   capability, and a seeded Monte Carlo is repeatable for the same seed.
 * `validation/test-vectors.json` (family `capability`) — the recorded cases are replayed in
-  `rust/tests/vectors.rs`, next to the two JavaScript vector families.
+  `crates/engine/tests/vectors.rs`, next to the two JavaScript vector families.
 * `src/core/capability.js` — the guard order and messages, the default exponent, the
   `-1e12` infeasible-demand residual, the curve sampling range and filter, and the
   Monte-Carlo acceptance floor.

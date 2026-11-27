@@ -16,42 +16,46 @@ fn assert_close(actual: f64, expected: f64, relative: f64, label: &str) {
     );
 }
 
-#[test]
-fn recorded_crossflow_vectors_reproduce() {
-    let vectors = [
+fn crossflow_vectors() -> [(&'static str, CrossflowGridInput, f64, f64, f64, f64); 4] {
+    [
         (
             "xf-base",
             CrossflowGridInput::new(42.0, 33.0, 27.0, 200.0, 150.0, 1.6),
-            32.333352,
+            32.333_352,
             8088.067,
             36.38799,
-            0.098917,
+            0.098_917,
         ),
         (
             "xf-low-transfer",
             CrossflowGridInput::new(40.0, 30.0, 24.0, 200.0, 150.0, 0.8),
-            32.395153,
+            32.395_153,
             6362.4565,
-            32.611451,
-            0.059272,
+            32.611_451,
+            0.059_272,
         ),
         (
             "xf-high-transfer",
             CrossflowGridInput::new(45.0, 35.0, 28.0, 250.0, 200.0, 2.4),
-            32.269144,
+            32.269_144,
             13316.4595,
-            38.710359,
-            0.154465,
+            38.710_359,
+            0.154_465,
         ),
         (
             "xf-temperate",
             CrossflowGridInput::new(32.0, 20.0, 14.0, 180.0, 160.0, 1.4),
-            23.492129,
+            23.492_129,
             6401.6276,
-            25.638455,
-            0.066315,
+            25.638_455,
+            0.066_315,
         ),
-    ];
+    ]
+}
+
+#[test]
+fn recorded_crossflow_vectors_reproduce() {
+    let vectors = crossflow_vectors();
     for (id, input, cold_water_c, heat_transfer_kw, outlet_dry_bulb_c, error_c) in vectors {
         let result = solve_crossflow_grid(&input).expect("the vector must solve");
         assert_close(

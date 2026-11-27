@@ -4,7 +4,7 @@ The wasm export surface (issue #24): a C ABI over [`crate::cli`].
 
 Built only for `wasm32-unknown-unknown` (see `lib.rs`), as a `cdylib` (see `Cargo.toml`).
 There is no binding generator and no dependency: the ABI is three functions over the
-module's own exported memory, and the JavaScript side is `rust/wasm/binding.mjs`, which
+module's own exported memory, and the JavaScript side is `tools/parity/binding.mjs`, which
 is data only — it allocates a buffer, writes the command line, reads the reply and
 parses it.
 
@@ -22,7 +22,7 @@ Every buffer that crosses the boundary carries its own length: four little-endia
   early because its input was unusable.
 
 The command line is UTF-8 with one argument per line (a flag, a value, …), which is the
-transport `rust/wasm/binding.mjs` speaks; a newline cannot occur inside an argument.
+transport `tools/parity/binding.mjs` speaks; a newline cannot occur inside an argument.
 
 # The reply envelope
 

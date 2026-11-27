@@ -15,7 +15,7 @@ pub(crate) fn capability_monte_carlo(cli: &Cli) -> Result<String, Failure> {
         base_input: capability_input(cli)?,
         uncertainty,
         samples: cli.integer("--samples", 1000)?,
-        seed: cli.number_or("--seed", 20260813.0)?,
+        seed: cli.number_or("--seed", 20_260_813.0)?,
     };
     let result = drafthouse_engine::monte_carlo_characteristic_capability(&input)?;
     Ok(object(&[

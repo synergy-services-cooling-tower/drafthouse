@@ -170,7 +170,7 @@ fn fill(
             limits,
             allowed_water_quality_classes: allowed_water_quality_classes
                 .iter()
-                .map(|class| class.to_string())
+                .map(ToString::to_string)
                 .collect(),
         },
         compatible_tower_types: compatible_tower_types.to_vec(),
@@ -640,14 +640,7 @@ fn re_evaluate_unit(
         .water_quality_factors
         .get(&requirements.water_quality_class)
         .expect("the quality class is in the catalog");
-    let inlet_air = drafthouse_engine::psychrometric_state(
-        drafthouse_engine::PsychrometricStateInput::from_wet_bulb(
-            requirements.dry_bulb_c,
-            requirements.wet_bulb_c,
-        )
-        .with_pressure(requirements.pressure_pa),
-    )
-    .expect("the inlet state solves");
+    let inlet_air = inlet_air_of(requirements);
     let breakdown =
         |flow_m3_s: f64| -> Result<SystemPressureBreakdown, drafthouse_engine::DomainError> {
             drafthouse_engine::system_pressure_breakdown(
@@ -676,6 +669,25 @@ fn re_evaluate_unit(
     )
     .expect("the fan balance solves");
     let airside = breakdown(point.flow_m3_s).expect("the breakdown evaluates");
+    cold_water_at(requirements, water_mass_flow_kg_s, &airside)
+}
+
+fn inlet_air_of(requirements: &SelectionRequirements) -> drafthouse_engine::PsychrometricState {
+    drafthouse_engine::psychrometric_state(
+        drafthouse_engine::PsychrometricStateInput::from_wet_bulb(
+            requirements.dry_bulb_c,
+            requirements.wet_bulb_c,
+        )
+        .with_pressure(requirements.pressure_pa),
+    )
+    .expect("the inlet state solves")
+}
+
+fn cold_water_at(
+    requirements: &SelectionRequirements,
+    water_mass_flow_kg_s: f64,
+    airside: &SystemPressureBreakdown,
+) -> f64 {
     drafthouse_engine::solve_cold_water_temperature(&drafthouse_engine::ColdWaterTemperatureInput {
         pressure_pa: requirements.pressure_pa,
         salinity_g_kg: requirements.salinity_g_kg,
@@ -813,28 +825,13 @@ fn the_bundled_catalog_winners_are_the_issue_1_anchors() {
         ),
     ];
     for (objective, expected) in anchors {
-        let order = run.order_for(objective);
-        assert_eq!(
-            identity(&run.candidates[order[0]]),
-            expected,
-            "{objective:?} winner"
-        );
-        let mut reference = order.clone();
-        reference.sort_by(|&a, &b| {
-            compare_documented(&run.candidates[a], &run.candidates[b], objective)
-        });
-        assert_eq!(
-            order, reference,
-            "{objective:?} order is not the documented one"
-        );
-        assert!(
-            order.iter().all(|&index| {
-                run.candidates[index].thermal_margin_c >= run.requirements.minimum_thermal_margin_c
-            }),
-            "the margin floor holds in every order"
-        );
+        check_anchor_order(&run, objective, expected);
     }
 
+    check_anchor_numbers(&run);
+}
+
+fn check_anchor_numbers(run: &drafthouse_engine::SelectionRun) {
     let over_capacity = run.candidates[run.order_for(Objective::LeastOverCapacity)[0]].clone();
     assert_close(
         over_capacity.capacity_kg_s.expect("resolved"),
@@ -875,6 +872,28 @@ fn the_bundled_catalog_winners_are_the_issue_1_anchors() {
         181.496_5,
         1e-4,
         "lowest-total-air-side-pressure totalPa",
+    );
+}
+
+fn check_anchor_order(run: &drafthouse_engine::SelectionRun, objective: Objective, expected: &str) {
+    let order = run.order_for(objective);
+    assert_eq!(
+        identity(&run.candidates[order[0]]),
+        expected,
+        "{objective:?} winner"
+    );
+    let mut reference = order.clone();
+    reference
+        .sort_by(|&a, &b| compare_documented(&run.candidates[a], &run.candidates[b], objective));
+    assert_eq!(
+        order, reference,
+        "{objective:?} order is not the documented one"
+    );
+    assert!(
+        order.iter().all(|&index| {
+            run.candidates[index].thermal_margin_c >= run.requirements.minimum_thermal_margin_c
+        }),
+        "the margin floor holds in every order"
     );
 }
 
@@ -1055,80 +1074,78 @@ fn engineered_candidate(
     candidate
 }
 
-fn link_cases() -> Vec<LinkCase> {
-    vec![
-        LinkCase {
-            label: "electrical input ascending",
-            objective: Objective::LeastOverCapacity,
-            a: [9.0, 1.0, 100.0, 2.0, 300.0],
-            b: [11.0, 1.0, 100.0, 2.0, 300.0],
-            expected_first: "A",
-        },
-        LinkCase {
-            label: "make-up water ascending",
-            objective: Objective::LeastOverCapacity,
-            a: [10.0, 1.0, 100.0, 2.0, 300.0],
-            b: [10.0, 2.0, 100.0, 2.0, 300.0],
-            expected_first: "A",
-        },
-        LinkCase {
-            label: "total air-side pressure ascending",
-            objective: Objective::LeastOverCapacity,
-            a: [10.0, 1.0, 99.0, 2.0, 300.0],
-            b: [10.0, 1.0, 101.0, 2.0, 300.0],
-            expected_first: "A",
-        },
-        LinkCase {
-            label: "capability ratio ascending",
-            objective: Objective::LeastOverCapacity,
-            a: [10.0, 1.0, 100.0, 1.9, 300.0],
-            b: [10.0, 1.0, 100.0, 2.1, 300.0],
-            expected_first: "A",
-        },
-        LinkCase {
-            label: "capacity ascending",
-            objective: Objective::LowestMakeupWater,
-            a: [10.0, 1.0, 100.0, 2.0, 299.0],
-            b: [10.0, 1.0, 100.0, 2.0, 301.0],
-            expected_first: "A",
-        },
-        LinkCase {
-            label: "electrical input before make-up water",
-            objective: Objective::LeastOverCapacity,
-            a: [9.0, 2.0, 100.0, 2.0, 300.0],
-            b: [11.0, 1.0, 100.0, 2.0, 300.0],
-            expected_first: "A",
-        },
-        LinkCase {
-            label: "make-up water before total air-side pressure",
-            objective: Objective::LeastOverCapacity,
-            a: [10.0, 1.0, 101.0, 2.0, 300.0],
-            b: [10.0, 2.0, 99.0, 2.0, 300.0],
-            expected_first: "A",
-        },
-        LinkCase {
-            label: "total air-side pressure before capability ratio",
-            objective: Objective::LeastOverCapacity,
-            a: [10.0, 1.0, 99.0, 2.1, 300.0],
-            b: [10.0, 1.0, 101.0, 1.9, 300.0],
-            expected_first: "A",
-        },
-        LinkCase {
-            label: "capability ratio before capacity",
-            objective: Objective::LowestMakeupWater,
-            a: [10.0, 1.0, 100.0, 1.9, 301.0],
-            b: [10.0, 1.0, 100.0, 2.1, 299.0],
-            expected_first: "A",
-        },
-    ]
-}
+const LINK_CASES: [LinkCase; 9] = [
+    LinkCase {
+        label: "electrical input ascending",
+        objective: Objective::LeastOverCapacity,
+        a: [9.0, 1.0, 100.0, 2.0, 300.0],
+        b: [11.0, 1.0, 100.0, 2.0, 300.0],
+        expected_first: "A",
+    },
+    LinkCase {
+        label: "make-up water ascending",
+        objective: Objective::LeastOverCapacity,
+        a: [10.0, 1.0, 100.0, 2.0, 300.0],
+        b: [10.0, 2.0, 100.0, 2.0, 300.0],
+        expected_first: "A",
+    },
+    LinkCase {
+        label: "total air-side pressure ascending",
+        objective: Objective::LeastOverCapacity,
+        a: [10.0, 1.0, 99.0, 2.0, 300.0],
+        b: [10.0, 1.0, 101.0, 2.0, 300.0],
+        expected_first: "A",
+    },
+    LinkCase {
+        label: "capability ratio ascending",
+        objective: Objective::LeastOverCapacity,
+        a: [10.0, 1.0, 100.0, 1.9, 300.0],
+        b: [10.0, 1.0, 100.0, 2.1, 300.0],
+        expected_first: "A",
+    },
+    LinkCase {
+        label: "capacity ascending",
+        objective: Objective::LowestMakeupWater,
+        a: [10.0, 1.0, 100.0, 2.0, 299.0],
+        b: [10.0, 1.0, 100.0, 2.0, 301.0],
+        expected_first: "A",
+    },
+    LinkCase {
+        label: "electrical input before make-up water",
+        objective: Objective::LeastOverCapacity,
+        a: [9.0, 2.0, 100.0, 2.0, 300.0],
+        b: [11.0, 1.0, 100.0, 2.0, 300.0],
+        expected_first: "A",
+    },
+    LinkCase {
+        label: "make-up water before total air-side pressure",
+        objective: Objective::LeastOverCapacity,
+        a: [10.0, 1.0, 101.0, 2.0, 300.0],
+        b: [10.0, 2.0, 99.0, 2.0, 300.0],
+        expected_first: "A",
+    },
+    LinkCase {
+        label: "total air-side pressure before capability ratio",
+        objective: Objective::LeastOverCapacity,
+        a: [10.0, 1.0, 99.0, 2.1, 300.0],
+        b: [10.0, 1.0, 101.0, 1.9, 300.0],
+        expected_first: "A",
+    },
+    LinkCase {
+        label: "capability ratio before capacity",
+        objective: Objective::LowestMakeupWater,
+        a: [10.0, 1.0, 100.0, 1.9, 301.0],
+        b: [10.0, 1.0, 100.0, 2.1, 299.0],
+        expected_first: "A",
+    },
+];
 
 #[test]
 fn the_tie_break_chain_discriminates_every_interior_link() {
     let catalog = small_catalog();
     let run = run_selection(&SelectionInput::new(&catalog)).expect("the run works");
     let base = &run.candidates[0];
-    for case in link_cases() {
+    for case in LINK_CASES {
         let mut pair = [
             engineered_candidate(base, "TIE-B", "FILL-A", case.a),
             engineered_candidate(base, "TIE-A", "FILL-Z", case.b),
@@ -1171,28 +1188,7 @@ fn no_money_ish_identifier_exists_anywhere_in_the_port() {
         "thb",
         "penalty",
     ];
-    let mut sources = Vec::new();
-    let crates = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
-    for entry in std::fs::read_dir(&crates).expect("the crates directory reads") {
-        let source = entry.expect("the entry reads").path().join("src");
-        if source.is_dir() {
-            collect_sources(&source, &mut sources);
-        }
-    }
-    assert!(
-        sources.len() >= 10,
-        "the port's source tree must be walked, found {}",
-        sources.len()
-    );
-    for (path, source) in &sources {
-        let lowered = source.to_lowercase();
-        for token in TOKENS {
-            assert!(
-                !lowered.contains(token),
-                "{path} contains the money-ish token {token:?}"
-            );
-        }
-    }
+    assert_no_money_in_sources(&TOKENS);
 
     let (args, tower_spec) = small_catalog_args();
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_ct-engine"))
@@ -1212,10 +1208,39 @@ fn no_money_ish_identifier_exists_anywhere_in_the_port() {
         "the CLI result must carry the new quantities"
     );
 
+    assert_cost_field_refused(&args, &tower_spec);
+}
+
+fn assert_no_money_in_sources(tokens: &[&str]) {
+    let mut sources = Vec::new();
+    let crates = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    for entry in std::fs::read_dir(&crates).expect("the crates directory reads") {
+        let source = entry.expect("the entry reads").path().join("src");
+        if source.is_dir() {
+            collect_sources(&source, &mut sources);
+        }
+    }
+    assert!(
+        sources.len() >= 10,
+        "the port's source tree must be walked, found {}",
+        sources.len()
+    );
+    for (path, source) in &sources {
+        let lowered = source.to_lowercase();
+        for token in tokens {
+            assert!(
+                !lowered.contains(token),
+                "{path} contains the money-ish token {token:?}"
+            );
+        }
+    }
+}
+
+fn assert_cost_field_refused(args: &[String], tower_spec: &str) {
     let poisoned = args
         .iter()
         .map(|argument| {
-            if argument == &tower_spec {
+            if argument == tower_spec {
                 format!("{argument},baseCost:118000")
             } else {
                 argument.clone()
@@ -1256,17 +1281,48 @@ fn small_catalog_args() -> (Vec<String>, String) {
     let fill = &catalog.fills[0];
     let drift = &catalog.drift_eliminators[0];
     let fan = &catalog.fans[0];
-    let zone_spec = |zone: &ZoneCorrelation| {
-        format!(
-            "{}|{}|{}|{}|{}",
-            zone.coefficient_per_m,
-            zone.reference_water_loading_kg_m2_s,
-            zone.reference_dry_air_loading_kg_m2_s,
-            zone.water_exponent,
-            zone.air_exponent
-        )
-    };
-    let tower_spec = format!(
+    let tower_spec = tower_spec(tower);
+    let fill_spec = fill_spec(fill);
+    let drift_spec = drift_spec(drift);
+    let fan_spec = fan_spec(fan);
+    let nozzle_specs = nozzle_specs(&catalog);
+    let args = vec![
+        "select".to_string(),
+        "--towers".to_string(),
+        tower_spec.clone(),
+        "--fills".to_string(),
+        fill_spec,
+        "--drift-eliminators".to_string(),
+        drift_spec,
+        "--fans".to_string(),
+        fan_spec,
+        "--nozzles".to_string(),
+        nozzle_specs,
+        "--quality-factors".to_string(),
+        "clean:1:1;moderate:0.92:1.12;dirty:0.8:1.35".to_string(),
+        "--catalog-id".to_string(),
+        catalog.metadata.id.clone(),
+        "--catalog-revision".to_string(),
+        catalog.metadata.revision.clone(),
+        "--catalog-status".to_string(),
+        catalog.metadata.status.clone(),
+    ];
+    (args, tower_spec)
+}
+
+fn zone_spec(zone: &ZoneCorrelation) -> String {
+    format!(
+        "{}|{}|{}|{}|{}",
+        zone.coefficient_per_m,
+        zone.reference_water_loading_kg_m2_s,
+        zone.reference_dry_air_loading_kg_m2_s,
+        zone.water_exponent,
+        zone.air_exponent
+    )
+}
+
+fn tower_spec(tower: &SelectionTower) -> String {
+    format!(
         "id:{},type:{},fillAreaM2:{},airFreeAreaM2:{},driftAreaM2:{},inletAreaM2:{},stackRecoveryFactor:{},inletLossCoefficient:{},distributionLossCoefficient:{},supportLossCoefficient:{},plenumLossCoefficient:{},fixedPressureLossPa:{},sprayZoneHeightM:{},rainZoneHeightM:{},footprintM2:{},maxWaterMassFlowKgS:{},fillDepthOptionsM:{},compatibleFanIds:{},sprayZone:{},rainZone:{}",
         tower.id,
         tower.tower_type.as_str(),
@@ -1293,8 +1349,11 @@ fn small_catalog_args() -> (Vec<String>, String) {
         tower.compatible_fan_ids.join("|"),
         zone_spec(tower.physics.spray_zone.as_ref().expect("set")),
         zone_spec(tower.physics.rain_zone.as_ref().expect("set")),
-    );
-    let fill_spec = format!(
+    )
+}
+
+fn fill_spec(fill: &SelectionFill) -> String {
+    format!(
         "id:{},compatibleTowerTypes:{},allowedWaterQualityClasses:{},thermal:{},pressure:{}|{}|{}|{}|{},limits:{}|{}|{}|{}|{}",
         fill.physics.id,
         fill.compatible_tower_types
@@ -1314,8 +1373,11 @@ fn small_catalog_args() -> (Vec<String>, String) {
         fill.physics.limits.min_dry_air_loading_kg_m2_s,
         fill.physics.limits.max_dry_air_loading_kg_m2_s,
         fill.physics.limits.max_water_temperature_c,
-    );
-    let drift_spec = format!(
+    )
+}
+
+fn drift_spec(drift: &SelectionDriftEliminator) -> String {
+    format!(
         "id:{},maxWaterTemperatureC:{},curve:{}",
         drift.physics.id,
         drift.max_water_temperature_c,
@@ -1329,8 +1391,11 @@ fn small_catalog_args() -> (Vec<String>, String) {
             ))
             .collect::<Vec<String>>()
             .join("|"),
-    );
-    let fan_spec = format!(
+    )
+}
+
+fn fan_spec(fan: &SelectionFan) -> String {
+    format!(
         "id:{},stackAreaM2:{},pressureBasis:total,referenceDensityKgM3:{},allowedSpeedRatio:{}|{},driveEfficiency:{},motorEfficiency:{},curve:{}",
         fan.physics.id,
         fan.physics.stack_area_m2.expect("set"),
@@ -1345,8 +1410,11 @@ fn small_catalog_args() -> (Vec<String>, String) {
             .map(|point| format!("{}:{}:{}", point.flow_m3_s, point.pressure_pa, point.efficiency))
             .collect::<Vec<String>>()
             .join("|"),
-    );
-    let nozzle_specs = catalog
+    )
+}
+
+fn nozzle_specs(catalog: &SelectionCatalog) -> String {
+    catalog
         .nozzles
         .iter()
         .map(|nozzle| {
@@ -1356,29 +1424,7 @@ fn small_catalog_args() -> (Vec<String>, String) {
             )
         })
         .collect::<Vec<String>>()
-        .join(";");
-    let args = vec![
-        "select".to_string(),
-        "--towers".to_string(),
-        tower_spec.clone(),
-        "--fills".to_string(),
-        fill_spec,
-        "--drift-eliminators".to_string(),
-        drift_spec,
-        "--fans".to_string(),
-        fan_spec,
-        "--nozzles".to_string(),
-        nozzle_specs,
-        "--quality-factors".to_string(),
-        "clean:1:1;moderate:0.92:1.12;dirty:0.8:1.35".to_string(),
-        "--catalog-id".to_string(),
-        catalog.metadata.id.clone(),
-        "--catalog-revision".to_string(),
-        catalog.metadata.revision.clone(),
-        "--catalog-status".to_string(),
-        catalog.metadata.status.clone(),
-    ];
-    (args, tower_spec)
+        .join(";")
 }
 
 fn pair_catalog() -> SelectionCatalog {
@@ -1421,7 +1467,7 @@ fn a_tower_without_declared_stacks_keeps_the_single_fill_enumeration() {
     let run =
         run_selection(&SelectionInput::new(&catalog).with_requirements(variant_requirements()))
             .expect("the bundled catalog selects");
-    assert!(!run.candidates.is_empty());
+    assert!(!run.candidates.is_empty(), "the run has candidates");
     for candidate in &run.candidates {
         assert_eq!(candidate.fill_layers.len(), 1);
         let layer = &candidate.fill_layers[0];
@@ -1490,7 +1536,7 @@ fn a_declared_variant_whose_fill_is_not_in_the_catalog_is_refused_by_label() {
     let mut catalog = pair_catalog();
     catalog.towers[0].fill_stacks = vec![FillStack::new(vec![FillLayer::new("NOT-A-FILL", 1.5)])];
     let run = run_selection(&SelectionInput::new(&catalog)).expect("the run itself answers");
-    assert!(run.candidates.is_empty());
+    assert!(run.candidates.is_empty(), "the run has no candidates");
     assert!(
         run.rejection_summary
             .iter()
@@ -1502,35 +1548,7 @@ fn a_declared_variant_whose_fill_is_not_in_the_catalog_is_refused_by_label() {
 
 #[test]
 fn the_selection_surface_carries_the_layers_into_the_worked_steps() {
-    let (mut args, tower_spec) = small_catalog_args();
-    let tower_index = args
-        .iter()
-        .position(|argument| argument == "--towers")
-        .expect("--towers")
-        + 1;
-    args[tower_index] =
-        format!("{tower_spec},fillStacks:FILM-OF25@0.45+FILM-VF38@0.9|FILM-OF25@1.35");
-    let fills_index = args
-        .iter()
-        .position(|argument| argument == "--fills")
-        .expect("--fills")
-        + 1;
-    args[fills_index] = format!(
-        "{};id:FILM-VF38,compatibleTowerTypes:counterflow|crossflow,\
-allowedWaterQualityClasses:clean|moderate|dirty,thermal:0.94|3|2|-0.27|0.39,\
-pressure:43|3|2|0.1|1.67,limits:1.1|6.2|0.8|3.5|75",
-        args[fills_index]
-    );
-    for (option, value) in [
-        ("--water", "180"),
-        ("--hot", "40"),
-        ("--target-cold", "30"),
-        ("--wb", "26"),
-        ("--db", "31"),
-    ] {
-        args.push(option.to_string());
-        args.push(value.to_string());
-    }
+    let args = layered_variant_args();
     let reply: Value =
         serde_json::from_str(&cli::run(&args).expect("the variants select")).expect("a JSON reply");
     let results = reply["results"].as_array().expect("results");
@@ -1576,4 +1594,37 @@ pressure:43|3|2|0.1|1.67,limits:1.1|6.2|0.8|3.5|75",
         assert_eq!(step["unit"], "-");
         assert_eq!(step["kind"], "calc");
     }
+}
+
+fn layered_variant_args() -> Vec<String> {
+    let (mut args, tower_spec) = small_catalog_args();
+    let tower_index = args
+        .iter()
+        .position(|argument| argument == "--towers")
+        .expect("--towers")
+        + 1;
+    args[tower_index] =
+        format!("{tower_spec},fillStacks:FILM-OF25@0.45+FILM-VF38@0.9|FILM-OF25@1.35");
+    let fills_index = args
+        .iter()
+        .position(|argument| argument == "--fills")
+        .expect("--fills")
+        + 1;
+    args[fills_index] = format!(
+        "{};id:FILM-VF38,compatibleTowerTypes:counterflow|crossflow,\
+allowedWaterQualityClasses:clean|moderate|dirty,thermal:0.94|3|2|-0.27|0.39,\
+pressure:43|3|2|0.1|1.67,limits:1.1|6.2|0.8|3.5|75",
+        args[fills_index]
+    );
+    for (option, value) in [
+        ("--water", "180"),
+        ("--hot", "40"),
+        ("--target-cold", "30"),
+        ("--wb", "26"),
+        ("--db", "31"),
+    ] {
+        args.push(option.to_string());
+        args.push(value.to_string());
+    }
+    args
 }

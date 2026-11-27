@@ -99,7 +99,7 @@ fn refusal(kind: RecordKind, label: &str, record: &[(&str, &str)]) -> Vec<String
         ),
         Err(violations) => violations
             .iter()
-            .map(|violation| violation.message())
+            .map(drafthouse_engine::validate::Violation::message)
             .collect(),
     }
 }
@@ -142,7 +142,7 @@ fn the_bundled_record_shapes_validate_clean() {
         if let Err(violations) = validate_record(kind, "record", &record) {
             let messages: Vec<String> = violations
                 .iter()
-                .map(|violation| violation.message())
+                .map(drafthouse_engine::validate::Violation::message)
                 .collect();
             panic!("{} record refused: {messages:?}", kind.as_str());
         }
@@ -280,35 +280,7 @@ fn a_non_numeric_value_is_refused() {
 
 #[test]
 fn out_of_domain_and_out_of_set_values_are_refused() {
-    let record: Vec<(&str, &str)> = bundled_tower()
-        .into_iter()
-        .map(|(name, value)| {
-            if name == "fillAreaM2" {
-                (name, "-64")
-            } else {
-                (name, value)
-            }
-        })
-        .collect();
-    let messages = refusal(RecordKind::Tower, "IDCF-064", &record);
-    assert!(messages[0].contains("must be positive"), "{}", messages[0]);
-
-    let record: Vec<(&str, &str)> = bundled_tower()
-        .into_iter()
-        .map(|(name, value)| {
-            if name == "type" {
-                (name, "counterflw")
-            } else {
-                (name, value)
-            }
-        })
-        .collect();
-    let messages = refusal(RecordKind::Tower, "IDCF-064", &record);
-    assert!(
-        messages[0].contains("\"type\"") && messages[0].contains("counterflow"),
-        "{}",
-        messages[0]
-    );
+    assert_tower_value_refusals();
 
     let mut record = bundled_fill();
     record.retain(|(name, _)| *name != "allowedWaterQualityClasses");
@@ -358,6 +330,38 @@ fn out_of_domain_and_out_of_set_values_are_refused() {
     let messages = refusal(RecordKind::Fan, "AX-500", &record);
     assert!(
         messages[0].contains("point 2") && messages[0].contains("efficiency"),
+        "{}",
+        messages[0]
+    );
+}
+
+fn assert_tower_value_refusals() {
+    let record: Vec<(&str, &str)> = bundled_tower()
+        .into_iter()
+        .map(|(name, value)| {
+            if name == "fillAreaM2" {
+                (name, "-64")
+            } else {
+                (name, value)
+            }
+        })
+        .collect();
+    let messages = refusal(RecordKind::Tower, "IDCF-064", &record);
+    assert!(messages[0].contains("must be positive"), "{}", messages[0]);
+
+    let record: Vec<(&str, &str)> = bundled_tower()
+        .into_iter()
+        .map(|(name, value)| {
+            if name == "type" {
+                (name, "counterflw")
+            } else {
+                (name, value)
+            }
+        })
+        .collect();
+    let messages = refusal(RecordKind::Tower, "IDCF-064", &record);
+    assert!(
+        messages[0].contains("\"type\"") && messages[0].contains("counterflow"),
         "{}",
         messages[0]
     );

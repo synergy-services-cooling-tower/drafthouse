@@ -2,7 +2,7 @@
 
 Moist-air properties — port of `src/core/psychrometrics.js`.
 
-Conventions, mirrored from the JavaScript reference (see `docs/ENGINEERING_METHODS.md`):
+Conventions, mirrored from the JavaScript reference (see `docs/engine/ENGINEERING_METHODS.md`):
 
 * ASHRAE Fundamentals saturation-pressure correlation, liquid branch above 0.01 °C and
   ice branch at or below it, limited to -100…200 °C.

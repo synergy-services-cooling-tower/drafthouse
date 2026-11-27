@@ -3,7 +3,7 @@ use crate::numeric::{assert_positive, DomainError};
 /// The reference's prototype water density when neither the call nor the nozzle record supplies one.
 pub const NOZZLE_WATER_DENSITY_KG_M3: f64 = 997.0;
 
-/// Port of `nozzleFlowM3S`.
+/// # Errors `DomainError` when the input is out of domain. Port of `nozzleFlowM3S`.
 pub fn nozzle_flow_m3_s(
     discharge_coefficient: f64,
     orifice_diameter_m: f64,
@@ -52,6 +52,7 @@ pub struct NozzleArrangementInput<'a> {
 
 impl<'a> NozzleArrangementInput<'a> {
     /// The three physically required inputs; the count range takes the reference default.
+    #[must_use]
     pub fn new(
         total_volumetric_water_flow_m3_s: f64,
         nozzles: &'a [NozzleRecord],
@@ -66,6 +67,7 @@ impl<'a> NozzleArrangementInput<'a> {
     }
 
     /// The reference's `targetCountRange` argument.
+    #[must_use]
     pub fn with_target_count_range(mut self, target_count_range: [f64; 2]) -> Self {
         self.target_count_range = target_count_range;
         self
@@ -85,7 +87,7 @@ fn compare_arrangements(a: &NozzleArrangement, b: &NozzleArrangement) -> std::cm
     }
 }
 
-/// Port of `selectNozzleArrangement`: one candidate per nozzle, filtered to the valid count range, sorted by excess flow.
+/// # Errors `DomainError` when the input is out of domain. Port of `selectNozzleArrangement`: one candidate per nozzle, filtered to the valid count range, sorted by excess flow.
 pub fn select_nozzle_arrangement(
     input: &NozzleArrangementInput<'_>,
 ) -> Result<Vec<NozzleArrangement>, DomainError> {

@@ -48,7 +48,7 @@ fn js_cmp(a: f64, b: f64) -> std::cmp::Ordering {
     a.partial_cmp(&b).unwrap_or(std::cmp::Ordering::Equal)
 }
 
-/// Port of `waterDensityKgM3` from `src/core/water.js` (see the module header for why it lives here).
+/// # Errors `DomainError` when the input is out of domain. Port of `waterDensityKgM3` from `src/core/water.js` (see the module header for why it lives here).
 pub fn water_density_kg_m3(temperature_c: f64, salinity_g_kg: f64) -> Result<f64, DomainError> {
     let t = temperature_c;
     let below_range = t < 0.0;
@@ -59,11 +59,11 @@ pub fn water_density_kg_m3(temperature_c: f64, salinity_g_kg: f64) -> Result<f64
         ));
     }
     let pure =
-        1000.0 * (1.0 - ((t + 288.9414) / (508929.2 * (t + 68.12963))) * (t - 3.9863).powi(2));
+        1000.0 * (1.0 - ((t + 288.9414) / (508_929.2 * (t + 68.12963))) * (t - 3.9863).powi(2));
     Ok(pure + 0.75 * js_max(0.0, salinity_g_kg))
 }
 
-/// Port of `heatRejectionKW` from `src/core/water.js`.
+/// # Errors `DomainError` when the input is out of domain. Port of `heatRejectionKW` from `src/core/water.js`.
 pub fn heat_rejection_kw(
     water_mass_flow_kg_s: f64,
     hot_water_c: f64,
@@ -71,13 +71,13 @@ pub fn heat_rejection_kw(
     salinity_g_kg: f64,
 ) -> Result<f64, DomainError> {
     assert_positive(water_mass_flow_kg_s, "waterMassFlowKgS")?;
-    let mean_temperature_c = (hot_water_c + cold_water_c) / 2.0;
+    let mean_temperature_c = f64::midpoint(hot_water_c, cold_water_c);
     Ok(water_mass_flow_kg_s
         * water_specific_heat_kj_kg_k(mean_temperature_c, salinity_g_kg)
         * (hot_water_c - cold_water_c))
 }
 
-/// Port of `volumetricFlowM3SFromMassFlow` from `src/core/water.js`.
+/// # Errors `DomainError` when the input is out of domain. Port of `volumetricFlowM3SFromMassFlow` from `src/core/water.js`.
 pub fn volumetric_flow_m3_s_from_mass_flow(
     water_mass_flow_kg_s: f64,
     temperature_c: f64,
@@ -86,7 +86,7 @@ pub fn volumetric_flow_m3_s_from_mass_flow(
     Ok(water_mass_flow_kg_s / water_density_kg_m3(temperature_c, salinity_g_kg)?)
 }
 
-/// Port of `estimateOutletAirState` from `src/core/merkel.js`.
+/// # Errors `DomainError` when the input is out of domain. Port of `estimateOutletAirState` from `src/core/merkel.js`.
 pub fn estimate_outlet_air_state(
     inlet_air_state: &PsychrometricState,
     water_to_dry_air_ratio: f64,
@@ -130,6 +130,7 @@ pub enum TowerType {
 
 impl TowerType {
     /// The JavaScript spelling.
+    #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
             TowerType::Counterflow => "counterflow",
@@ -138,6 +139,7 @@ impl TowerType {
     }
 
     /// Parse the JavaScript spelling; an unknown string is the caller's usage error.
+    #[must_use]
     pub fn parse(raw: &str) -> Option<Self> {
         match raw {
             "counterflow" => Some(TowerType::Counterflow),
@@ -232,6 +234,7 @@ impl Objective {
     ];
 
     /// The reference-facing spelling (`--objective` accepts exactly this).
+    #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
             Objective::LeastOverCapacity => "least-over-capacity",
@@ -242,6 +245,7 @@ impl Objective {
     }
 
     /// Parse the spelling; an unknown string is the caller's usage error.
+    #[must_use]
     pub fn parse(raw: &str) -> Option<Self> {
         Objective::ALL
             .into_iter()
@@ -318,6 +322,7 @@ pub struct SelectionInput<'a> {
 
 impl<'a> SelectionInput<'a> {
     /// The reference defaults: `defaultSelectionRequirements()`, the default objective (least over-capacity) and `maxResults` 30.
+    #[must_use]
     pub fn new(catalog: &'a SelectionCatalog) -> Self {
         Self {
             requirements: SelectionRequirements::default(),
@@ -328,18 +333,21 @@ impl<'a> SelectionInput<'a> {
     }
 
     /// Override the requirements wholesale, as the reference's spread does.
+    #[must_use]
     pub fn with_requirements(mut self, requirements: SelectionRequirements) -> Self {
         self.requirements = requirements;
         self
     }
 
     /// The run's declared objective.
+    #[must_use]
     pub fn with_objective(mut self, objective: Objective) -> Self {
         self.objective = objective;
         self
     }
 
     /// The reference's `maxResults` argument.
+    #[must_use]
     pub fn with_max_results(mut self, max_results: usize) -> Self {
         self.max_results = max_results;
         self
@@ -392,6 +400,7 @@ pub struct SelectionCandidate {
 
 impl SelectionCandidate {
     /// The metric the objective ranks by.
+    #[must_use]
     pub fn objective_metric(&self, objective: Objective) -> Option<f64> {
         match objective {
             Objective::LeastOverCapacity => self.capacity_kg_s,
@@ -402,6 +411,7 @@ impl SelectionCandidate {
     }
 
     /// The candidate's identity as matched between the engines: tower, fill, drift eliminator, fan, fill depth, speed ratio.
+    #[must_use]
     pub fn identity(&self) -> (&str, &str, &str, &str, f64, f64) {
         (
             &self.tower_id,
@@ -428,17 +438,18 @@ pub struct SelectionRun {
 
 impl SelectionRun {
     /// The number of feasible candidates, as the reference counts it.
+    #[must_use]
     pub fn feasible_candidate_count(&self) -> usize {
         self.candidates.len()
     }
 
     /// The whole feasible set's order under one objective, as indices into [`SelectionRun::candidates`].
+    #[must_use]
     pub fn order_for(&self, objective: Objective) -> Vec<usize> {
-        let mut indices: Vec<usize> = (0..self.candidates.len()).collect();
-        indices.sort_by(|&a, &b| {
-            compare_candidates(&self.candidates[a], &self.candidates[b], objective)
-        });
-        indices
+        let mut indexed: Vec<(usize, &SelectionCandidate)> =
+            self.candidates.iter().enumerate().collect();
+        indexed.sort_by(|a, b| compare_candidates(a.1, b.1, objective));
+        indexed.into_iter().map(|(index, _)| index).collect()
     }
 }
 
@@ -600,77 +611,84 @@ impl CandidateContext<'_> {
     }
 
     fn capability_ratio(&self, airside: &SystemPressureBreakdown) -> Option<f64> {
+        match self.tower.tower_type {
+            TowerType::Counterflow => self.counterflow_capability_ratio(airside),
+            TowerType::Crossflow => self.crossflow_capability_ratio(airside),
+        }
+    }
+
+    fn counterflow_capability_ratio(&self, airside: &SystemPressureBreakdown) -> Option<f64> {
         let available = airside.available_merkel_number;
         let requirements = self.requirements;
         let target_c = requirements.target_cold_water_c;
-        match self.tower.tower_type {
-            TowerType::Counterflow => {
-                let water_to_dry_air_ratio =
-                    requirements.water_mass_flow_kg_s / airside.dry_air_mass_flow_kg_s;
-                let demand = merkel_demand(&MerkelInput {
-                    pressure_pa: requirements.pressure_pa,
-                    salinity_g_kg: requirements.salinity_g_kg,
-                    integration: Integration::Chebyshev4,
-                    ..MerkelInput::new(
-                        requirements.hot_water_c,
-                        target_c,
-                        requirements.wet_bulb_c,
-                        requirements.dry_bulb_c,
-                        water_to_dry_air_ratio,
-                    )
-                })
-                .ok()?;
-                (demand.merkel_number > 0.0).then(|| available / demand.merkel_number)
-            }
-            TowerType::Crossflow => {
-                let cold_at = |available_merkel_number: f64| -> Result<f64, DomainError> {
-                    Ok(solve_crossflow_grid(
-                        &CrossflowGridInput::new(
-                            requirements.hot_water_c,
-                            requirements.dry_bulb_c,
-                            requirements.wet_bulb_c,
-                            requirements.water_mass_flow_kg_s,
-                            airside.dry_air_mass_flow_kg_s,
-                            available_merkel_number,
-                        )
-                        .with_pressure(requirements.pressure_pa)
-                        .with_salinity(requirements.salinity_g_kg),
-                    )?
-                    .cold_water_c)
-                };
-                let residual = |available_merkel_number: f64| -> Result<f64, DomainError> {
-                    Ok(cold_at(available_merkel_number)? - target_c)
-                };
-                let f_available = residual(available).ok()?;
-                if f_available >= 0.0 {
-                    return Some(1.0);
-                }
-                let mut lower = available;
-                let mut f_lower = f_available;
-                for _ in 0..60 {
-                    if f_lower >= 0.0 {
-                        break;
-                    }
-                    lower *= 0.5;
-                    f_lower = residual(lower).ok()?;
-                }
-                if f_lower < 0.0 {
-                    return None;
-                }
-                let required_merkel_number = solve_bracketed_root(
-                    residual,
-                    lower,
-                    available,
-                    BracketedRootOptions {
-                        tolerance: 1e-9,
-                        x_tolerance: Some(1e-9),
-                        max_iterations: 160,
-                    },
+        let water_to_dry_air_ratio =
+            requirements.water_mass_flow_kg_s / airside.dry_air_mass_flow_kg_s;
+        let demand = merkel_demand(&MerkelInput {
+            pressure_pa: requirements.pressure_pa,
+            salinity_g_kg: requirements.salinity_g_kg,
+            integration: Integration::Chebyshev4,
+            ..MerkelInput::new(
+                requirements.hot_water_c,
+                target_c,
+                requirements.wet_bulb_c,
+                requirements.dry_bulb_c,
+                water_to_dry_air_ratio,
+            )
+        })
+        .ok()?;
+        (demand.merkel_number > 0.0).then(|| available / demand.merkel_number)
+    }
+
+    fn crossflow_capability_ratio(&self, airside: &SystemPressureBreakdown) -> Option<f64> {
+        let available = airside.available_merkel_number;
+        let requirements = self.requirements;
+        let target_c = requirements.target_cold_water_c;
+        let cold_at = |available_merkel_number: f64| -> Result<f64, DomainError> {
+            Ok(solve_crossflow_grid(
+                &CrossflowGridInput::new(
+                    requirements.hot_water_c,
+                    requirements.dry_bulb_c,
+                    requirements.wet_bulb_c,
+                    requirements.water_mass_flow_kg_s,
+                    airside.dry_air_mass_flow_kg_s,
+                    available_merkel_number,
                 )
-                .ok()?;
-                (required_merkel_number > 0.0).then(|| available / required_merkel_number)
-            }
+                .with_pressure(requirements.pressure_pa)
+                .with_salinity(requirements.salinity_g_kg),
+            )?
+            .cold_water_c)
+        };
+        let residual = |available_merkel_number: f64| -> Result<f64, DomainError> {
+            Ok(cold_at(available_merkel_number)? - target_c)
+        };
+        let f_available = residual(available).ok()?;
+        if f_available >= 0.0 {
+            return Some(1.0);
         }
+        let mut lower = available;
+        let mut f_lower = f_available;
+        for _ in 0..60 {
+            if f_lower >= 0.0 {
+                break;
+            }
+            lower *= 0.5;
+            f_lower = residual(lower).ok()?;
+        }
+        if f_lower < 0.0 {
+            return None;
+        }
+        let required_merkel_number = solve_bracketed_root(
+            residual,
+            lower,
+            available,
+            BracketedRootOptions {
+                tolerance: 1e-9,
+                x_tolerance: Some(1e-9),
+                max_iterations: 160,
+            },
+        )
+        .ok()?;
+        (required_merkel_number > 0.0).then(|| available / required_merkel_number)
     }
 }
 
@@ -748,6 +766,90 @@ enum CandidateFailure {
     Domain,
 }
 
+fn candidate_nozzles(
+    requirements: &SelectionRequirements,
+    catalog: &SelectionCatalog,
+) -> Result<(f64, Vec<NozzleArrangement>), CandidateFailure> {
+    let water_volumetric_flow_m3_s = volumetric_flow_m3_s_from_mass_flow(
+        requirements.water_mass_flow_kg_s,
+        f64::midpoint(requirements.hot_water_c, requirements.target_cold_water_c),
+        requirements.salinity_g_kg,
+    )
+    .map_err(|_| CandidateFailure::Domain)?;
+    let nozzle_options = select_nozzle_arrangement(&NozzleArrangementInput::new(
+        water_volumetric_flow_m3_s,
+        &catalog.nozzles,
+        requirements.nozzle_pressure_drop_pa,
+    ))
+    .map_err(|_| CandidateFailure::Domain)?;
+    Ok((water_volumetric_flow_m3_s, nozzle_options))
+}
+
+fn candidate_motor(
+    context: &CandidateContext<'_>,
+    shaft_power_kw: f64,
+) -> Result<(MotorSelection, f64), CandidateFailure> {
+    let motor = choose_standard_motor(shaft_power_kw, context.fan.drive_efficiency, 1.1)
+        .map_err(|_| CandidateFailure::Domain)?;
+    if motor.selected_motor_kw.is_none() {
+        return Err(CandidateFailure::Constraint("motor size unavailable"));
+    }
+    let electrical_input_kw =
+        shaft_power_kw / context.fan.drive_efficiency / context.fan.motor_efficiency;
+    if electrical_input_kw > context.requirements.max_electrical_input_kw {
+        return Err(CandidateFailure::Constraint("power limit"));
+    }
+    Ok((motor, electrical_input_kw))
+}
+
+fn check_airside_envelope(
+    context: &CandidateContext<'_>,
+    airside: &SystemPressureBreakdown,
+    drift_velocity_envelope_ms: [f64; 2],
+) -> Result<(), CandidateFailure> {
+    let [min_drift_velocity_ms, max_drift_velocity_ms] = drift_velocity_envelope_ms;
+    if airside.drift_velocity_ms < min_drift_velocity_ms
+        || airside.drift_velocity_ms > max_drift_velocity_ms
+    {
+        return Err(CandidateFailure::Constraint("drift velocity range"));
+    }
+    let requirements = context.requirements;
+    let envelope = check_stack_operating_envelope(
+        context.layers,
+        airside.water_loading_kg_m2_s,
+        airside.dry_air_loading_kg_m2_s,
+        Some(requirements.hot_water_c),
+        Some(&requirements.water_quality_class),
+    );
+    if envelope.is_empty() {
+        Ok(())
+    } else {
+        Err(CandidateFailure::Constraint("fill operating envelope"))
+    }
+}
+
+fn candidate_water_balance(
+    context: &CandidateContext<'_>,
+    airside: &SystemPressureBreakdown,
+    outlet_humidity_ratio: f64,
+) -> Result<WaterBalance, CandidateFailure> {
+    let requirements = context.requirements;
+    let evaporation_kg_s = evaporation_from_air_mass_balance(
+        airside.dry_air_mass_flow_kg_s,
+        context.inlet_air.humidity_ratio,
+        outlet_humidity_ratio,
+    )
+    .map_err(|_| CandidateFailure::Domain)?;
+    let drift_kg_s = drift_loss_kg_s(requirements.water_mass_flow_kg_s, airside.drift_ppm)
+        .map_err(|_| CandidateFailure::Domain)?;
+    cooling_tower_water_balance(
+        &WaterBalanceInput::new(evaporation_kg_s)
+            .with_drift_kg_s(drift_kg_s)
+            .with_cycles_of_concentration(requirements.cycles_of_concentration),
+    )
+    .map_err(|_| CandidateFailure::Domain)
+}
+
 fn evaluate_candidate(
     context: &CandidateContext<'_>,
     catalog: &SelectionCatalog,
@@ -758,21 +860,7 @@ fn evaluate_candidate(
         .unit_airside(requirements.water_mass_flow_kg_s)
         .map_err(|_| CandidateFailure::Domain)?;
 
-    if airside.breakdown.drift_velocity_ms < drift_velocity_envelope_ms[0]
-        || airside.breakdown.drift_velocity_ms > drift_velocity_envelope_ms[1]
-    {
-        return Err(CandidateFailure::Constraint("drift velocity range"));
-    }
-    let envelope = check_stack_operating_envelope(
-        context.layers,
-        airside.breakdown.water_loading_kg_m2_s,
-        airside.breakdown.dry_air_loading_kg_m2_s,
-        Some(requirements.hot_water_c),
-        Some(&requirements.water_quality_class),
-    );
-    if !envelope.is_empty() {
-        return Err(CandidateFailure::Constraint("fill operating envelope"));
-    }
+    check_airside_envelope(context, &airside.breakdown, drift_velocity_envelope_ms)?;
 
     let thermal = thermal_model(
         context.tower.tower_type,
@@ -790,56 +878,19 @@ fn evaluate_candidate(
         return Err(CandidateFailure::Constraint("drift limit"));
     }
 
-    let motor = choose_standard_motor(
-        fan_operating_point.shaft_power_kw,
-        context.fan.drive_efficiency,
-        1.1,
-    )
-    .map_err(|_| CandidateFailure::Domain)?;
-    if motor.selected_motor_kw.is_none() {
-        return Err(CandidateFailure::Constraint("motor size unavailable"));
-    }
-    let electrical_input_kw = fan_operating_point.shaft_power_kw
-        / context.fan.drive_efficiency
-        / context.fan.motor_efficiency;
-    if electrical_input_kw > requirements.max_electrical_input_kw {
-        return Err(CandidateFailure::Constraint("power limit"));
-    }
+    let (motor, electrical_input_kw) =
+        candidate_motor(context, fan_operating_point.shaft_power_kw)?;
 
-    let outlet_air_state = thermal.outlet_air_state;
-    let evaporation_kg_s = evaporation_from_air_mass_balance(
-        airside.breakdown.dry_air_mass_flow_kg_s,
-        context.inlet_air.humidity_ratio,
-        outlet_air_state.humidity_ratio,
-    )
-    .map_err(|_| CandidateFailure::Domain)?;
-    let drift_kg_s = drift_loss_kg_s(
-        requirements.water_mass_flow_kg_s,
-        airside.breakdown.drift_ppm,
-    )
-    .map_err(|_| CandidateFailure::Domain)?;
-    let water_balance = cooling_tower_water_balance(
-        &WaterBalanceInput::new(evaporation_kg_s)
-            .with_drift_kg_s(drift_kg_s)
-            .with_cycles_of_concentration(requirements.cycles_of_concentration),
-    )
-    .map_err(|_| CandidateFailure::Domain)?;
-    let water_volumetric_flow_m3_s = volumetric_flow_m3_s_from_mass_flow(
-        requirements.water_mass_flow_kg_s,
-        (requirements.hot_water_c + requirements.target_cold_water_c) / 2.0,
-        requirements.salinity_g_kg,
-    )
-    .map_err(|_| CandidateFailure::Domain)?;
-    let nozzle_options = select_nozzle_arrangement(&NozzleArrangementInput::new(
-        water_volumetric_flow_m3_s,
-        &catalog.nozzles,
-        requirements.nozzle_pressure_drop_pa,
-    ))
-    .map_err(|_| CandidateFailure::Domain)?;
+    let water_balance = candidate_water_balance(
+        context,
+        &airside.breakdown,
+        thermal.outlet_air_state.humidity_ratio,
+    )?;
+    let (water_volumetric_flow_m3_s, nozzle_options) = candidate_nozzles(requirements, catalog)?;
     let nozzle = nozzle_options
         .first()
-        .expect("the selector refuses an empty arrangement list")
-        .clone();
+        .cloned()
+        .ok_or(CandidateFailure::Domain)?;
 
     let capacity_kg_s = context.capacity_kg_s();
     let capability_ratio = context.capability_ratio(&airside.breakdown);
@@ -872,16 +923,19 @@ fn evaluate_candidate(
 
 impl SelectionFan {
     /// The fan's identity, as `fan.id` in the reference.
+    #[must_use]
     pub fn id(&self) -> &str {
         &self.physics.id
     }
 
     /// The fan's speed in rpm at a speed ratio: `nominal_rpm × speed_ratio`.
+    #[must_use]
     pub fn rpm_at_speed_ratio(&self, speed_ratio: f64) -> Option<f64> {
         self.nominal_rpm.map(|nominal| nominal * speed_ratio)
     }
 
     /// `None` inside the fan's validity band; the named [`FanSpeedRatioLimit`] outside it.
+    #[must_use]
     pub fn speed_ratio_limit(&self, speed_ratio: f64) -> Option<FanSpeedRatioLimit> {
         fan_speed_ratio_limit(&self.physics.id, self.allowed_speed_ratio, speed_ratio)
     }
@@ -902,6 +956,7 @@ impl FanSpeedRatioLimit {
 }
 
 /// `None` inside the band `[min, max]`; the named [`FanSpeedRatioLimit`] outside it.
+#[must_use]
 pub fn fan_speed_ratio_limit(
     fan_id: &str,
     allowed_speed_ratio: [f64; 2],
@@ -924,6 +979,105 @@ fn count_rejection(counts: &mut Vec<(String, usize)>, reason: &str) {
         entry.1 += 1;
     } else {
         counts.push((reason.to_string(), 1));
+    }
+}
+
+struct TowerSweep<'a> {
+    catalog: &'a SelectionCatalog,
+    tower: &'a SelectionTower,
+    requirements: &'a SelectionRequirements,
+    inlet_air: &'a PsychrometricState,
+    quality: &'a WaterQualityFactor,
+}
+
+impl TowerSweep<'_> {
+    fn run(&self, candidates: &mut Vec<SelectionCandidate>, counts: &mut Vec<(String, usize)>) {
+        let (tower, catalog, requirements) = (self.tower, self.catalog, self.requirements);
+        if tower.footprint_m2 > requirements.max_footprint_m2 {
+            count_rejection(counts, "footprint");
+            return;
+        }
+        if requirements.water_mass_flow_kg_s > tower.max_water_mass_flow_kg_s {
+            count_rejection(counts, "tower water-flow limit");
+            return;
+        }
+        let compatible_fans: Vec<&SelectionFan> = catalog
+            .fans
+            .iter()
+            .filter(|fan| tower.compatible_fan_ids.contains(&fan.physics.id))
+            .collect();
+        if tower.fill_stacks.is_empty() {
+            self.sweep_single_fills(&compatible_fans, candidates, counts);
+            return;
+        }
+        for stack in &tower.fill_stacks {
+            let Some(layers) = declared_stack_layers(
+                stack,
+                catalog,
+                tower,
+                &requirements.water_quality_class,
+                counts,
+            ) else {
+                continue;
+            };
+            sweep_stack(
+                &self.context(stack, &layers),
+                &compatible_fans,
+                candidates,
+                counts,
+            );
+        }
+    }
+
+    fn sweep_single_fills(
+        &self,
+        compatible_fans: &[&SelectionFan],
+        candidates: &mut Vec<SelectionCandidate>,
+        counts: &mut Vec<(String, usize)>,
+    ) {
+        let tower = self.tower;
+        let compatible_fills: Vec<&SelectionFill> = self
+            .catalog
+            .fills
+            .iter()
+            .filter(|fill| fill.compatible_tower_types.contains(&tower.tower_type))
+            .collect();
+        for fill in &compatible_fills {
+            if !fill
+                .physics
+                .allowed_water_quality_classes
+                .contains(&self.requirements.water_quality_class)
+            {
+                count_rejection(counts, "fill water-quality compatibility");
+                continue;
+            }
+            for fill_depth_m in &tower.fill_depth_options_m {
+                let stack = FillStack::single(fill.physics.id.clone(), *fill_depth_m);
+                let layers = [LayerTerms::of_fill(&fill.physics, *fill_depth_m)];
+                sweep_stack(
+                    &self.context(&stack, &layers),
+                    compatible_fans,
+                    candidates,
+                    counts,
+                );
+            }
+        }
+    }
+
+    fn context<'s>(
+        &'s self,
+        stack: &'s FillStack,
+        layers: &'s [LayerTerms<'s>],
+    ) -> SweepContext<'s> {
+        SweepContext {
+            catalog: self.catalog,
+            tower: self.tower,
+            stack,
+            layers,
+            requirements: self.requirements,
+            inlet_air: self.inlet_air,
+            quality: self.quality,
+        }
     }
 }
 
@@ -1034,7 +1188,7 @@ fn declared_stack_layers<'a>(
     Some(layers)
 }
 
-/// Run the selector and rank the whole feasible set under the declared objective.
+/// # Errors `DomainError` when the input is out of domain. Run the selector and rank the whole feasible set under the declared objective.
 pub fn run_selection(input: &SelectionInput<'_>) -> Result<SelectionRun, DomainError> {
     let requirements = input.requirements.clone();
     let catalog = input.catalog;
@@ -1057,81 +1211,14 @@ pub fn run_selection(input: &SelectionInput<'_>) -> Result<SelectionRun, DomainE
     let mut counts: Vec<(String, usize)> = Vec::new();
     let mut candidates: Vec<SelectionCandidate> = Vec::new();
     for tower in &catalog.towers {
-        if tower.footprint_m2 > requirements.max_footprint_m2 {
-            count_rejection(&mut counts, "footprint");
-            continue;
-        }
-        if requirements.water_mass_flow_kg_s > tower.max_water_mass_flow_kg_s {
-            count_rejection(&mut counts, "tower water-flow limit");
-            continue;
-        }
-        let compatible_fans: Vec<&SelectionFan> = catalog
-            .fans
-            .iter()
-            .filter(|fan| tower.compatible_fan_ids.contains(&fan.physics.id))
-            .collect();
-        let compatible_fills: Vec<&SelectionFill> = catalog
-            .fills
-            .iter()
-            .filter(|fill| fill.compatible_tower_types.contains(&tower.tower_type))
-            .collect();
-
-        if tower.fill_stacks.is_empty() {
-            for fill in &compatible_fills {
-                if !fill
-                    .physics
-                    .allowed_water_quality_classes
-                    .contains(&requirements.water_quality_class)
-                {
-                    count_rejection(&mut counts, "fill water-quality compatibility");
-                    continue;
-                }
-                for fill_depth_m in &tower.fill_depth_options_m {
-                    let stack = FillStack::single(fill.physics.id.clone(), *fill_depth_m);
-                    let layers = [LayerTerms::of_fill(&fill.physics, *fill_depth_m)];
-                    sweep_stack(
-                        &SweepContext {
-                            catalog,
-                            tower,
-                            stack: &stack,
-                            layers: &layers,
-                            requirements: &requirements,
-                            inlet_air: &inlet_air,
-                            quality,
-                        },
-                        &compatible_fans,
-                        &mut candidates,
-                        &mut counts,
-                    );
-                }
-            }
-        } else {
-            for stack in &tower.fill_stacks {
-                let Some(layers) = declared_stack_layers(
-                    stack,
-                    catalog,
-                    tower,
-                    &requirements.water_quality_class,
-                    &mut counts,
-                ) else {
-                    continue;
-                };
-                sweep_stack(
-                    &SweepContext {
-                        catalog,
-                        tower,
-                        stack,
-                        layers: &layers,
-                        requirements: &requirements,
-                        inlet_air: &inlet_air,
-                        quality,
-                    },
-                    &compatible_fans,
-                    &mut candidates,
-                    &mut counts,
-                );
-            }
-        }
+        let sweep = TowerSweep {
+            catalog,
+            tower,
+            requirements: &requirements,
+            inlet_air: &inlet_air,
+            quality,
+        };
+        sweep.run(&mut candidates, &mut counts);
     }
 
     rank_candidates(&mut candidates, input.objective);
@@ -1139,7 +1226,9 @@ pub fn run_selection(input: &SelectionInput<'_>) -> Result<SelectionRun, DomainE
         candidate.rank = index + 1;
     }
     for candidate in &mut candidates {
-        candidate.provenance_status = catalog.metadata.status.clone();
+        candidate
+            .provenance_status
+            .clone_from(&catalog.metadata.status);
     }
     counts.sort_by_key(|entry| std::cmp::Reverse(entry.1));
 
@@ -1154,7 +1243,7 @@ pub fn run_selection(input: &SelectionInput<'_>) -> Result<SelectionRun, DomainE
     })
 }
 
-/// The reference-shaped selection: [`run_selection`], truncated to the first `maxResults` candidates of the declared objective and ranked from 1.
+/// # Errors `DomainError` when the input is out of domain. The reference-shaped selection: [`run_selection`], truncated to the first `maxResults` candidates of the declared objective and ranked from 1.
 pub fn select_cooling_tower_components(
     input: &SelectionInput<'_>,
 ) -> Result<SelectionResult, DomainError> {
@@ -1174,6 +1263,7 @@ pub fn select_cooling_tower_components(
 }
 
 /// Reference default requirements, exposed like `defaultSelectionRequirements()`.
+#[must_use]
 pub fn default_selection_requirements() -> SelectionRequirements {
     SelectionRequirements::default()
 }

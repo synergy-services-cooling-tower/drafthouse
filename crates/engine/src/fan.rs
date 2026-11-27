@@ -21,6 +21,7 @@ pub enum FanPressureBasis {
 
 impl FanPressureBasis {
     /// The JavaScript spelling of this basis.
+    #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
             FanPressureBasis::Total => "total",
@@ -84,7 +85,7 @@ pub struct FanOperatingLimits {
     pub max_flow_m3_s: f64,
 }
 
-/// Port of `fanOperatingLimits`.
+/// # Errors `DomainError` when the input is out of domain. Port of `fanOperatingLimits`.
 pub fn fan_operating_limits(
     fan: &FanRecord,
     speed_ratio: f64,
@@ -94,7 +95,9 @@ pub fn fan_operating_limits(
         .curve
         .iter()
         .map(|point| point.flow_m3_s * speed_ratio.powf(FLOW_AFFINITY_EXPONENT));
-    let first = flows.next().expect("validated: at least two curve points");
+    let Some(first) = flows.next() else {
+        return Err(DomainError::new("A fan curve needs at least two points."));
+    };
     let (min_flow_m3_s, max_flow_m3_s) = flows.fold((first, first), |(min, max), flow| {
         (js_min(min, flow), js_max(max, flow))
     });
@@ -104,7 +107,7 @@ pub fn fan_operating_limits(
     })
 }
 
-/// Port of `fanPressurePaAtFlow`: the curve is read at the speed-corrected reference flow and scaled by the density ratio and the affinity law's pressure exponent ([`PRESSURE_AFFINITY_EXPONENT`], the square of the speed ratio).
+/// # Errors `DomainError` when the input is out of domain. Port of `fanPressurePaAtFlow`: the curve is read at the speed-corrected reference flow and scaled by the density ratio and the affinity law's pressure exponent ([`PRESSURE_AFFINITY_EXPONENT`], the square of the speed ratio).
 pub fn fan_pressure_pa_at_flow(
     fan: &FanRecord,
     flow_m3_s: f64,
@@ -127,7 +130,7 @@ pub fn fan_pressure_pa_at_flow(
         * speed_ratio.powf(PRESSURE_AFFINITY_EXPONENT))
 }
 
-/// Port of `fanEfficiencyAtFlow`: the curve is read at the speed-corrected reference flow and clamped at the ends (an efficiency curve outside its range is not extrapolated).
+/// # Errors `DomainError` when the input is out of domain. Port of `fanEfficiencyAtFlow`: the curve is read at the speed-corrected reference flow and clamped at the ends (an efficiency curve outside its range is not extrapolated).
 pub fn fan_efficiency_at_flow(
     fan: &FanRecord,
     flow_m3_s: f64,
@@ -144,7 +147,7 @@ pub fn fan_efficiency_at_flow(
     )
 }
 
-/// Port of `fanShaftPowerKW`.
+/// # Errors `DomainError` when the input is out of domain. Port of `fanShaftPowerKW`.
 pub fn fan_shaft_power_kw(
     fan: &FanRecord,
     flow_m3_s: f64,
@@ -169,6 +172,7 @@ pub struct FanSystemIntersectionInput<'a> {
 
 impl<'a> FanSystemIntersectionInput<'a> {
     /// The required inputs; defaults to the JavaScript `speedRatio: 1` and `minimumFlowFraction: 0.05`.
+    #[must_use]
     pub fn new(fan: &'a FanRecord, air_density_kg_m3: f64) -> Self {
         Self {
             fan,
@@ -178,11 +182,13 @@ impl<'a> FanSystemIntersectionInput<'a> {
         }
     }
 
+    #[must_use]
     pub fn with_speed_ratio(mut self, speed_ratio: f64) -> Self {
         self.speed_ratio = speed_ratio;
         self
     }
 
+    #[must_use]
     pub fn with_minimum_flow_fraction(mut self, minimum_flow_fraction: f64) -> Self {
         self.minimum_flow_fraction = minimum_flow_fraction;
         self
@@ -201,7 +207,7 @@ pub struct FanSystemIntersection {
     pub residual_pa: f64,
 }
 
-/// Port of `solveFanSystemIntersection`.
+/// # Errors `DomainError` when the input is out of domain. Port of `solveFanSystemIntersection`.
 pub fn solve_fan_system_intersection<F>(
     input: &FanSystemIntersectionInput<'_>,
     system_pressure_fn: F,
@@ -265,7 +271,7 @@ pub struct AirflowEstimateInput {
     pub actual_air_density_kg_m3: f64,
 }
 
-/// Port of `estimateAirflowFromFanPower`: the fan-affinity estimate `Q = Q_ref * (P/P_ref * rho_ref/rho)^(1/3)`.
+/// # Errors `DomainError` when the input is out of domain. Port of `estimateAirflowFromFanPower`: the fan-affinity estimate `Q = Q_ref * (P/P_ref * rho_ref/rho)^(1/3)`.
 pub fn estimate_airflow_from_fan_power(input: AirflowEstimateInput) -> Result<f64, DomainError> {
     assert_positive(
         input.reference_volumetric_flow_m3_s,
@@ -291,13 +297,13 @@ pub const STANDARD_MOTOR_SIZES_KW: [f64; 24] = [
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MotorSelection {
     pub required_motor_output_kw: f64,
-    /// `None` when the required output is above the largest standard size (the JavaScript `??
+    /// `None` when the required output is above the largest standard size.
     pub selected_motor_kw: Option<f64>,
     pub drive_efficiency: f64,
     pub service_factor: f64,
 }
 
-/// Port of `chooseStandardMotor`.
+/// # Errors `DomainError` when the input is out of domain. Port of `chooseStandardMotor`.
 pub fn choose_standard_motor(
     shaft_power_kw: f64,
     drive_efficiency: f64,

@@ -1,4 +1,6 @@
-use crate::numeric::{assert_positive, solve_bracketed_root, BracketedRootOptions, DomainError};
+use crate::numeric::{
+    assert_positive, count_as_f64, solve_bracketed_root, BracketedRootOptions, DomainError,
+};
 use crate::psychrometrics::{
     psychrometric_state, saturated_air_enthalpy_kj_kg_dry_air, saturation_humidity_ratio,
     PsychrometricOptions, PsychrometricState, PsychrometricStateInput,
@@ -24,7 +26,7 @@ fn js_min(a: f64, b: f64) -> f64 {
     }
 }
 
-/// Port of `saturatedTemperatureFromEnthalpy` from `src/core/psychrometrics.js`: the temperature at which saturated air carries the given enthalpy, by bracketed root.
+/// # Errors `DomainError` when the input is out of domain. Port of `saturatedTemperatureFromEnthalpy` from `src/core/psychrometrics.js`: the temperature at which saturated air carries the given enthalpy, by bracketed root.
 pub fn saturated_temperature_from_enthalpy(
     enthalpy_kj_kg_dry_air: f64,
     pressure_pa: f64,
@@ -69,39 +71,41 @@ struct Sweep {
 
 fn sweep_crossflow_grid(input: &SweepInput) -> Result<Sweep, DomainError> {
     let options = PsychrometricOptions::default();
-    let water_by_column = input.water_mass_flow_kg_s / input.air_cells as f64;
-    let air_by_row = input.dry_air_mass_flow_kg_s / input.water_cells as f64;
+    let water_by_column = input.water_mass_flow_kg_s / count_as_f64(input.air_cells);
+    let air_by_row = input.dry_air_mass_flow_kg_s / count_as_f64(input.water_cells);
     let total_kav = input.available_merkel_number * input.water_mass_flow_kg_s;
-    let kav_cell = total_kav / (input.air_cells * input.water_cells) as f64;
+    let kav_cell = total_kav / count_as_f64(input.air_cells * input.water_cells);
 
-    let mut water = vec![vec![f64::NAN; input.air_cells]; input.water_cells + 1];
-    let mut air = vec![vec![f64::NAN; input.air_cells + 1]; input.water_cells];
-    for column in water[0].iter_mut() {
-        *column = input.hot_water_c;
-    }
-    for row in air.iter_mut() {
-        row[0] = input.inlet_air_enthalpy_kj_kg_dry_air;
-    }
-
-    for y in 0..input.water_cells {
-        for x in 0..input.air_cells {
-            let water_in_c = water[y][x];
-            let air_in_h = air[y][x];
+    let mut water = Vec::with_capacity(input.water_cells + 1);
+    let mut air = Vec::with_capacity(input.water_cells);
+    let mut water_row = vec![input.hot_water_c; input.air_cells];
+    for _ in 0..input.water_cells {
+        let mut air_in_h = input.inlet_air_enthalpy_kj_kg_dry_air;
+        let mut air_row = Vec::with_capacity(input.air_cells + 1);
+        air_row.push(air_in_h);
+        let mut next_water_row = Vec::with_capacity(input.air_cells);
+        for &water_in_c in &water_row {
             let saturated_h =
                 saturated_air_enthalpy_kj_kg_dry_air(water_in_c, input.pressure_pa, options)?;
             let potential = js_max(0.0, saturated_h - air_in_h);
             let cell_effectiveness = 1.0 - f64::exp(-kav_cell / air_by_row);
             let air_delta_h = cell_effectiveness * potential;
             let heat_kw = air_by_row * air_delta_h;
-            water[y + 1][x] = water_in_c - heat_kw / (water_by_column * input.cp_water);
-            air[y][x + 1] = air_in_h + heat_kw / air_by_row;
+            next_water_row.push(water_in_c - heat_kw / (water_by_column * input.cp_water));
+            air_in_h += heat_kw / air_by_row;
+            air_row.push(air_in_h);
         }
+        water.push(std::mem::replace(&mut water_row, next_water_row));
+        air.push(air_row);
     }
 
-    let last_row = water.last().expect("water has water_cells + 1 rows");
-    let cold_water_c = last_row.iter().sum::<f64>() / input.air_cells as f64;
-    let outlet_enthalpy =
-        air.iter().map(|row| row[input.air_cells]).sum::<f64>() / input.water_cells as f64;
+    let cold_water_c = water_row.iter().sum::<f64>() / count_as_f64(input.air_cells);
+    water.push(water_row);
+    let outlet_enthalpy = air
+        .iter()
+        .map(|row| row.last().copied().unwrap_or(f64::NAN))
+        .sum::<f64>()
+        / count_as_f64(input.water_cells);
     Ok(Sweep {
         water,
         air,
@@ -135,6 +139,7 @@ pub struct CrossflowGridInput {
 
 impl CrossflowGridInput {
     /// The seven physically required inputs; everything else takes the reference default.
+    #[must_use]
     pub fn new(
         hot_water_c: f64,
         dry_bulb_c: f64,
@@ -160,18 +165,21 @@ impl CrossflowGridInput {
     }
 
     /// The reference's `pressurePa` argument.
+    #[must_use]
     pub fn with_pressure(mut self, pressure_pa: f64) -> Self {
         self.pressure_pa = pressure_pa;
         self
     }
 
     /// The reference's `salinityGKg` argument, default 0.
+    #[must_use]
     pub fn with_salinity(mut self, salinity_g_kg: f64) -> Self {
         self.salinity_g_kg = salinity_g_kg;
         self
     }
 
     /// The reference's `airCells` / `waterCells` arguments, both defaulting to 18.
+    #[must_use]
     pub fn with_cells(mut self, air_cells: usize, water_cells: usize) -> Self {
         self.air_cells = air_cells;
         self.water_cells = water_cells;
@@ -179,12 +187,14 @@ impl CrossflowGridInput {
     }
 
     /// The reference's `richardson` argument, default true.
+    #[must_use]
     pub fn with_richardson(mut self, richardson: bool) -> Self {
         self.richardson = richardson;
         self
     }
 
     /// The reference's `cpIterations` argument, default 3.
+    #[must_use]
     pub fn with_cp_iterations(mut self, cp_iterations: usize) -> Self {
         self.cp_iterations = cp_iterations;
         self
@@ -233,6 +243,7 @@ pub struct CrossflowGridResult {
 
 impl CrossflowGridResult {
     /// The reference's `model` field.
+    #[must_use]
     pub fn model(&self) -> &'static str {
         CROSSFLOW_MODEL
     }
@@ -266,7 +277,7 @@ fn solve_at(
             water_cells: ny,
         })?;
         let next_cp = water_specific_heat_kj_kg_k(
-            (input.hot_water_c + current.cold_water_c) / 2.0,
+            f64::midpoint(input.hot_water_c, current.cold_water_c),
             input.salinity_g_kg,
         );
         if (next_cp - cp_water).abs() < 1e-9 {
@@ -277,10 +288,65 @@ fn solve_at(
         cp_water = next_cp;
         sweep = Some(current);
     }
-    Ok((sweep.expect("at least one iteration"), cp_water))
+    let sweep = sweep
+        .ok_or_else(|| DomainError::new("The crossflow grid needs at least one iteration."))?;
+    Ok((sweep, cp_water))
 }
 
-/// Port of `solveCrossflowGrid`.
+fn saturated_outlet(
+    input: &CrossflowGridInput,
+    outlet_enthalpy: f64,
+) -> Result<OutletAirState, DomainError> {
+    let outlet_dry_bulb_c = saturated_temperature_from_enthalpy(
+        outlet_enthalpy,
+        input.pressure_pa,
+        [-50.0, js_min(120.0, input.hot_water_c + 40.0)],
+    )?;
+    let outlet_humidity_ratio = saturation_humidity_ratio(
+        outlet_dry_bulb_c,
+        input.pressure_pa,
+        PsychrometricOptions::default(),
+    )?;
+    Ok(OutletAirState {
+        dry_bulb_c: outlet_dry_bulb_c,
+        wet_bulb_c: outlet_dry_bulb_c,
+        relative_humidity: 1.0,
+        enthalpy_kj_kg_dry_air: outlet_enthalpy,
+        humidity_ratio: outlet_humidity_ratio,
+        pressure_pa: input.pressure_pa,
+    })
+}
+
+fn grid_convergence(
+    input: &CrossflowGridInput,
+    coarse: &Sweep,
+    fine: Option<&Sweep>,
+    extrapolated_cold_water_c: f64,
+) -> CrossflowGridConvergence {
+    let error_estimate_meaning = if fine.is_some() {
+        "Conservative upper bound: the estimated error of the raw fine grid, not of the reported extrapolated value."
+    } else {
+        "Richardson extrapolation disabled; the reported value carries the full first-order grid error."
+    };
+    let note = if fine.is_some() {
+        "Cold-water temperature is Richardson-extrapolated from the coarse and doubled grids."
+    } else {
+        "Richardson extrapolation disabled; the reported value carries the raw first-order grid error."
+    };
+    CrossflowGridConvergence {
+        coarse_cells: [input.air_cells, input.water_cells],
+        coarse_cold_water_c: coarse.cold_water_c,
+        fine_cells: fine.map(|_| [input.air_cells * 2, input.water_cells * 2]),
+        fine_cold_water_c: fine.map(|sweep| sweep.cold_water_c),
+        richardson_cold_water_c: extrapolated_cold_water_c,
+        estimated_discretization_error_c: fine
+            .map(|sweep| (sweep.cold_water_c - extrapolated_cold_water_c).abs()),
+        error_estimate_meaning,
+        note,
+    }
+}
+
+/// # Errors `DomainError` when the input is out of domain. Port of `solveCrossflowGrid`.
 pub fn solve_crossflow_grid(
     input: &CrossflowGridInput,
 ) -> Result<CrossflowGridResult, DomainError> {
@@ -326,31 +392,9 @@ pub fn solve_crossflow_grid(
         None => (&coarse, coarse_cp),
     };
     let cold_water_c = extrapolated_cold_water_c;
-    let outlet_enthalpy = extrapolated_outlet_enthalpy;
-
-    let outlet_dry_bulb_c = saturated_temperature_from_enthalpy(
-        outlet_enthalpy,
-        input.pressure_pa,
-        [-50.0, js_min(120.0, input.hot_water_c + 40.0)],
-    )?;
-    let outlet_humidity_ratio = saturation_humidity_ratio(
-        outlet_dry_bulb_c,
-        input.pressure_pa,
-        PsychrometricOptions::default(),
-    )?;
+    let outlet_air_state = saturated_outlet(input, extrapolated_outlet_enthalpy)?;
     let heat_transfer_kw =
         input.water_mass_flow_kg_s * cp_water * (input.hot_water_c - cold_water_c);
-
-    let error_estimate_meaning = if fine.is_some() {
-        "Conservative upper bound: the estimated error of the raw fine grid, not of the reported extrapolated value."
-    } else {
-        "Richardson extrapolation disabled; the reported value carries the full first-order grid error."
-    };
-    let note = if fine.is_some() {
-        "Cold-water temperature is Richardson-extrapolated from the coarse and doubled grids."
-    } else {
-        "Richardson extrapolation disabled; the reported value carries the raw first-order grid error."
-    };
 
     Ok(CrossflowGridResult {
         cold_water_c,
@@ -359,28 +403,13 @@ pub fn solve_crossflow_grid(
         heat_transfer_kw,
         water_energy_kw: heat_transfer_kw,
         cp_water_kj_kg_k: cp_water,
-        grid_convergence: CrossflowGridConvergence {
-            coarse_cells: [input.air_cells, input.water_cells],
-            coarse_cold_water_c: coarse.cold_water_c,
-            fine_cells: fine
-                .as_ref()
-                .map(|_| [input.air_cells * 2, input.water_cells * 2]),
-            fine_cold_water_c: fine.as_ref().map(|(sweep, _)| sweep.cold_water_c),
-            richardson_cold_water_c: extrapolated_cold_water_c,
-            estimated_discretization_error_c: fine
-                .as_ref()
-                .map(|(sweep, _)| (sweep.cold_water_c - extrapolated_cold_water_c).abs()),
-            error_estimate_meaning,
-            note,
-        },
-        outlet_air_state: OutletAirState {
-            dry_bulb_c: outlet_dry_bulb_c,
-            wet_bulb_c: outlet_dry_bulb_c,
-            relative_humidity: 1.0,
-            enthalpy_kj_kg_dry_air: outlet_enthalpy,
-            humidity_ratio: outlet_humidity_ratio,
-            pressure_pa: input.pressure_pa,
-        },
+        grid_convergence: grid_convergence(
+            input,
+            &coarse,
+            fine.as_ref().map(|(sweep, _)| sweep),
+            extrapolated_cold_water_c,
+        ),
+        outlet_air_state,
         water_temperature_grid_c: chosen.water.clone(),
         air_enthalpy_grid_kj_kg_dry_air: chosen.air.clone(),
         inlet_air_state: inlet_air,
@@ -399,6 +428,7 @@ pub struct CrossflowStudyInput {
 
 impl CrossflowStudyInput {
     /// The reference's defaults; `grid` carries the case's inputs.
+    #[must_use]
     pub fn new(grid: CrossflowGridInput) -> Self {
         Self {
             base_cells: 12,
@@ -408,12 +438,14 @@ impl CrossflowStudyInput {
     }
 
     /// The reference's `baseCells` argument.
+    #[must_use]
     pub fn with_base_cells(mut self, base_cells: usize) -> Self {
         self.base_cells = base_cells;
         self
     }
 
     /// The reference's `safetyFactor` argument.
+    #[must_use]
     pub fn with_safety_factor(mut self, safety_factor: f64) -> Self {
         self.safety_factor = safety_factor;
         self
@@ -432,7 +464,7 @@ pub struct CrossflowConvergenceStudy {
     pub interpretation: &'static str,
 }
 
-/// Port of `crossflowConvergenceStudy` — the three-grid (n, 2n, 4n) convergence study the selector deliberately does not call.
+/// # Errors `DomainError` when the input is out of domain. Port of `crossflowConvergenceStudy` — the three-grid (n, 2n, 4n) convergence study the selector deliberately does not call.
 pub fn crossflow_convergence_study(
     input: &CrossflowStudyInput,
 ) -> Result<CrossflowConvergenceStudy, DomainError> {

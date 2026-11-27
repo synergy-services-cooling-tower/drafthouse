@@ -19,6 +19,7 @@ impl RecordKind {
     ];
 
     /// The spelling used in refusals and in the CLI's record options.
+    #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
             RecordKind::Tower => "tower",
@@ -115,6 +116,7 @@ impl Violation {
     }
 
     /// The refusal line: names the record and the field.
+    #[must_use]
     pub fn message(&self) -> String {
         format!("{}: field {:?} {}", self.record, self.field, self.problem)
     }
@@ -375,6 +377,7 @@ const NOZZLE_FIELDS: [FieldRule; 5] = [
 ];
 
 /// The machine-enforced schema of one record type.
+#[must_use]
 pub fn schema(kind: RecordKind) -> &'static [FieldRule] {
     match kind {
         RecordKind::Tower => &TOWER_FIELDS,
@@ -385,7 +388,7 @@ pub fn schema(kind: RecordKind) -> &'static [FieldRule] {
     }
 }
 
-/// Validate one record's `field: value` pairs against the schema of `kind`.
+/// # Errors `Err` when the input is out of domain. Validate one record's `field: value` pairs against the schema of `kind`.
 pub fn validate_record(
     kind: RecordKind,
     label: &str,
@@ -454,51 +457,9 @@ fn check_value(rule: &FieldRule, raw: &str, record: &str, sink: &mut Vec<Violati
             }
         }
         FieldKind::NumberList { domain, min_len } => {
-            let entries: Vec<&str> = raw.split('|').collect();
-            if entries.len() < min_len {
-                sink.push(Violation::new(
-                    record,
-                    field,
-                    format!(
-                        "expects at least {min_len} '|'-separated numbers, got {}",
-                        entries.len()
-                    ),
-                ));
-                return;
-            }
-            for (index, entry) in entries.iter().enumerate() {
-                if let Some(problem) = number_problem(domain, entry) {
-                    sink.push(Violation::new(
-                        record,
-                        field,
-                        format!("entry {} {problem}", index + 1),
-                    ));
-                }
-            }
+            check_number_list(domain, min_len, raw, record, field, sink);
         }
-        FieldKind::TextList { min_len } => {
-            let entries: Vec<&str> = raw.split('|').collect();
-            if entries.len() < min_len {
-                sink.push(Violation::new(
-                    record,
-                    field,
-                    format!(
-                        "expects at least {min_len} '|'-separated entries, got {}",
-                        entries.len()
-                    ),
-                ));
-                return;
-            }
-            for (index, entry) in entries.iter().enumerate() {
-                if entry.is_empty() {
-                    sink.push(Violation::new(
-                        record,
-                        field,
-                        format!("entry {} must not be empty", index + 1),
-                    ));
-                }
-            }
-        }
+        FieldKind::TextList { min_len } => check_text_list(min_len, raw, record, field, sink),
         FieldKind::Enum(allowed) => {
             if !allowed.contains(&raw) {
                 sink.push(Violation::new(
@@ -509,127 +470,211 @@ fn check_value(rule: &FieldRule, raw: &str, record: &str, sink: &mut Vec<Violati
             }
         }
         FieldKind::EnumList { allowed, min_len } => {
-            let entries: Vec<&str> = raw.split('|').collect();
-            if entries.len() < min_len {
-                sink.push(Violation::new(
-                    record,
-                    field,
-                    format!(
-                        "expects at least {min_len} '|'-separated entries, got {}",
-                        entries.len()
-                    ),
-                ));
-                return;
-            }
-            for entry in &entries {
-                if !allowed.contains(entry) {
-                    sink.push(Violation::new(
-                        record,
-                        field,
-                        format!("must be one of {}, got {entry:?}", listed(allowed)),
-                    ));
-                }
-            }
+            check_enum_list(allowed, min_len, raw, record, field, sink);
         }
-        FieldKind::RatioBracket => {
-            let entries: Vec<&str> = raw.split('|').collect();
-            if entries.len() != 2 {
-                sink.push(Violation::new(
-                    record,
-                    field,
-                    format!("expects lower|upper, got {raw:?}"),
-                ));
-                return;
-            }
-            let mut ratios = [0.0_f64; 2];
-            let mut ok = true;
-            for (index, entry) in entries.iter().enumerate() {
-                match number_problem(NumberDomain::Positive, entry) {
-                    None => ratios[index] = entry.parse().unwrap_or_default(),
-                    Some(problem) => {
-                        ok = false;
-                        sink.push(Violation::new(
-                            record,
-                            field,
-                            format!("{} {problem}", bracket_side(index)),
-                        ));
-                    }
-                }
-            }
-            if ok && ratios[0] > ratios[1] {
-                sink.push(Violation::new(
-                    record,
-                    field,
-                    format!(
-                        "expects the lower ratio first, got {}|{}",
-                        entries[0], entries[1]
-                    ),
-                ));
-            }
-        }
-        FieldKind::Row(columns) => {
-            let entries: Vec<&str> = raw.split('|').collect();
-            if entries.len() != columns.len() {
-                sink.push(Violation::new(
-                    record,
-                    field,
-                    format!(
-                        "expects {} '|'-separated numbers ({}), got {}",
-                        columns.len(),
-                        column_names(columns),
-                        entries.len()
-                    ),
-                ));
-                return;
-            }
-            for (column, entry) in columns.iter().zip(&entries) {
-                if let Some(problem) = number_problem(column.domain, entry) {
-                    sink.push(Violation::new(
-                        record,
-                        field,
-                        format!("column {:?} {problem}", column.name),
-                    ));
-                }
-            }
-        }
+        FieldKind::RatioBracket => check_ratio_bracket(raw, record, field, sink),
+        FieldKind::Row(columns) => check_row(columns, raw, record, field, sink),
         FieldKind::Points { columns, min_len } => {
-            let points: Vec<&str> = raw.split('|').collect();
-            if points.len() < min_len {
+            check_points(columns, min_len, raw, record, field, sink);
+        }
+    }
+}
+
+fn check_number_list(
+    domain: NumberDomain,
+    min_len: usize,
+    raw: &str,
+    record: &str,
+    field: &str,
+    sink: &mut Vec<Violation>,
+) {
+    let entries: Vec<&str> = raw.split('|').collect();
+    if entries.len() < min_len {
+        sink.push(Violation::new(
+            record,
+            field,
+            format!(
+                "expects at least {min_len} '|'-separated numbers, got {}",
+                entries.len()
+            ),
+        ));
+        return;
+    }
+    for (index, entry) in entries.iter().enumerate() {
+        if let Some(problem) = number_problem(domain, entry) {
+            sink.push(Violation::new(
+                record,
+                field,
+                format!("entry {} {problem}", index + 1),
+            ));
+        }
+    }
+}
+
+fn check_text_list(
+    min_len: usize,
+    raw: &str,
+    record: &str,
+    field: &str,
+    sink: &mut Vec<Violation>,
+) {
+    let entries: Vec<&str> = raw.split('|').collect();
+    if entries.len() < min_len {
+        sink.push(Violation::new(
+            record,
+            field,
+            format!(
+                "expects at least {min_len} '|'-separated entries, got {}",
+                entries.len()
+            ),
+        ));
+        return;
+    }
+    for (index, entry) in entries.iter().enumerate() {
+        if entry.is_empty() {
+            sink.push(Violation::new(
+                record,
+                field,
+                format!("entry {} must not be empty", index + 1),
+            ));
+        }
+    }
+}
+
+fn check_enum_list(
+    allowed: &[&str],
+    min_len: usize,
+    raw: &str,
+    record: &str,
+    field: &str,
+    sink: &mut Vec<Violation>,
+) {
+    let entries: Vec<&str> = raw.split('|').collect();
+    if entries.len() < min_len {
+        sink.push(Violation::new(
+            record,
+            field,
+            format!(
+                "expects at least {min_len} '|'-separated entries, got {}",
+                entries.len()
+            ),
+        ));
+        return;
+    }
+    for entry in &entries {
+        if !allowed.contains(entry) {
+            sink.push(Violation::new(
+                record,
+                field,
+                format!("must be one of {}, got {entry:?}", listed(allowed)),
+            ));
+        }
+    }
+}
+
+fn check_ratio_bracket(raw: &str, record: &str, field: &str, sink: &mut Vec<Violation>) {
+    let entries: Vec<&str> = raw.split('|').collect();
+    let &[lower, upper] = entries.as_slice() else {
+        sink.push(Violation::new(
+            record,
+            field,
+            format!("expects lower|upper, got {raw:?}"),
+        ));
+        return;
+    };
+    let mut ratios = Vec::with_capacity(2);
+    for (index, entry) in entries.iter().enumerate() {
+        match number_problem(NumberDomain::Positive, entry) {
+            None => ratios.push(entry.parse::<f64>().unwrap_or_default()),
+            Some(problem) => {
                 sink.push(Violation::new(
                     record,
                     field,
-                    format!(
-                        "expects at least {min_len} '|'-separated points ({}), got {}",
-                        column_names(columns),
-                        points.len()
-                    ),
+                    format!("{} {problem}", bracket_side(index)),
                 ));
-                return;
             }
-            for (index, point) in points.iter().enumerate() {
-                let entries: Vec<&str> = point.split(':').collect();
-                if entries.len() != columns.len() {
-                    sink.push(Violation::new(
-                        record,
-                        field,
-                        format!(
-                            "point {} expects {} ':'-separated numbers ({}), got {point:?}",
-                            index + 1,
-                            columns.len(),
-                            column_names(columns)
-                        ),
-                    ));
-                    continue;
-                }
-                for (column, entry) in columns.iter().zip(&entries) {
-                    if let Some(problem) = number_problem(column.domain, entry) {
-                        sink.push(Violation::new(
-                            record,
-                            field,
-                            format!("point {} column {:?} {problem}", index + 1, column.name),
-                        ));
-                    }
-                }
+        }
+    }
+    if let &[lower_ratio, upper_ratio] = ratios.as_slice() {
+        if lower_ratio > upper_ratio {
+            sink.push(Violation::new(
+                record,
+                field,
+                format!("expects the lower ratio first, got {lower}|{upper}"),
+            ));
+        }
+    }
+}
+
+fn check_row(columns: &[Column], raw: &str, record: &str, field: &str, sink: &mut Vec<Violation>) {
+    let entries: Vec<&str> = raw.split('|').collect();
+    if entries.len() != columns.len() {
+        sink.push(Violation::new(
+            record,
+            field,
+            format!(
+                "expects {} '|'-separated numbers ({}), got {}",
+                columns.len(),
+                column_names(columns),
+                entries.len()
+            ),
+        ));
+        return;
+    }
+    for (column, entry) in columns.iter().zip(&entries) {
+        if let Some(problem) = number_problem(column.domain, entry) {
+            sink.push(Violation::new(
+                record,
+                field,
+                format!("column {:?} {problem}", column.name),
+            ));
+        }
+    }
+}
+
+fn check_points(
+    columns: &[Column],
+    min_len: usize,
+    raw: &str,
+    record: &str,
+    field: &str,
+    sink: &mut Vec<Violation>,
+) {
+    let points: Vec<&str> = raw.split('|').collect();
+    if points.len() < min_len {
+        sink.push(Violation::new(
+            record,
+            field,
+            format!(
+                "expects at least {min_len} '|'-separated points ({}), got {}",
+                column_names(columns),
+                points.len()
+            ),
+        ));
+        return;
+    }
+    for (index, point) in points.iter().enumerate() {
+        let entries: Vec<&str> = point.split(':').collect();
+        if entries.len() != columns.len() {
+            sink.push(Violation::new(
+                record,
+                field,
+                format!(
+                    "point {} expects {} ':'-separated numbers ({}), got {point:?}",
+                    index + 1,
+                    columns.len(),
+                    column_names(columns)
+                ),
+            ));
+            continue;
+        }
+        for (column, entry) in columns.iter().zip(&entries) {
+            if let Some(problem) = number_problem(column.domain, entry) {
+                sink.push(Violation::new(
+                    record,
+                    field,
+                    format!("point {} column {:?} {problem}", index + 1, column.name),
+                ));
             }
         }
     }
@@ -668,7 +713,6 @@ fn number_problem(domain: NumberDomain, raw: &str) -> Option<String> {
         return Some(format!("must be finite, got {raw:?}"));
     }
     match domain {
-        NumberDomain::Finite => None,
         NumberDomain::Positive if value <= 0.0 => Some(format!("must be positive, got {value}")),
         NumberDomain::NonNegative if value < 0.0 => {
             Some(format!("must not be negative, got {value}"))

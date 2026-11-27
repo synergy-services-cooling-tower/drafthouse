@@ -24,18 +24,21 @@ impl FillLayer {
     }
 
     /// The layer's own thermal multiplier.
+    #[must_use]
     pub fn with_thermal_multiplier(mut self, thermal_multiplier: f64) -> Self {
         self.thermal_multiplier = thermal_multiplier;
         self
     }
 
     /// The layer's own pressure multiplier.
+    #[must_use]
     pub fn with_pressure_multiplier(mut self, pressure_multiplier: f64) -> Self {
         self.pressure_multiplier = pressure_multiplier;
         self
     }
 
     /// `<fillId>@<depthM>` — the layer's name, in the result and in the record specs the CLI reads (`format!`'s shortest round-trip form of the depth parses back to the same value).
+    #[must_use]
     pub fn label(&self) -> String {
         format!("{}@{}", self.fill_id, self.depth_m)
     }
@@ -48,6 +51,7 @@ pub struct FillStack {
 }
 
 impl FillStack {
+    #[must_use]
     pub fn new(layers: Vec<FillLayer>) -> Self {
         FillStack { layers }
     }
@@ -57,11 +61,13 @@ impl FillStack {
         FillStack::new(vec![FillLayer::new(fill_id, depth_m)])
     }
 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.layers.is_empty()
     }
 
     /// The top-to-bottom total depth of the stack.
+    #[must_use]
     pub fn total_depth_m(&self) -> f64 {
         self.layers.iter().map(|layer| layer.depth_m).sum()
     }
@@ -76,6 +82,7 @@ impl FillStack {
     }
 
     /// The stack's identity: `(fill id, depth)` for a **one-layer** stack — the single-fill candidate's own identity, byte for byte — and `(stack name, total depth)` for a mixed stack, whose identity is the stack itself rather than any one of its fills.
+    #[must_use]
     pub fn identity(&self) -> (String, f64) {
         match self.layers.as_slice() {
             [layer] => (layer.fill_id.clone(), layer.depth_m),
@@ -85,6 +92,7 @@ impl FillStack {
 }
 
 /// The refusal an empty stack earns, wherever it is raised (resolution, or the breakdown's own backstop guard).
+#[must_use]
 pub fn empty_stack_error() -> DomainError {
     DomainError::new("A fill stack must carry at least one layer.")
 }
@@ -100,6 +108,7 @@ pub struct LayerTerms<'a> {
 
 impl LayerTerms<'_> {
     /// A layer at both of its own multipliers 1: it contributes exactly its fill record's characteristics over `depth_m`.
+    #[must_use]
     pub fn of_fill(fill: &FillRecord, depth_m: f64) -> LayerTerms<'_> {
         LayerTerms {
             fill,
@@ -110,6 +119,7 @@ impl LayerTerms<'_> {
     }
 
     /// The layer's own name, as the caller declared it.
+    #[must_use]
     pub fn label(&self) -> String {
         FillLayer {
             fill_id: self.fill.id.clone(),
@@ -125,7 +135,7 @@ fn layer_head(position: usize, layer: &FillLayer) -> String {
     format!("Layer {position} ({})", layer.label())
 }
 
-/// Resolve a stack against the catalog, in physical order.
+/// # Errors `DomainError` when the input is out of domain. Resolve a stack against the catalog, in physical order.
 pub fn resolve_fill_layers<'a>(
     stack: &FillStack,
     fills: &'a [FillRecord],
@@ -212,12 +222,14 @@ pub struct FillLayerResult {
 
 impl FillLayerResult {
     /// The layer's name in a result: `<fillId>@<depthM>`.
+    #[must_use]
     pub fn label(&self) -> String {
         format!("{}@{}", self.fill_id, self.depth_m)
     }
 }
 
 /// Where a stack's layers stand against their own fills' limits at one operating point.
+#[must_use]
 pub fn check_stack_operating_envelope(
     terms: &[LayerTerms<'_>],
     water_loading_kg_m2_s: f64,

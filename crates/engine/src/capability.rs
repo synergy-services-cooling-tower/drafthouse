@@ -3,8 +3,8 @@ use crate::merkel::{
     InletEnthalpyConvention, Integration, MerkelInput,
 };
 use crate::numeric::{
-    create_seeded_random, find_root_by_scan, gaussian_random, js_max, js_min, percentile, range,
-    DomainError, RootPreference, RootScanOptions, SeededRandom,
+    count_as_f64, create_seeded_random, find_root_by_scan, gaussian_random, js_max, js_min,
+    percentile, range, DomainError, RootPreference, RootScanOptions, SeededRandom,
 };
 use crate::psychrometrics::{psychrometric_state, PsychrometricState, PsychrometricStateInput};
 
@@ -21,7 +21,8 @@ pub struct CapabilityCondition {
 }
 
 impl CapabilityCondition {
-    /// A condition at the reference's default pressure (the `??
+    /// A condition at the reference's default pressure.
+    #[must_use]
     pub fn new(
         water_mass_flow_kg_s: f64,
         dry_air_mass_flow_kg_s: f64,
@@ -41,6 +42,7 @@ impl CapabilityCondition {
         }
     }
 
+    #[must_use]
     pub fn with_pressure(mut self, pressure_pa: f64) -> Self {
         self.pressure_pa = Some(pressure_pa);
         self
@@ -89,6 +91,7 @@ pub struct CharacteristicCapabilityInput {
 
 impl CharacteristicCapabilityInput {
     /// `evaluateCharacteristicCapability({ design, test })` — the two required conditions and every default argument.
+    #[must_use]
     pub fn new(design: CapabilityCondition, test: CapabilityCondition) -> Self {
         Self {
             design,
@@ -102,30 +105,35 @@ impl CharacteristicCapabilityInput {
     }
 
     /// The reference's `characteristicExponent` argument.
+    #[must_use]
     pub fn with_characteristic_exponent(mut self, characteristic_exponent: f64) -> Self {
         self.characteristic_exponent = characteristic_exponent;
         self
     }
 
     /// The reference's `salinityGKg` argument.
+    #[must_use]
     pub fn with_salinity_g_kg(mut self, salinity_g_kg: f64) -> Self {
         self.salinity_g_kg = salinity_g_kg;
         self
     }
 
     /// The reference's `integration` argument.
+    #[must_use]
     pub fn with_integration(mut self, integration: Integration) -> Self {
         self.integration = integration;
         self
     }
 
     /// The reference's `curvePoints` argument.
+    #[must_use]
     pub fn with_curve_points(mut self, curve_points: usize) -> Self {
         self.curve_points = curve_points;
         self
     }
 
     /// The reference's `inletEnthalpyConvention` argument.
+    #[must_use]
     pub fn with_inlet_enthalpy_convention(
         mut self,
         inlet_enthalpy_convention: InletEnthalpyConvention,
@@ -175,7 +183,7 @@ pub struct CharacteristicCapability {
     pub curves: Vec<CapabilityCurvePoint>,
 }
 
-/// Port of `evaluateCharacteristicCapability`: the test demand sets the characteristic coefficient, and the capability is the design-condition L/G at which the design demand meets that characteristic — the last such crossing in the scan interval.
+/// # Errors `DomainError` when the input is out of domain. Port of `evaluateCharacteristicCapability`: the test demand sets the characteristic coefficient, and the capability is the design-condition L/G at which the design demand meets that characteristic — the last such crossing in the scan interval.
 pub fn evaluate_characteristic_capability(
     input: &CharacteristicCapabilityInput,
 ) -> Result<CharacteristicCapability, DomainError> {
@@ -197,62 +205,14 @@ pub fn evaluate_characteristic_capability(
         input.characteristic_exponent,
     )?;
 
-    let design_demand_at = |ratio: f64| -> Result<f64, DomainError> {
-        safe_merkel_demand(&input.demand_input(&input.design, ratio))
+    let ratios = CapabilityRatios {
+        design: design_water_to_air,
+        test: test_water_to_air,
+        test_coefficient,
     };
-    let residual = |ratio: f64| -> Result<f64, DomainError> {
-        let demand = design_demand_at(ratio)?;
-        if !demand.is_finite() {
-            return Ok(-1e12);
-        }
-        Ok(tower_characteristic(ratio, test_coefficient, input.characteristic_exponent)? - demand)
-    };
-
-    let min_ratio = js_max(0.05, js_min(design_water_to_air, test_water_to_air) * 0.12);
-    let max_ratio = js_max(design_water_to_air, test_water_to_air) * 8.0;
-    let capability_water_to_air = find_root_by_scan(
-        residual,
-        min_ratio,
-        max_ratio,
-        RootScanOptions {
-            samples: 720,
-            tolerance: 1e-8,
-            prefer: RootPreference::Last,
-            ..RootScanOptions::default()
-        },
-    )?;
+    let capability_water_to_air = capability_root(input, &ratios)?;
     let capability_pct = 100.0 * capability_water_to_air / design_water_to_air;
-
-    let x_values = range(
-        js_max(
-            0.05,
-            js_min(
-                js_min(design_water_to_air, test_water_to_air),
-                capability_water_to_air,
-            ) * 0.55,
-        ),
-        js_max(
-            js_max(design_water_to_air, test_water_to_air),
-            capability_water_to_air,
-        ) * 1.55,
-        input.curve_points,
-    );
-    let mut curves = Vec::new();
-    for ratio in x_values {
-        let design_demand_merkel = design_demand_at(ratio)?;
-        if !design_demand_merkel.is_finite() {
-            continue;
-        }
-        curves.push(CapabilityCurvePoint {
-            water_to_dry_air_ratio: ratio,
-            design_demand_merkel,
-            test_characteristic_merkel: tower_characteristic(
-                ratio,
-                test_coefficient,
-                input.characteristic_exponent,
-            )?,
-        });
-    }
+    let curves = capability_curves(input, &ratios, capability_water_to_air)?;
 
     Ok(CharacteristicCapability {
         capability_pct,
@@ -273,6 +233,78 @@ pub fn evaluate_characteristic_capability(
         test_air_state: test_demand.inlet_air_state,
         curves,
     })
+}
+
+struct CapabilityRatios {
+    design: f64,
+    test: f64,
+    test_coefficient: f64,
+}
+
+fn design_demand_at(input: &CharacteristicCapabilityInput, ratio: f64) -> Result<f64, DomainError> {
+    safe_merkel_demand(&input.demand_input(&input.design, ratio))
+}
+
+fn capability_root(
+    input: &CharacteristicCapabilityInput,
+    ratios: &CapabilityRatios,
+) -> Result<f64, DomainError> {
+    let residual = |ratio: f64| -> Result<f64, DomainError> {
+        let demand = design_demand_at(input, ratio)?;
+        if !demand.is_finite() {
+            return Ok(-1e12);
+        }
+        Ok(tower_characteristic(
+            ratio,
+            ratios.test_coefficient,
+            input.characteristic_exponent,
+        )? - demand)
+    };
+    let min_ratio = js_max(0.05, js_min(ratios.design, ratios.test) * 0.12);
+    let max_ratio = js_max(ratios.design, ratios.test) * 8.0;
+    find_root_by_scan(
+        residual,
+        min_ratio,
+        max_ratio,
+        RootScanOptions {
+            samples: 720,
+            tolerance: 1e-8,
+            prefer: RootPreference::Last,
+            ..RootScanOptions::default()
+        },
+    )
+}
+
+fn capability_curves(
+    input: &CharacteristicCapabilityInput,
+    ratios: &CapabilityRatios,
+    capability_water_to_air: f64,
+) -> Result<Vec<CapabilityCurvePoint>, DomainError> {
+    let x_values = range(
+        js_max(
+            0.05,
+            js_min(js_min(ratios.design, ratios.test), capability_water_to_air) * 0.55,
+        ),
+        js_max(js_max(ratios.design, ratios.test), capability_water_to_air) * 1.55,
+        input.curve_points,
+    );
+    let mut curves = Vec::new();
+    for ratio in x_values {
+        let design_demand_merkel = design_demand_at(input, ratio)?;
+        if !design_demand_merkel.is_finite() {
+            continue;
+        }
+        curves.push(CapabilityCurvePoint {
+            water_to_dry_air_ratio: ratio,
+            design_demand_merkel,
+            test_characteristic_merkel: tower_characteristic(
+                ratio,
+                ratios.test_coefficient,
+                input.characteristic_exponent,
+            )?,
+        });
+    }
+    Ok(curves)
 }
 
 /// The condition fields a perturbation can carry, in the order the reference's condition objects declare them.
@@ -309,6 +341,7 @@ pub struct MonteCarloInput {
 
 impl MonteCarloInput {
     /// `monteCarloCharacteristicCapability({ baseInput, standardUncertainty })`.
+    #[must_use]
     pub fn new(
         base_input: CharacteristicCapabilityInput,
         uncertainty: CapabilityUncertainty,
@@ -317,17 +350,19 @@ impl MonteCarloInput {
             base_input,
             uncertainty,
             samples: 1000,
-            seed: 20260813.0,
+            seed: 20_260_813.0,
         }
     }
 
     /// The reference's `samples` argument.
+    #[must_use]
     pub fn with_samples(mut self, samples: usize) -> Self {
         self.samples = samples;
         self
     }
 
     /// The reference's `seed` argument.
+    #[must_use]
     pub fn with_seed(mut self, seed: f64) -> Self {
         self.seed = seed;
         self
@@ -392,7 +427,7 @@ fn perturb_condition(
     }
 }
 
-/// Port of `monteCarloCharacteristicCapability`: perturb the base input `samples` times with the seeded Gaussian stream, evaluate each draw, and report the accepted capability distribution.
+/// # Errors `DomainError` when the input is out of domain. Port of `monteCarloCharacteristicCapability`: perturb the base input `samples` times with the seeded Gaussian stream, evaluate each draw, and report the accepted capability distribution.
 pub fn monte_carlo_characteristic_capability(
     input: &MonteCarloInput,
 ) -> Result<MonteCarloResult, DomainError> {
@@ -413,21 +448,20 @@ pub fn monte_carlo_characteristic_capability(
             Ok(result) if result.capability_pct.is_finite() => {
                 capabilities.push(result.capability_pct);
             }
-            Ok(_) => rejected_samples += 1,
-            Err(_) => rejected_samples += 1,
+            Ok(_) | Err(_) => rejected_samples += 1,
         }
     }
-    if (capabilities.len() as f64) < js_max(20.0, input.samples as f64 * 0.5) {
+    if count_as_f64(capabilities.len()) < js_max(20.0, count_as_f64(input.samples) * 0.5) {
         return Err(DomainError::new(
             "Too many Monte Carlo samples were invalid; review uncertainty inputs.",
         ));
     }
-    let mean = capabilities.iter().sum::<f64>() / capabilities.len() as f64;
+    let mean = capabilities.iter().sum::<f64>() / count_as_f64(capabilities.len());
     let variance = capabilities
         .iter()
         .map(|value| (value - mean).powi(2))
         .sum::<f64>()
-        / (capabilities.len() - 1).max(1) as f64;
+        / count_as_f64((capabilities.len() - 1).max(1));
     Ok(MonteCarloResult {
         samples_requested: input.samples,
         samples_accepted: capabilities.len(),

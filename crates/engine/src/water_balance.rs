@@ -10,7 +10,7 @@ fn floor_at_zero(value: f64) -> f64 {
     }
 }
 
-/// Port of `evaporationFromAirMassBalance`: dry air is conserved through the tower, so the water lost to evaporation is the dry-air flow times the rise in humidity ratio.
+/// # Errors `DomainError` when the input is out of domain. Port of `evaporationFromAirMassBalance`: dry air is conserved through the tower, so the water lost to evaporation is the dry-air flow times the rise in humidity ratio.
 pub fn evaporation_from_air_mass_balance(
     dry_air_mass_flow_kg_s: f64,
     inlet_humidity_ratio: f64,
@@ -24,7 +24,7 @@ pub fn evaporation_from_air_mass_balance(
     ))
 }
 
-/// Port of `driftLossKgS`: the circulating flow times the drift rating in parts per million.
+/// # Errors `DomainError` when the input is out of domain. Port of `driftLossKgS`: the circulating flow times the drift rating in parts per million.
 pub fn drift_loss_kg_s(
     circulating_water_mass_flow_kg_s: f64,
     drift_ppm: f64,
@@ -50,6 +50,7 @@ pub struct WaterBalanceInput {
 
 impl WaterBalanceInput {
     /// `coolingTowerWaterBalance({ evaporationKgS })` — both default arguments apply.
+    #[must_use]
     pub fn new(evaporation_kg_s: f64) -> Self {
         Self {
             evaporation_kg_s,
@@ -59,12 +60,14 @@ impl WaterBalanceInput {
     }
 
     /// The reference's `driftKgS` argument, whose default is 0.
+    #[must_use]
     pub fn with_drift_kg_s(mut self, drift_kg_s: f64) -> Self {
         self.drift_kg_s = drift_kg_s;
         self
     }
 
     /// The reference's `cyclesOfConcentration` argument, whose default is 4.
+    #[must_use]
     pub fn with_cycles_of_concentration(mut self, cycles_of_concentration: f64) -> Self {
         self.cycles_of_concentration = cycles_of_concentration;
         self
@@ -81,7 +84,7 @@ pub struct WaterBalance {
     pub cycles_of_concentration: f64,
 }
 
-/// Port of `coolingTowerWaterBalance`: the cycles guard comes first, before any arithmetic, then the two losses are asserted non-negative and finite, then blowdown at `evaporation / (cycles − 1) − drift` floored at zero, then makeup as the sum of the three
+/// # Errors `DomainError` when the input is out of domain. Port of `coolingTowerWaterBalance`: the cycles guard comes first, before any arithmetic, then the two losses are asserted non-negative and finite, then blowdown at `evaporation / (cycles − 1) − drift` floored at zero, then makeup as the sum of the three
 pub fn cooling_tower_water_balance(input: &WaterBalanceInput) -> Result<WaterBalance, DomainError> {
     if input.cycles_of_concentration <= 1.0 {
         return Err(DomainError::new("Cycles of concentration must exceed 1."));

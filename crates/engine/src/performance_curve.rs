@@ -85,7 +85,7 @@ fn interpolate_corner(
     )
 }
 
-/// Port of `performanceCurveBounds`: the record set's four axis ranges.
+/// # Errors `DomainError` when the input is out of domain. Port of `performanceCurveBounds`: the record set's four axis ranges.
 pub fn performance_curve_bounds(
     records: &[PerformanceCurveRecord],
 ) -> Result<PerformanceCurveBounds, DomainError> {
@@ -110,15 +110,19 @@ pub fn performance_curve_bounds(
     })
 }
 
+fn same(a: f64, b: f64) -> bool {
+    a.partial_cmp(&b) == Some(std::cmp::Ordering::Equal)
+}
+
 fn inverse_lerp(a: f64, b: f64, value: f64) -> f64 {
-    if a == b {
+    if same(a, b) {
         0.0
     } else {
         (value - a) / (b - a)
     }
 }
 
-/// Port of `predictColdWaterFromPerformanceCurves`: bracket the test point on both axes, interpolate the four corner curves, and blend them bilinearly.
+/// # Errors `DomainError` when the input is out of domain. Port of `predictColdWaterFromPerformanceCurves`: bracket the test point on both axes, interpolate the four corner curves, and blend them bilinearly.
 pub fn predict_cold_water_from_performance_curves(
     records: &[PerformanceCurveRecord],
     wet_bulb_c: f64,
@@ -134,12 +138,12 @@ pub fn predict_cold_water_from_performance_curves(
     let q21 = interpolate_corner(records, wet_bulb_hi, range_lo, water_flow_kg_s)?;
     let q12 = interpolate_corner(records, wet_bulb_lo, range_hi, water_flow_kg_s)?;
     let q22 = interpolate_corner(records, wet_bulb_hi, range_hi, water_flow_kg_s)?;
-    let tx = if wet_bulb_lo == wet_bulb_hi {
+    let tx = if same(wet_bulb_lo, wet_bulb_hi) {
         0.0
     } else {
         inverse_lerp(wet_bulb_lo, wet_bulb_hi, wet_bulb_c)
     };
-    let ty = if range_lo == range_hi {
+    let ty = if same(range_lo, range_hi) {
         0.0
     } else {
         inverse_lerp(range_lo, range_hi, range_c)
@@ -161,7 +165,7 @@ pub fn predict_cold_water_from_performance_curves(
     })
 }
 
-/// Port of `predictWaterFlowFromPerformanceCurves`: solve the water flow whose curve prediction matches the given cold-water temperature, then report that prediction.
+/// # Errors `DomainError` when the input is out of domain. Port of `predictWaterFlowFromPerformanceCurves`: solve the water flow whose curve prediction matches the given cold-water temperature, then report that prediction.
 pub fn predict_water_flow_from_performance_curves(
     records: &[PerformanceCurveRecord],
     wet_bulb_c: f64,
@@ -199,7 +203,7 @@ pub fn predict_water_flow_from_performance_curves(
     })
 }
 
-/// Port of `evaluatePerformanceCurveCapability`: the test's adjusted flow over the flow the curve set implies, and the leaving-water deviation against the curve prediction at that flow.
+/// # Errors `DomainError` when the input is out of domain. Port of `evaluatePerformanceCurveCapability`: the test's adjusted flow over the flow the curve set implies, and the leaving-water deviation against the curve prediction at that flow.
 pub fn evaluate_performance_curve_capability(
     records: &[PerformanceCurveRecord],
     test_wet_bulb_c: f64,

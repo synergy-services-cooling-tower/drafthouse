@@ -14,6 +14,7 @@ impl DomainError {
         }
     }
 
+    #[must_use]
     pub fn message(&self) -> &str {
         &self.message
     }
@@ -27,7 +28,7 @@ impl fmt::Display for DomainError {
 
 impl std::error::Error for DomainError {}
 
-/// Port of `assertFiniteNumber`.
+/// # Errors `DomainError` when the input is out of domain. Port of `assertFiniteNumber`.
 pub fn assert_finite_number(value: f64, name: &str) -> Result<f64, DomainError> {
     if !value.is_finite() {
         return Err(DomainError::new(format!("{name} must be a finite number.")));
@@ -35,7 +36,7 @@ pub fn assert_finite_number(value: f64, name: &str) -> Result<f64, DomainError> 
     Ok(value)
 }
 
-/// Port of `assertPositive`; the JavaScript `allowZero` variant is [`assert_non_negative`].
+/// # Errors `DomainError` when the input is out of domain. Port of `assertPositive`; the JavaScript `allowZero` variant is [`assert_non_negative`].
 pub fn assert_positive(value: f64, name: &str) -> Result<f64, DomainError> {
     assert_finite_number(value, name)?;
     if value <= 0.0 {
@@ -44,7 +45,7 @@ pub fn assert_positive(value: f64, name: &str) -> Result<f64, DomainError> {
     Ok(value)
 }
 
-/// Port of the JavaScript `assertPositive(value, name, { allowZero: true })`: a finite, non-negative quantity.
+/// # Errors `DomainError` when the input is out of domain. Port of the JavaScript `assertPositive(value, name, { allowZero: true })`: a finite, non-negative quantity.
 pub fn assert_non_negative(value: f64, name: &str) -> Result<f64, DomainError> {
     assert_finite_number(value, name)?;
     if value < 0.0 {
@@ -54,11 +55,13 @@ pub fn assert_non_negative(value: f64, name: &str) -> Result<f64, DomainError> {
 }
 
 /// Port of `clamp`; returns NaN for a NaN input, like the JavaScript `Math.min/Math.max` pair it replaces.
+#[must_use]
 pub fn clamp(value: f64, min: f64, max: f64) -> f64 {
     value.clamp(min, max)
 }
 
 /// Port of two-argument `Math.min`: a NaN operand propagates, where Rust's own `f64::min` returns the other operand and would quietly turn a NaN into a plausible number.
+#[must_use]
 pub fn js_min(a: f64, b: f64) -> f64 {
     if a.is_nan() || b.is_nan() {
         f64::NAN
@@ -70,6 +73,7 @@ pub fn js_min(a: f64, b: f64) -> f64 {
 }
 
 /// Port of two-argument `Math.max`, with the same NaN rule as [`js_min`].
+#[must_use]
 pub fn js_max(a: f64, b: f64) -> f64 {
     if a.is_nan() || b.is_nan() {
         f64::NAN
@@ -84,15 +88,44 @@ fn lerp(a: f64, b: f64, t: f64) -> f64 {
     a + (b - a) * t
 }
 
+/// `value as f64` for a count, exact below 2^32.
+#[must_use]
+pub fn count_as_f64(value: usize) -> f64 {
+    f64::from(u32::try_from(value).unwrap_or(u32::MAX))
+}
+
+/// `value as u64`: truncation toward zero, saturating, NaN to zero.
+#[must_use]
+pub fn truncate_to_u64(value: f64) -> u64 {
+    if value.is_nan() || value < 1.0 {
+        return 0;
+    }
+    if value >= 18_446_744_073_709_551_616.0 {
+        return u64::MAX;
+    }
+    let bits = value.to_bits();
+    let exponent = (bits >> 52) & 0x7ff;
+    let mantissa = (bits & 0x000f_ffff_ffff_ffff) | 0x0010_0000_0000_0000;
+    if exponent >= 1075 {
+        mantissa << (exponent - 1075)
+    } else {
+        mantissa >> (1075 - exponent)
+    }
+}
+
+fn same(a: f64, b: f64) -> bool {
+    a.partial_cmp(&b) == Some(Ordering::Equal)
+}
+
 fn inverse_lerp(a: f64, b: f64, value: f64) -> f64 {
-    if a == b {
+    if same(a, b) {
         0.0
     } else {
         (value - a) / (b - a)
     }
 }
 
-/// Port of `interpolate1D`: linear interpolation over an unsorted table of records.
+/// # Errors `DomainError` when the input is out of domain. Port of `interpolate1D`: linear interpolation over an unsorted table of records.
 pub fn interpolate_1d<P, X, Y>(
     points: &[P],
     x: f64,
@@ -104,31 +137,28 @@ where
     X: Fn(&P) -> f64,
     Y: Fn(&P) -> f64,
 {
-    if points.len() < 2 {
-        return Err(DomainError::new(
-            "At least two interpolation points are required.",
-        ));
-    }
     let mut sorted: Vec<(f64, f64)> = points
         .iter()
         .map(|point| (x_of(point), y_of(point)))
         .collect();
     sorted.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(Ordering::Equal));
 
-    let first = sorted[0];
-    let last = sorted[sorted.len() - 1];
+    let (&[first, second, ..], &[.., previous, last]) = (sorted.as_slice(), sorted.as_slice())
+    else {
+        return Err(DomainError::new(
+            "At least two interpolation points are required.",
+        ));
+    };
     if x <= first.0 {
         if clamp_ends {
             return Ok(first.1);
         }
-        let second = sorted[1];
         return Ok(lerp(first.1, second.1, inverse_lerp(first.0, second.0, x)));
     }
     if x >= last.0 {
         if clamp_ends {
             return Ok(last.1);
         }
-        let previous = sorted[sorted.len() - 2];
         return Ok(lerp(
             previous.1,
             last.1,
@@ -136,25 +166,26 @@ where
         ));
     }
     for pair in sorted.windows(2) {
-        let (a, b) = (pair[0], pair[1]);
-        if x >= a.0 && x <= b.0 {
-            return Ok(lerp(a.1, b.1, inverse_lerp(a.0, b.0, x)));
+        if let &[a, b] = pair {
+            if x >= a.0 && x <= b.0 {
+                return Ok(lerp(a.1, b.1, inverse_lerp(a.0, b.0, x)));
+            }
         }
     }
     Err(DomainError::new("Interpolation failed unexpectedly."))
 }
 
-fn math_sign(value: f64) -> f64 {
+fn math_sign(value: f64) -> i8 {
     if value > 0.0 {
-        1.0
+        1
     } else if value < 0.0 {
-        -1.0
+        -1
     } else {
-        0.0
+        0
     }
 }
 
-/// Port of `integrateSimpson`: composite Simpson's rule with the segment count rounded up to an even number (minimum 2).
+/// # Errors `DomainError` when the input is out of domain. Port of `integrateSimpson`: composite Simpson's rule with the segment count rounded up to an even number (minimum 2).
 pub fn integrate_simpson<F>(
     function: F,
     lower: f64,
@@ -166,36 +197,36 @@ where
 {
     assert_finite_number(lower, "integration lower bound")?;
     assert_finite_number(upper, "integration upper bound")?;
-    if upper == lower {
+    if same(upper, lower) {
         return Ok(0.0);
     }
     let mut n = segments.max(2);
     if !n.is_multiple_of(2) {
         n += 1;
     }
-    let h = (upper - lower) / n as f64;
+    let h = (upper - lower) / count_as_f64(n);
     let mut sum = function(lower)? + function(upper)?;
     for i in 1..n {
         let weight = if i % 2 == 0 { 2.0 } else { 4.0 };
-        sum += weight * function(lower + i as f64 * h)?;
+        sum += weight * function(lower + count_as_f64(i) * h)?;
     }
     Ok((h / 3.0) * sum)
 }
 
-/// Port of `integrateChebyshev4`: four-point equal-weight Tchebycheff quadrature, the form used in cooling-tower worksheets.
+/// # Errors `DomainError` when the input is out of domain. Port of `integrateChebyshev4`: four-point equal-weight Tchebycheff quadrature, the form used in cooling-tower worksheets.
 pub fn integrate_chebyshev4<F>(function: F, lower: f64, upper: f64) -> Result<f64, DomainError>
 where
     F: Fn(f64) -> Result<f64, DomainError>,
 {
-    if upper == lower {
+    const FRACTIONS: [f64; 4] = [
+        0.102_672_763_854,
+        0.406_203_762_957,
+        0.593_796_237_043,
+        0.897_327_236_146,
+    ];
+    if same(upper, lower) {
         return Ok(0.0);
     }
-    const FRACTIONS: [f64; 4] = [
-        0.102672763854,
-        0.406203762957,
-        0.593796237043,
-        0.897327236146,
-    ];
     let span = upper - lower;
     let mut total = 0.0;
     for fraction in FRACTIONS {
@@ -222,7 +253,7 @@ impl Default for BracketedRootOptions {
     }
 }
 
-/// Port of `solveBracketedRoot`: bisection on a bracketed root, stopping on either the residual `tolerance` or the bracket width `x_tolerance`.
+/// # Errors `DomainError` when the input is out of domain. Port of `solveBracketedRoot`: bisection on a bracketed root, stopping on either the residual `tolerance` or the bracket width `x_tolerance`.
 pub fn solve_bracketed_root<F>(
     function: F,
     lower: f64,
@@ -254,7 +285,7 @@ where
     let mut hi = upper;
     let mut f_lo = f_lower;
     for _ in 0..options.max_iterations {
-        let midpoint = (lo + hi) / 2.0;
+        let midpoint = f64::midpoint(lo, hi);
         let f_mid = function(midpoint)?;
         if !f_mid.is_finite() {
             return Err(DomainError::new(
@@ -271,7 +302,7 @@ where
             hi = midpoint;
         }
     }
-    Ok((lo + hi) / 2.0)
+    Ok(f64::midpoint(lo, hi))
 }
 
 /// Which root to return when a scan finds several, mirroring the JavaScript `prefer` option.
@@ -301,7 +332,7 @@ impl Default for RootScanOptions {
     }
 }
 
-/// Port of `findRootByScan`: sample the interval, bracket every sign change, and refine it with bisection.
+/// # Errors `DomainError` when the input is out of domain. Port of `findRootByScan`: sample the interval, bracket every sign change, and refine it with bisection.
 pub fn find_root_by_scan<F>(
     function: F,
     lower: f64,
@@ -321,7 +352,7 @@ where
     let mut previous_f = function(previous_x)?;
 
     for i in 1..=options.samples {
-        let x = lower + ((upper - lower) * i as f64) / options.samples as f64;
+        let x = lower + ((upper - lower) * count_as_f64(i)) / count_as_f64(options.samples);
         let f_x = function(x)?;
         if previous_f.is_finite() && f_x.is_finite() {
             if previous_f == 0.0 {
@@ -344,27 +375,23 @@ where
         previous_f = f_x;
     }
 
-    if roots.is_empty() {
-        return Err(DomainError::new(
-            "No bracketed root was found in the requested interval.",
-        ));
-    }
-    Ok(match options.prefer {
-        RootPreference::Last => *roots.last().expect("roots is non-empty"),
-        RootPreference::First => roots[0],
-    })
+    let chosen = match options.prefer {
+        RootPreference::Last => roots.last(),
+        RootPreference::First => roots.first(),
+    };
+    chosen
+        .copied()
+        .ok_or_else(|| DomainError::new("No bracketed root was found in the requested interval."))
 }
 
-/// Port of `bracketValues`: the two sorted unique values that bracket `target`.
+/// # Errors `Err` when the input is out of domain. Port of `bracketValues`: the two sorted unique values that bracket `target`.
 pub fn bracket_values(values: &[f64], target: f64) -> Result<(f64, f64), DomainError> {
-    if values.is_empty() {
-        return Err(DomainError::new("Cannot bracket an empty value set."));
-    }
     let mut sorted: Vec<f64> = values.to_vec();
     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal));
     sorted.dedup();
-    let first = sorted[0];
-    let last = sorted[sorted.len() - 1];
+    let (Some(&first), Some(&last)) = (sorted.first(), sorted.last()) else {
+        return Err(DomainError::new("Cannot bracket an empty value set."));
+    };
     if target <= first {
         return Ok((first, first));
     }
@@ -372,14 +399,17 @@ pub fn bracket_values(values: &[f64], target: f64) -> Result<(f64, f64), DomainE
         return Ok((last, last));
     }
     for pair in sorted.windows(2) {
-        if target >= pair[0] && target <= pair[1] {
-            return Ok((pair[0], pair[1]));
+        if let &[low, high] = pair {
+            if target >= low && target <= high {
+                return Ok((low, high));
+            }
         }
     }
     Ok((first, last))
 }
 
 /// Port of `bilinear`: linear interpolation across the first axis, then across the second.
+#[must_use]
 pub fn bilinear(q11: f64, q21: f64, q12: f64, q22: f64, tx: f64, ty: f64) -> f64 {
     let bottom = lerp(q11, q21, tx);
     let top = lerp(q12, q22, tx);
@@ -387,12 +417,13 @@ pub fn bilinear(q11: f64, q21: f64, q12: f64, q22: f64, tx: f64, ty: f64) -> f64
 }
 
 /// Port of `range`: `count` values from `start` to `stop` inclusive.
+#[must_use]
 pub fn range(start: f64, stop: f64, count: usize) -> Vec<f64> {
     if count < 2 {
         return vec![start];
     }
     (0..count)
-        .map(|index| lerp(start, stop, index as f64 / (count - 1) as f64))
+        .map(|index| lerp(start, stop, count_as_f64(index) / count_as_f64(count - 1)))
         .collect()
 }
 
@@ -403,9 +434,11 @@ pub struct SeededRandom {
 }
 
 impl SeededRandom {
+    #[must_use]
     pub fn new(seed: f64) -> Self {
         Self {
-            state: seed.rem_euclid(4_294_967_296.0) as u32,
+            state: u32::try_from(truncate_to_u64(seed.rem_euclid(4_294_967_296.0)))
+                .unwrap_or(u32::MAX),
         }
     }
 
@@ -414,12 +447,13 @@ impl SeededRandom {
         self.state = self.state.wrapping_add(0x6D2B_79F5);
         let mut t = self.state;
         t = (t ^ (t >> 15)).wrapping_mul(t | 1);
-        t ^= t.wrapping_add((t ^ (t >> 7)).wrapping_mul(t | 61));
+        t ^= t.wrapping_add((t ^ (t >> 7)).wrapping_mul(t | 0x3D));
         f64::from(t ^ (t >> 14)) / 4_294_967_296.0
     }
 }
 
 /// Port of `createSeededRandom(seed)` — the same object, spelled the way the reference names it.
+#[must_use]
 pub fn create_seeded_random(seed: f64) -> SeededRandom {
     SeededRandom::new(seed)
 }
@@ -438,20 +472,23 @@ pub fn gaussian_random<F: FnMut() -> f64>(random: &mut F) -> f64 {
 }
 
 /// Port of `percentile`: the linear interpolation between the two nearest order statistics of a sorted copy, with the position clamped to the sample range.
+#[must_use]
 pub fn percentile(values: &[f64], p: f64) -> f64 {
     if values.is_empty() {
         return f64::NAN;
     }
     let mut sorted = values.to_vec();
     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal));
-    let index = clamp(p, 0.0, 1.0) * (sorted.len() - 1) as f64;
+    let index = clamp(p, 0.0, 1.0) * count_as_f64(sorted.len() - 1);
     let lower = index.floor();
     let upper = index.ceil();
-    lerp(
-        sorted[lower as usize],
-        sorted[upper as usize],
-        index - lower,
-    )
+    let at = |position: f64| {
+        usize::try_from(truncate_to_u64(position))
+            .ok()
+            .and_then(|slot| sorted.get(slot).copied())
+            .unwrap_or(f64::NAN)
+    };
+    lerp(at(lower), at(upper), index - lower)
 }
 
 #[cfg(test)]

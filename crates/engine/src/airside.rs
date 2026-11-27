@@ -97,11 +97,13 @@ pub struct AirsideAreas {
 }
 
 /// Port of `velocityPressurePa`.
+#[must_use]
 pub fn velocity_pressure_pa(air_density_kg_m3: f64, velocity_ms: f64) -> f64 {
     0.5 * air_density_kg_m3 * velocity_ms.powi(2)
 }
 
 /// Port of `minorLossPressurePa`.
+#[must_use]
 pub fn minor_loss_pressure_pa(
     loss_coefficient: f64,
     air_density_kg_m3: f64,
@@ -110,7 +112,7 @@ pub fn minor_loss_pressure_pa(
     loss_coefficient * velocity_pressure_pa(air_density_kg_m3, velocity_ms)
 }
 
-/// Port of `zoneMerkelNumber`.
+/// # Errors `DomainError` when the input is out of domain. Port of `zoneMerkelNumber`.
 pub fn zone_merkel_number(
     zone: Option<&ZoneCorrelation>,
     height_m: f64,
@@ -129,7 +131,7 @@ pub fn zone_merkel_number(
     Ok(per_meter * height_m * thermal_multiplier)
 }
 
-/// Port of `fillThermalMerkelNumber`.
+/// # Errors `DomainError` when the input is out of domain. Port of `fillThermalMerkelNumber`.
 pub fn fill_thermal_merkel_number(
     fill: &FillRecord,
     depth_m: f64,
@@ -151,7 +153,7 @@ pub fn fill_thermal_merkel_number(
     )
 }
 
-/// Port of `fillPressureDropPa`.
+/// # Errors `DomainError` when the input is out of domain. Port of `fillPressureDropPa`.
 pub fn fill_pressure_drop_pa(
     fill: &FillRecord,
     depth_m: f64,
@@ -172,7 +174,7 @@ pub fn fill_pressure_drop_pa(
     Ok(per_meter_pa * depth_m * pressure_multiplier)
 }
 
-/// Port of `driftPerformanceAtVelocity`: both curve readings are extrapolated linearly outside the tabulated range (`clampEnds: false`), so a velocity beyond the curve is not an error.
+/// # Errors `DomainError` when the input is out of domain. Port of `driftPerformanceAtVelocity`: both curve readings are extrapolated linearly outside the tabulated range (`clampEnds: false`), so a velocity beyond the curve is not an error.
 pub fn drift_performance_at_velocity(
     drift_eliminator: &DriftEliminatorRecord,
     face_velocity_ms: f64,
@@ -198,6 +200,7 @@ pub fn drift_performance_at_velocity(
 }
 
 /// Port of `resolveAirsideAreas`.
+#[must_use]
 pub fn resolve_airside_areas(tower: &TowerRecord, fan: Option<&FanRecord>) -> AirsideAreas {
     let fill_area_m2 = tower.fill_area_m2;
     let air_free_area_m2 = tower.air_free_area_m2.unwrap_or(fill_area_m2);
@@ -238,7 +241,7 @@ pub struct FanStackDischarge {
     pub basis: FanPressureBasis,
 }
 
-/// Port of `fanStackDischargePressurePa`.
+/// # Errors `DomainError` when the input is out of domain. Port of `fanStackDischargePressurePa`.
 pub fn fan_stack_discharge_pressure_pa(
     input: FanStackDischargeInput,
 ) -> Result<FanStackDischarge, DomainError> {
@@ -276,6 +279,7 @@ fn missing_fan_stack_area() -> DomainError {
 }
 
 /// Input to [`system_pressure_breakdown`], mirroring the JavaScript options object.
+#[derive(Clone, Copy)]
 pub struct SystemPressureBreakdownInput<'a> {
     pub tower: &'a TowerRecord,
     pub fill: &'a FillRecord,
@@ -320,6 +324,7 @@ pub struct SystemPressureBreakdown {
 }
 
 /// Input to [`layered_system_pressure_breakdown`]: the air-side machinery plus the **resolved layers**, in physical order (top first).
+#[derive(Clone, Copy)]
 pub struct LayeredBreakdownInput<'a> {
     pub tower: &'a TowerRecord,
     pub layers: &'a [LayerTerms<'a>],
@@ -340,7 +345,7 @@ pub struct LayeredBreakdown {
     pub fill_layers: Vec<FillLayerResult>,
 }
 
-/// Port of `systemPressureBreakdown` for an **ordered fill stack**.
+/// # Errors `DomainError` when the input is out of domain. Port of `systemPressureBreakdown` for an **ordered fill stack**.
 pub fn layered_system_pressure_breakdown(
     input: LayeredBreakdownInput<'_>,
 ) -> Result<LayeredBreakdown, DomainError> {
@@ -349,165 +354,50 @@ pub fn layered_system_pressure_breakdown(
         return Err(crate::layers::empty_stack_error());
     }
     let areas = resolve_airside_areas(input.tower, input.fan);
-    let AirsideAreas {
-        fill_area_m2,
-        air_free_area_m2,
-        drift_area_m2,
-        inlet_area_m2,
-        plenum_area_m2,
-        fan_stack_area_m2,
-    } = areas;
+    let loads = Loadings::new(&input, &areas);
 
-    let water_loading_kg_m2_s = input.water_mass_flow_kg_s / fill_area_m2;
-    let dry_air_mass_flow_kg_s = input.volumetric_air_flow_m3_s * input.dry_air_density_kg_m3;
-    let dry_air_loading_kg_m2_s = dry_air_mass_flow_kg_s / air_free_area_m2;
-    let fill_velocity_ms = input.volumetric_air_flow_m3_s / air_free_area_m2;
-    let drift_velocity_ms = input.volumetric_air_flow_m3_s / drift_area_m2;
-    let inlet_velocity_ms = input.volumetric_air_flow_m3_s / inlet_area_m2;
-    let plenum_velocity_ms = input.volumetric_air_flow_m3_s / plenum_area_m2;
-
-    let mut fill_pa = 0.0;
-    let mut layer_pressure_drop_pa = Vec::with_capacity(input.layers.len());
-    for terms in input.layers {
-        let drop_pa = fill_pressure_drop_pa(
-            terms.fill,
-            terms.depth_m,
-            water_loading_kg_m2_s,
-            dry_air_loading_kg_m2_s,
-            terms.pressure_multiplier * input.pressure_multiplier,
-        )?;
-        fill_pa += drop_pa;
-        layer_pressure_drop_pa.push(drop_pa);
-    }
-    let drift = drift_performance_at_velocity(input.drift_eliminator, drift_velocity_ms)?;
-
-    let inlet_pa = minor_loss_pressure_pa(
-        input.tower.inlet_loss_coefficient.unwrap_or(1.2),
-        input.moist_air_density_kg_m3,
-        inlet_velocity_ms,
-    );
-    let distribution_pa = minor_loss_pressure_pa(
-        input.tower.distribution_loss_coefficient.unwrap_or(0.8),
-        input.moist_air_density_kg_m3,
-        fill_velocity_ms,
-    );
-    let support_pa = minor_loss_pressure_pa(
-        input.tower.support_loss_coefficient.unwrap_or(0.6),
-        input.moist_air_density_kg_m3,
-        fill_velocity_ms,
-    );
-    let plenum_pa = minor_loss_pressure_pa(
-        input.tower.plenum_loss_coefficient.unwrap_or(0.7),
-        input.moist_air_density_kg_m3,
-        plenum_velocity_ms,
-    );
-    let stack = fan_stack_discharge_pressure_pa(FanStackDischargeInput {
-        volumetric_air_flow_m3_s: input.volumetric_air_flow_m3_s,
-        fan_stack_area_m2,
-        moist_air_density_kg_m3: input.moist_air_density_kg_m3,
-        stack_recovery_factor: input
-            .tower
-            .stack_recovery_factor
-            .or(input.fan.and_then(|fan| fan.stack_recovery_factor))
-            .unwrap_or(0.0),
-        fan_pressure_basis: match input.fan {
-            Some(fan) => fan.pressure_basis.unwrap_or(FanPressureBasis::Total),
-            None => FanPressureBasis::Static,
-        },
-    })?;
+    let (fill_pa, layer_pressure_drop_pa) = layer_pressure_drops(&input, &loads)?;
+    let drift = drift_performance_at_velocity(input.drift_eliminator, loads.drift_velocity_ms)?;
+    let minor = MinorLosses::new(&input, &loads);
+    let stack = layered_fan_stack(&input, areas.fan_stack_area_m2)?;
     let fixed_pa = input.tower.fixed_pressure_loss_pa.unwrap_or(0.0);
     let total_pa = fill_pa
         + drift.pressure_drop_pa
-        + inlet_pa
-        + distribution_pa
-        + support_pa
-        + plenum_pa
+        + minor.inlet
+        + minor.distribution
+        + minor.support
+        + minor.plenum
         + stack.pressure_pa
         + fixed_pa;
 
-    let mut fill_merkel_number = 0.0;
-    let mut layer_merkel_number = Vec::with_capacity(input.layers.len());
-    for terms in input.layers {
-        let merkel_number = fill_thermal_merkel_number(
-            terms.fill,
-            terms.depth_m,
-            water_loading_kg_m2_s,
-            dry_air_loading_kg_m2_s,
-            terms.thermal_multiplier * input.thermal_multiplier,
-        )?;
-        fill_merkel_number += merkel_number;
-        layer_merkel_number.push(merkel_number);
-    }
-    let spray_zone_merkel_number = zone_merkel_number(
-        input.tower.spray_zone.as_ref(),
-        input.tower.spray_zone_height_m.unwrap_or(0.0),
-        water_loading_kg_m2_s,
-        dry_air_loading_kg_m2_s,
-        input.thermal_multiplier,
+    let (fill_merkel_number, layer_merkel_number) = layer_merkel_numbers(&input, &loads)?;
+    let (spray_zone_merkel_number, rain_zone_merkel_number) = zone_merkel_numbers(&input, &loads)?;
+    let fill_layers = layer_results(
+        &input,
+        &loads,
+        &layer_pressure_drop_pa,
+        &layer_merkel_number,
     )?;
-    let rain_zone_merkel_number = zone_merkel_number(
-        input.tower.rain_zone.as_ref(),
-        input.tower.rain_zone_height_m.unwrap_or(0.0),
-        water_loading_kg_m2_s,
-        dry_air_loading_kg_m2_s,
-        input.thermal_multiplier,
-    )?;
-
-    let mut cumulative_pressure_drop_pa = 0.0;
-    let mut cumulative_merkel_number = 0.0;
-    let mut fill_layers = Vec::with_capacity(input.layers.len());
-    for (index, terms) in input.layers.iter().enumerate() {
-        cumulative_pressure_drop_pa += layer_pressure_drop_pa[index];
-        cumulative_merkel_number += layer_merkel_number[index];
-        fill_layers.push(FillLayerResult {
-            position: index + 1,
-            fill_id: terms.fill.id.clone(),
-            depth_m: terms.depth_m,
-            thermal_multiplier: terms.thermal_multiplier,
-            pressure_multiplier: terms.pressure_multiplier,
-            effective_thermal_multiplier: terms.thermal_multiplier * input.thermal_multiplier,
-            effective_pressure_multiplier: terms.pressure_multiplier * input.pressure_multiplier,
-            thermal: terms
-                .fill
-                .thermal
-                .expect("fill_thermal_merkel_number resolves the thermal correlation"),
-            pressure: terms
-                .fill
-                .pressure
-                .expect("fill_pressure_drop_pa resolves the pressure correlation"),
-            limits: terms.fill.limits,
-            volumetric_air_flow_m3_s: input.volumetric_air_flow_m3_s,
-            dry_air_mass_flow_kg_s,
-            water_mass_flow_kg_s: input.water_mass_flow_kg_s,
-            water_loading_kg_m2_s,
-            dry_air_loading_kg_m2_s,
-            fill_velocity_ms,
-            pressure_drop_pa: layer_pressure_drop_pa[index],
-            merkel_number: layer_merkel_number[index],
-            cumulative_pressure_drop_pa,
-            cumulative_merkel_number,
-        });
-    }
 
     Ok(LayeredBreakdown {
         breakdown: SystemPressureBreakdown {
             total_pa,
             fill_pa,
             drift_pa: drift.pressure_drop_pa,
-            inlet_pa,
-            distribution_pa,
-            support_pa,
-            plenum_pa,
+            inlet_pa: minor.inlet,
+            distribution_pa: minor.distribution,
+            support_pa: minor.support,
+            plenum_pa: minor.plenum,
             fan_stack_pa: stack.pressure_pa,
             fixed_pa,
             drift_ppm: drift.drift_ppm,
-            water_loading_kg_m2_s,
-            dry_air_loading_kg_m2_s,
-            dry_air_mass_flow_kg_s,
-            fill_velocity_ms,
-            drift_velocity_ms,
-            inlet_velocity_ms,
-            plenum_velocity_ms,
+            water_loading_kg_m2_s: loads.water_loading_kg_m2_s,
+            dry_air_loading_kg_m2_s: loads.dry_air_loading_kg_m2_s,
+            dry_air_mass_flow_kg_s: loads.dry_air_mass_flow_kg_s,
+            fill_velocity_ms: loads.fill_velocity_ms,
+            drift_velocity_ms: loads.drift_velocity_ms,
+            inlet_velocity_ms: loads.inlet_velocity_ms,
+            plenum_velocity_ms: loads.plenum_velocity_ms,
             fan_stack_velocity_ms: stack.stack_velocity_ms,
             fan_pressure_basis: stack.basis,
             areas,
@@ -522,7 +412,202 @@ pub fn layered_system_pressure_breakdown(
     })
 }
 
-/// Port of `systemPressureBreakdown`.
+struct Loadings {
+    water_loading_kg_m2_s: f64,
+    dry_air_mass_flow_kg_s: f64,
+    dry_air_loading_kg_m2_s: f64,
+    fill_velocity_ms: f64,
+    drift_velocity_ms: f64,
+    inlet_velocity_ms: f64,
+    plenum_velocity_ms: f64,
+}
+
+impl Loadings {
+    fn new(input: &LayeredBreakdownInput<'_>, areas: &AirsideAreas) -> Self {
+        let dry_air_mass_flow_kg_s = input.volumetric_air_flow_m3_s * input.dry_air_density_kg_m3;
+        Self {
+            water_loading_kg_m2_s: input.water_mass_flow_kg_s / areas.fill_area_m2,
+            dry_air_mass_flow_kg_s,
+            dry_air_loading_kg_m2_s: dry_air_mass_flow_kg_s / areas.air_free_area_m2,
+            fill_velocity_ms: input.volumetric_air_flow_m3_s / areas.air_free_area_m2,
+            drift_velocity_ms: input.volumetric_air_flow_m3_s / areas.drift_area_m2,
+            inlet_velocity_ms: input.volumetric_air_flow_m3_s / areas.inlet_area_m2,
+            plenum_velocity_ms: input.volumetric_air_flow_m3_s / areas.plenum_area_m2,
+        }
+    }
+}
+
+struct MinorLosses {
+    inlet: f64,
+    distribution: f64,
+    support: f64,
+    plenum: f64,
+}
+
+impl MinorLosses {
+    fn new(input: &LayeredBreakdownInput<'_>, loads: &Loadings) -> Self {
+        let tower = input.tower;
+        let density = input.moist_air_density_kg_m3;
+        Self {
+            inlet: minor_loss_pressure_pa(
+                tower.inlet_loss_coefficient.unwrap_or(1.2),
+                density,
+                loads.inlet_velocity_ms,
+            ),
+            distribution: minor_loss_pressure_pa(
+                tower.distribution_loss_coefficient.unwrap_or(0.8),
+                density,
+                loads.fill_velocity_ms,
+            ),
+            support: minor_loss_pressure_pa(
+                tower.support_loss_coefficient.unwrap_or(0.6),
+                density,
+                loads.fill_velocity_ms,
+            ),
+            plenum: minor_loss_pressure_pa(
+                tower.plenum_loss_coefficient.unwrap_or(0.7),
+                density,
+                loads.plenum_velocity_ms,
+            ),
+        }
+    }
+}
+
+fn layered_fan_stack(
+    input: &LayeredBreakdownInput<'_>,
+    fan_stack_area_m2: Option<f64>,
+) -> Result<FanStackDischarge, DomainError> {
+    fan_stack_discharge_pressure_pa(FanStackDischargeInput {
+        volumetric_air_flow_m3_s: input.volumetric_air_flow_m3_s,
+        fan_stack_area_m2,
+        moist_air_density_kg_m3: input.moist_air_density_kg_m3,
+        stack_recovery_factor: input
+            .tower
+            .stack_recovery_factor
+            .or(input.fan.and_then(|fan| fan.stack_recovery_factor))
+            .unwrap_or(0.0),
+        fan_pressure_basis: match input.fan {
+            Some(fan) => fan.pressure_basis.unwrap_or(FanPressureBasis::Total),
+            None => FanPressureBasis::Static,
+        },
+    })
+}
+
+fn layer_pressure_drops(
+    input: &LayeredBreakdownInput<'_>,
+    loads: &Loadings,
+) -> Result<(f64, Vec<f64>), DomainError> {
+    let mut fill_pa = 0.0;
+    let mut drops = Vec::with_capacity(input.layers.len());
+    for terms in input.layers {
+        let drop_pa = fill_pressure_drop_pa(
+            terms.fill,
+            terms.depth_m,
+            loads.water_loading_kg_m2_s,
+            loads.dry_air_loading_kg_m2_s,
+            terms.pressure_multiplier * input.pressure_multiplier,
+        )?;
+        fill_pa += drop_pa;
+        drops.push(drop_pa);
+    }
+    Ok((fill_pa, drops))
+}
+
+fn layer_merkel_numbers(
+    input: &LayeredBreakdownInput<'_>,
+    loads: &Loadings,
+) -> Result<(f64, Vec<f64>), DomainError> {
+    let mut fill_merkel_number = 0.0;
+    let mut numbers = Vec::with_capacity(input.layers.len());
+    for terms in input.layers {
+        let merkel_number = fill_thermal_merkel_number(
+            terms.fill,
+            terms.depth_m,
+            loads.water_loading_kg_m2_s,
+            loads.dry_air_loading_kg_m2_s,
+            terms.thermal_multiplier * input.thermal_multiplier,
+        )?;
+        fill_merkel_number += merkel_number;
+        numbers.push(merkel_number);
+    }
+    Ok((fill_merkel_number, numbers))
+}
+
+fn zone_merkel_numbers(
+    input: &LayeredBreakdownInput<'_>,
+    loads: &Loadings,
+) -> Result<(f64, f64), DomainError> {
+    let spray = zone_merkel_number(
+        input.tower.spray_zone.as_ref(),
+        input.tower.spray_zone_height_m.unwrap_or(0.0),
+        loads.water_loading_kg_m2_s,
+        loads.dry_air_loading_kg_m2_s,
+        input.thermal_multiplier,
+    )?;
+    let rain = zone_merkel_number(
+        input.tower.rain_zone.as_ref(),
+        input.tower.rain_zone_height_m.unwrap_or(0.0),
+        loads.water_loading_kg_m2_s,
+        loads.dry_air_loading_kg_m2_s,
+        input.thermal_multiplier,
+    )?;
+    Ok((spray, rain))
+}
+
+fn layer_results(
+    input: &LayeredBreakdownInput<'_>,
+    loads: &Loadings,
+    pressure_drops_pa: &[f64],
+    merkel_numbers: &[f64],
+) -> Result<Vec<FillLayerResult>, DomainError> {
+    let mut cumulative_pressure_drop_pa = 0.0;
+    let mut cumulative_merkel_number = 0.0;
+    let mut fill_layers = Vec::with_capacity(input.layers.len());
+    let layers = input
+        .layers
+        .iter()
+        .zip(pressure_drops_pa)
+        .zip(merkel_numbers);
+    for (index, ((terms, &pressure_drop_pa), &merkel_number)) in layers.enumerate() {
+        cumulative_pressure_drop_pa += pressure_drop_pa;
+        cumulative_merkel_number += merkel_number;
+        fill_layers.push(FillLayerResult {
+            position: index + 1,
+            fill_id: terms.fill.id.clone(),
+            depth_m: terms.depth_m,
+            thermal_multiplier: terms.thermal_multiplier,
+            pressure_multiplier: terms.pressure_multiplier,
+            effective_thermal_multiplier: terms.thermal_multiplier * input.thermal_multiplier,
+            effective_pressure_multiplier: terms.pressure_multiplier * input.pressure_multiplier,
+            thermal: terms.fill.thermal.ok_or_else(|| {
+                DomainError::new(format!(
+                    "Fill {} has no thermal correlation.",
+                    terms.fill.id
+                ))
+            })?,
+            pressure: terms.fill.pressure.ok_or_else(|| {
+                DomainError::new(format!(
+                    "Fill {} has no pressure correlation.",
+                    terms.fill.id
+                ))
+            })?,
+            limits: terms.fill.limits,
+            volumetric_air_flow_m3_s: input.volumetric_air_flow_m3_s,
+            dry_air_mass_flow_kg_s: loads.dry_air_mass_flow_kg_s,
+            water_mass_flow_kg_s: input.water_mass_flow_kg_s,
+            water_loading_kg_m2_s: loads.water_loading_kg_m2_s,
+            dry_air_loading_kg_m2_s: loads.dry_air_loading_kg_m2_s,
+            fill_velocity_ms: loads.fill_velocity_ms,
+            pressure_drop_pa,
+            merkel_number,
+            cumulative_pressure_drop_pa,
+            cumulative_merkel_number,
+        });
+    }
+    Ok(fill_layers)
+}
+
+/// # Errors `DomainError` when the input is out of domain. Port of `systemPressureBreakdown`.
 pub fn system_pressure_breakdown(
     input: SystemPressureBreakdownInput<'_>,
 ) -> Result<SystemPressureBreakdown, DomainError> {
@@ -543,6 +628,7 @@ pub fn system_pressure_breakdown(
 }
 
 /// Input to [`check_fill_operating_envelope`].
+#[derive(Clone, Copy)]
 pub struct FillOperatingEnvelopeInput<'a> {
     pub fill: &'a FillRecord,
     pub water_loading_kg_m2_s: f64,
@@ -559,6 +645,7 @@ pub struct FillOperatingEnvelope {
 }
 
 /// Port of `checkFillOperatingEnvelope`.
+#[must_use]
 pub fn check_fill_operating_envelope(
     input: FillOperatingEnvelopeInput<'_>,
 ) -> FillOperatingEnvelope {
@@ -576,6 +663,7 @@ pub fn check_fill_operating_envelope(
 }
 
 /// The ported envelope's own failure texts, with the two dimensions a run may not be making a claim about optional: `None` skips that check instead of inventing a value for it (a run that declares no hot-water temperature has nothing to compare against the fill's limit).
+#[must_use]
 pub fn envelope_failures(
     fill: &FillRecord,
     water_loading_kg_m2_s: f64,
@@ -621,8 +709,7 @@ pub fn envelope_failures(
             .any(|class| class == water_quality_class)
         {
             failures.push(format!(
-                "Fill is not approved in the sample catalog for water-quality class “{}”.",
-                water_quality_class
+                "Fill is not approved in the sample catalog for water-quality class “{water_quality_class}”."
             ));
         }
     }
@@ -634,11 +721,17 @@ fn to_fixed(value: f64, digits: usize) -> String {
         return format!("{value}");
     }
     let exact = format!("{:.*}", digits + 25, value.abs());
-    let (integer_part, fraction) = exact.split_once('.').expect("a fixed-format decimal");
+    let Some((integer_part, fraction)) = exact.split_once('.') else {
+        return exact;
+    };
     let mut digits_text = String::with_capacity(integer_part.len() + digits);
     digits_text.push_str(integer_part);
     digits_text.push_str(&fraction[..digits]);
-    if fraction.as_bytes()[digits] >= b'5' {
+    if fraction
+        .as_bytes()
+        .get(digits)
+        .is_some_and(|&digit| digit >= b'5')
+    {
         increment_decimal(&mut digits_text);
     }
     let split = digits_text.len() - digits;
@@ -655,15 +748,18 @@ fn to_fixed(value: f64, digits: usize) -> String {
 
 fn increment_decimal(digits: &mut String) {
     let mut bytes = digits.clone().into_bytes();
-    for index in (0..bytes.len()).rev() {
-        if bytes[index] == b'9' {
-            bytes[index] = b'0';
+    let mut carried = true;
+    for byte in bytes.iter_mut().rev() {
+        if *byte == b'9' {
+            *byte = b'0';
         } else {
-            bytes[index] += 1;
-            *digits = String::from_utf8(bytes).expect("ascii digits");
-            return;
+            *byte += 1;
+            carried = false;
+            break;
         }
     }
-    bytes.insert(0, b'1');
-    *digits = String::from_utf8(bytes).expect("ascii digits");
+    if carried {
+        bytes.insert(0, b'1');
+    }
+    *digits = String::from_utf8_lossy(&bytes).into_owned();
 }

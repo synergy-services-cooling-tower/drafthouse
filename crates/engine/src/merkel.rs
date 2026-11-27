@@ -23,7 +23,7 @@ pub enum InletEnthalpyConvention {
     CtiSaturatedWetBulb,
 }
 
-/// Port of `validateThermalTemperatures`.
+/// # Errors `DomainError` when the input is out of domain. Port of `validateThermalTemperatures`.
 pub fn validate_thermal_temperatures(
     hot_water_c: f64,
     cold_water_c: f64,
@@ -42,7 +42,7 @@ pub fn validate_thermal_temperatures(
     Ok(())
 }
 
-/// Port of `inletAirEnthalpyKJkgDryAir`.
+/// # Errors `DomainError` when the input is out of domain. Port of `inletAirEnthalpyKJkgDryAir`.
 pub fn inlet_air_enthalpy_kj_kg_dry_air(
     inlet_air_state: &PsychrometricState,
     pressure_pa: f64,
@@ -59,6 +59,7 @@ pub fn inlet_air_enthalpy_kj_kg_dry_air(
 }
 
 /// Port of `airEnthalpyOperatingLineKJkg`.
+#[must_use]
 pub fn air_enthalpy_operating_line_kj_kg(
     water_temperature_c: f64,
     cold_water_c: f64,
@@ -94,6 +95,7 @@ pub struct MerkelInput {
 
 impl MerkelInput {
     /// The five physically required inputs; everything else takes the reference default.
+    #[must_use]
     pub fn new(
         hot_water_c: f64,
         cold_water_c: f64,
@@ -128,7 +130,7 @@ pub struct MerkelResult {
     pub integration: Integration,
 }
 
-/// Port of `merkelDemand`.
+/// # Errors `DomainError` when the input is out of domain. Port of `merkelDemand`.
 pub fn merkel_demand(input: &MerkelInput) -> Result<MerkelResult, DomainError> {
     validate_thermal_temperatures(input.hot_water_c, input.cold_water_c, input.wet_bulb_c)?;
     assert_positive(input.water_to_dry_air_ratio, "waterToDryAirRatio")?;
@@ -138,7 +140,7 @@ pub fn merkel_demand(input: &MerkelInput) -> Result<MerkelResult, DomainError> {
             .with_pressure(input.pressure_pa),
     )?;
     let cp_water = water_specific_heat_kj_kg_k(
-        (input.hot_water_c + input.cold_water_c) / 2.0,
+        f64::midpoint(input.hot_water_c, input.cold_water_c),
         input.salinity_g_kg,
     );
     let inlet_enthalpy = inlet_air_enthalpy_kj_kg_dry_air(
@@ -188,7 +190,7 @@ pub fn merkel_demand(input: &MerkelInput) -> Result<MerkelResult, DomainError> {
     })
 }
 
-/// Port of `safeMerkelDemand`: a pinch returns positive infinity (as the reference does) instead of an error; every other refusal still propagates.
+/// # Errors `DomainError` when the input is out of domain. Port of `safeMerkelDemand`: a pinch returns positive infinity (as the reference does) instead of an error; every other refusal still propagates.
 pub fn safe_merkel_demand(input: &MerkelInput) -> Result<f64, DomainError> {
     match merkel_demand(input) {
         Ok(result) => Ok(result.merkel_number),
@@ -197,7 +199,7 @@ pub fn safe_merkel_demand(input: &MerkelInput) -> Result<f64, DomainError> {
     }
 }
 
-/// Port of `towerCharacteristic`: the whole-tower characteristic `coefficient · L/G^exponent` the capability projection compares the design demand against.
+/// # Errors `DomainError` when the input is out of domain. Port of `towerCharacteristic`: the whole-tower characteristic `coefficient · L/G^exponent` the capability projection compares the design demand against.
 pub fn tower_characteristic(
     water_to_dry_air_ratio: f64,
     coefficient: f64,
@@ -208,7 +210,7 @@ pub fn tower_characteristic(
     Ok(coefficient * water_to_dry_air_ratio.powf(exponent))
 }
 
-/// Port of `characteristicCoefficient`: the coefficient that makes the characteristic pass through a measured demand at a measured L/G — the test-condition anchor of the capability projection.
+/// # Errors `DomainError` when the input is out of domain. Port of `characteristicCoefficient`: the coefficient that makes the characteristic pass through a measured demand at a measured L/G — the test-condition anchor of the capability projection.
 pub fn characteristic_coefficient(
     merkel_number: f64,
     water_to_dry_air_ratio: f64,
@@ -239,6 +241,7 @@ pub struct ColdWaterTemperatureInput {
 
 impl ColdWaterTemperatureInput {
     /// The five physically required inputs; everything else takes the reference default.
+    #[must_use]
     pub fn new(
         hot_water_c: f64,
         wet_bulb_c: f64,
@@ -313,7 +316,7 @@ pub struct ColdWaterTemperatureResult {
     pub cp_water_kj_kg_k: f64,
 }
 
-/// Port of `solveColdWaterTemperature`.
+/// # Errors `DomainError` when the input is out of domain. Port of `solveColdWaterTemperature`.
 pub fn solve_cold_water_temperature(
     input: &ColdWaterTemperatureInput,
 ) -> Result<ColdWaterTemperatureResult, DomainError> {

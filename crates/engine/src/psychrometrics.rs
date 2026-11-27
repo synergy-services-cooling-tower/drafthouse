@@ -4,7 +4,7 @@ use crate::numeric::{
 
 const R_DA: f64 = 287.042;
 const MIN_HUM_RATIO: f64 = 1e-7;
-const EPSILON: f64 = 0.621945;
+const EPSILON: f64 = 0.621_945;
 
 /// Port of `DEFAULT_PSYCHROMETRIC_OPTIONS`:
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -21,6 +21,7 @@ impl Default for PsychrometricOptions {
 }
 
 /// Port of `waterVaporEnhancementFactor`.
+#[must_use]
 pub fn water_vapor_enhancement_factor(pressure_pa: f64, options: PsychrometricOptions) -> f64 {
     if !options.enhancement_factor {
         return 1.0;
@@ -28,7 +29,7 @@ pub fn water_vapor_enhancement_factor(pressure_pa: f64, options: PsychrometricOp
     1.0007 + 3.46e-6 * (pressure_pa / 100.0)
 }
 
-/// Port of `saturationVaporPressurePa` — ASHRAE Fundamentals, Chapter 1.
+/// # Errors `DomainError` when the input is out of domain. Port of `saturationVaporPressurePa` — ASHRAE Fundamentals, Chapter 1.
 pub fn saturation_vapor_pressure_pa(dry_bulb_c: f64) -> Result<f64, DomainError> {
     assert_finite_number(dry_bulb_c, "temperature")?;
     let t_k = dry_bulb_c + 273.15;
@@ -40,13 +41,13 @@ pub fn saturation_vapor_pressure_pa(dry_bulb_c: f64) -> Result<f64, DomainError>
 
     let ln_pws = if dry_bulb_c <= 0.01 {
         let (c1, c2, c3, c4, c5, c6, c7) = (
-            -5.6745359e3,
-            6.3925247,
-            -9.677843e-3,
-            6.2215701e-7,
-            2.0747825e-9,
-            -9.484024e-13,
-            4.1635019,
+            -5.674_535_9e3,
+            6.392_524_7,
+            -9.677_843e-3,
+            6.221_570_1e-7,
+            2.074_782_5e-9,
+            -9.484_024e-13,
+            4.163_501_9,
         );
         c1 / t_k
             + c2
@@ -57,19 +58,19 @@ pub fn saturation_vapor_pressure_pa(dry_bulb_c: f64) -> Result<f64, DomainError>
             + c7 * t_k.ln()
     } else {
         let (c8, c9, c10, c11, c12, c13) = (
-            -5.8002206e3,
-            1.3914993,
-            -4.8640239e-2,
-            4.1764768e-5,
-            -1.4452093e-8,
-            6.5459673,
+            -5.800_220_6e3,
+            1.391_499_3,
+            -4.864_023_9e-2,
+            4.176_476_8e-5,
+            -1.445_209_3e-8,
+            6.545_967_3,
         );
         c8 / t_k + c9 + c10 * t_k + c11 * t_k.powi(2) + c12 * t_k.powi(3) + c13 * t_k.ln()
     };
     Ok(ln_pws.exp())
 }
 
-/// Port of `effectiveSaturationPressurePa`: the quantity that should drive every humidity-ratio calculation.
+/// # Errors `DomainError` when the input is out of domain. Port of `effectiveSaturationPressurePa`: the quantity that should drive every humidity-ratio calculation.
 pub fn effective_saturation_pressure_pa(
     temperature_c: f64,
     pressure_pa: f64,
@@ -79,7 +80,7 @@ pub fn effective_saturation_pressure_pa(
         * saturation_vapor_pressure_pa(temperature_c)?)
 }
 
-/// Port of `humidityRatioFromVaporPressure`.
+/// # Errors `DomainError` when the input is out of domain. Port of `humidityRatioFromVaporPressure`.
 pub fn humidity_ratio_from_vapor_pressure(
     vapor_pressure_pa: f64,
     pressure_pa: f64,
@@ -92,7 +93,7 @@ pub fn humidity_ratio_from_vapor_pressure(
     Ok(MIN_HUM_RATIO.max(EPSILON * vapor_pressure_pa / (pressure_pa - vapor_pressure_pa)))
 }
 
-/// Port of `vaporPressureFromHumidityRatio`.
+/// # Errors `DomainError` when the input is out of domain. Port of `vaporPressureFromHumidityRatio`.
 pub fn vapor_pressure_from_humidity_ratio(
     humidity_ratio: f64,
     pressure_pa: f64,
@@ -103,7 +104,7 @@ pub fn vapor_pressure_from_humidity_ratio(
     Ok(pressure_pa * humidity_ratio / (EPSILON + humidity_ratio))
 }
 
-/// Port of `saturationHumidityRatio`.
+/// # Errors `DomainError` when the input is out of domain. Port of `saturationHumidityRatio`.
 pub fn saturation_humidity_ratio(
     temperature_c: f64,
     pressure_pa: f64,
@@ -118,7 +119,7 @@ pub fn saturation_humidity_ratio(
     humidity_ratio_from_vapor_pressure(pws, pressure_pa)
 }
 
-/// Port of `humidityRatioFromRelativeHumidity`.
+/// # Errors `DomainError` when the input is out of domain. Port of `humidityRatioFromRelativeHumidity`.
 pub fn humidity_ratio_from_relative_humidity(
     dry_bulb_c: f64,
     relative_humidity: f64,
@@ -136,7 +137,7 @@ pub fn humidity_ratio_from_relative_humidity(
     )
 }
 
-/// Port of `relativeHumidityFromHumidityRatio` (clamped to 0…1, as the reference does).
+/// # Errors `DomainError` when the input is out of domain. Port of `relativeHumidityFromHumidityRatio` (clamped to 0…1, as the reference does).
 pub fn relative_humidity_from_humidity_ratio(
     dry_bulb_c: f64,
     humidity_ratio: f64,
@@ -148,7 +149,7 @@ pub fn relative_humidity_from_humidity_ratio(
     Ok(clamp(vapor_pressure / saturation_pressure, 0.0, 1.0))
 }
 
-/// Port of `humidityRatioFromWetBulb`, including the sub-zero relation.
+/// # Errors `DomainError` when the input is out of domain. Port of `humidityRatioFromWetBulb`, including the sub-zero relation.
 pub fn humidity_ratio_from_wet_bulb(
     dry_bulb_c: f64,
     wet_bulb_c: f64,
@@ -171,7 +172,7 @@ pub fn humidity_ratio_from_wet_bulb(
     Ok(MIN_HUM_RATIO.max(ratio))
 }
 
-/// Port of `wetBulbFromHumidityRatio`.
+/// # Errors `DomainError` when the input is out of domain. Port of `wetBulbFromHumidityRatio`.
 pub fn wet_bulb_from_humidity_ratio(
     dry_bulb_c: f64,
     humidity_ratio: f64,
@@ -200,7 +201,7 @@ pub fn wet_bulb_from_humidity_ratio(
     )
 }
 
-/// Port of `dewPointFromHumidityRatio`.
+/// # Errors `DomainError` when the input is out of domain. Port of `dewPointFromHumidityRatio`.
 pub fn dew_point_from_humidity_ratio(
     humidity_ratio: f64,
     pressure_pa: f64,
@@ -224,11 +225,12 @@ pub fn dew_point_from_humidity_ratio(
 }
 
 /// Port of `moistAirEnthalpyKJkgDryAir`.
+#[must_use]
 pub fn moist_air_enthalpy_kj_kg_dry_air(dry_bulb_c: f64, humidity_ratio: f64) -> f64 {
     1.006 * dry_bulb_c + humidity_ratio * (2501.0 + 1.86 * dry_bulb_c)
 }
 
-/// Port of `saturatedAirEnthalpyKJkgDryAir`.
+/// # Errors `DomainError` when the input is out of domain. Port of `saturatedAirEnthalpyKJkgDryAir`.
 pub fn saturated_air_enthalpy_kj_kg_dry_air(
     temperature_c: f64,
     pressure_pa: f64,
@@ -241,21 +243,24 @@ pub fn saturated_air_enthalpy_kj_kg_dry_air(
 }
 
 /// Port of `dryAirSpecificVolumeM3kg`.
+#[must_use]
 pub fn dry_air_specific_volume_m3_kg(
     dry_bulb_c: f64,
     humidity_ratio: f64,
     pressure_pa: f64,
 ) -> f64 {
     let t_k = dry_bulb_c + 273.15;
-    R_DA * t_k * (1.0 + 1.607858 * humidity_ratio) / pressure_pa
+    R_DA * t_k * (1.0 + 1.607_858 * humidity_ratio) / pressure_pa
 }
 
 /// Port of `dryAirDensityKgM3`.
+#[must_use]
 pub fn dry_air_density_kg_m3(dry_bulb_c: f64, humidity_ratio: f64, pressure_pa: f64) -> f64 {
     1.0 / dry_air_specific_volume_m3_kg(dry_bulb_c, humidity_ratio, pressure_pa)
 }
 
 /// Port of `moistAirDensityKgM3`.
+#[must_use]
 pub fn moist_air_density_kg_m3(dry_bulb_c: f64, humidity_ratio: f64, pressure_pa: f64) -> f64 {
     (1.0 + humidity_ratio) * dry_air_density_kg_m3(dry_bulb_c, humidity_ratio, pressure_pa)
 }
@@ -272,6 +277,7 @@ pub struct PsychrometricStateInput {
 
 impl PsychrometricStateInput {
     /// Dry bulb + wet bulb at standard atmospheric pressure.
+    #[must_use]
     pub fn from_wet_bulb(dry_bulb_c: f64, wet_bulb_c: f64) -> Self {
         Self {
             dry_bulb_c,
@@ -283,6 +289,7 @@ impl PsychrometricStateInput {
     }
 
     /// Dry bulb + relative humidity (fraction) at standard atmospheric pressure.
+    #[must_use]
     pub fn from_relative_humidity(dry_bulb_c: f64, relative_humidity: f64) -> Self {
         Self {
             dry_bulb_c,
@@ -293,11 +300,13 @@ impl PsychrometricStateInput {
         }
     }
 
+    #[must_use]
     pub fn with_pressure(mut self, pressure_pa: f64) -> Self {
         self.pressure_pa = pressure_pa;
         self
     }
 
+    #[must_use]
     pub fn with_enhancement_factor(mut self, enhancement_factor: bool) -> Self {
         self.enhancement_factor = enhancement_factor;
         self
@@ -319,7 +328,7 @@ pub struct PsychrometricState {
     pub enhancement_factor: f64,
 }
 
-/// Port of `psychrometricState`.
+/// # Errors `DomainError` when the input is out of domain. Port of `psychrometricState`.
 pub fn psychrometric_state(
     input: PsychrometricStateInput,
 ) -> Result<PsychrometricState, DomainError> {

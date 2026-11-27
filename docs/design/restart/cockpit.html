@@ -14,22 +14,29 @@ if (qs.has("light")) document.documentElement.classList.add("light");
 <header class="dock bar">
   <a class="brand" href="#"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" aria-hidden="true"><path d="M16 5 27 11.3v12.4L16 30 5 23.7V11.3z"/><path d="M5 11.3 16 17.6 27 11.3M16 17.6V30"/><path d="M8.5 9.3 16 13.6l7.5-4.3"/><ellipse cx="16" cy="7.4" rx="4.6" ry="2.2"/><path d="M7.5 20.5l8.5 4.9 8.5-4.9M7.5 16.9l8.5 4.9 8.5-4.9"/></svg>Drafthouse</a>
   <span class="sep wide"></span>
-  <div class="design"><b>IDCF-064 · FILM-VF38 · AX-500</b><span class="q" id="dstate">rank 1 of 202</span></div>
-  <span class="sp"></span>
+  <span class="in sel scen" id="scen"><b>Plant B peak</b><span class="q" id="dstate">rank 1 of 202</span><i>▾</i></span>
+  <span class="icons"><button class="icon" aria-label="Undo" title="Undo ⌘Z"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 3 2 6l3 3"/><path d="M2 6h7.5a4 4 0 0 1 0 8H7"/></svg></button><button class="icon dis wide" aria-label="Redo" title="Redo ⇧⌘Z"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m11 3 3 3-3 3"/><path d="M14 6H6.5a4 4 0 0 0 0 8H9"/></svg></button></span>
   <span class="seg" id="mode"><span data-m="3d">3D</span><span data-m="ga">GA views</span></span>
-  <span class="chip on wide" id="c-cut">◧ Cutaway</span>
-  <span class="chip on wide"><i class="sw" style="background:linear-gradient(90deg,var(--flow-hot),var(--flow-mid),var(--flow-cold))"></i>Water</span>
-  <span class="chip on wide"><i class="sw" style="background:var(--flow-air)"></i>Air</span>
-  <span class="chip on wide">⟷ Dimensions</span>
+  <span class="sp wide"></span>
+  <span class="btn wide" id="cmpbtn">⊞ Compare <i id="cmpn">0 / 3</i></span>
+  <span class="btn wide">⧉ Share</span>
   <span class="sep wide"></span>
   <span class="notice wide"><b>Synthetic catalog.</b> Not CTI certified.</span>
   <button class="icon" aria-label="Theme" id="theme"></button>
 </header>
+<div class="toolbar" id="tools">
+  <span class="chip on">◧ Cutaway</span>
+  <span class="chip on"><i class="sw" style="background:linear-gradient(90deg,var(--flow-hot),var(--flow-mid),var(--flow-cold))"></i>Water</span>
+  <span class="chip on"><i class="sw" style="background:var(--flow-air)"></i>Air</span>
+  <span class="chip on">⟷ Dimensions</span><i class="vr"></i>
+  <span class="chip">⤢ Fit <b class="kbd">F</b></span>
+</div>
+<aside class="dock tray" id="tray"><div class="cats" id="cats"></div><div class="cards" id="cards"></div></aside>
 
 <aside class="dock left" id="inputs">
   <i class="grab"></i><div class="tabbar" data-tabs></div>
-  <div class="hd"><h2>Duty</h2><span class="live" id="rated">rated 3 ms ago</span><span class="sp"></span><a href="#">↺ Default duty</a></div>
-  <div class="scroll">
+  <div class="hd"><span class="ltabs wide"><span id="lt-duty">Duty</span><span id="lt-build">Build</span></span><span class="live" id="rated">rated 3 ms ago</span><span class="sp"></span><a href="#" id="ldef">↺ Reset</a></div>
+  <div class="pane" id="p-duty"><div class="scroll">
     <div class="grp" id="duty"></div>
     <div class="grp"><div class="ro" id="derived"></div></div>
     <div class="grp"><span class="eyebrow">Site and water</span>
@@ -40,7 +47,8 @@ if (qs.has("light")) document.documentElement.classList.add("light");
     <div class="grp"><span class="eyebrow">Limits</span>
       <dl class="kv"><dt>Footprint at most</dt><dd>130 m²</dd><span class="tag">default</span><dt>Electrical input at most</dt><dd>75 kW</dd><span class="tag">default</span><dt>Thermal margin at least</dt><dd>0.30 K</dd><span class="tag">default</span><dt>Drift at most</dt><dd>—</dd><span class="tag">none</span></dl>
     </div>
-  </div>
+  </div></div>
+  <div class="pane" id="p-build"><div class="scroll" id="build"></div></div>
 </aside>
 
 <aside class="dock right" id="rank">
@@ -51,9 +59,11 @@ if (qs.has("light")) document.documentElement.classList.add("light");
   <div class="pk" id="picked"></div>
 </aside>
 
+<section class="dock cmp" id="cmp" hidden><i class="grab"></i><div class="tabbar" data-tabs></div><div class="hd"><h2>Compare</h2><span class="q" id="cmpq">3 of 3 pinned · the picked design is edged</span><span class="sp"></span><a href="#">Clear</a></div><div class="cmpg" id="cmpg"></div></section>
+
 <section class="dock drawer" id="calc">
   <i class="grab"></i><div class="tabbar" data-tabs></div>
-  <div class="hd"><h2>Calc steps</h2><nav class="tabs" id="sect"></nav><span class="sp"></span><a href="#" class="wide" id="drawerToggle">▾ Collapse</a></div>
+  <div class="hd"><h2>Calc steps</h2><nav class="tabs" id="sect"></nav><span class="sp"></span><a href="#" class="wide" id="drawerToggle">▾</a></div>
   <div class="body" id="steps"></div>
 </section>
 

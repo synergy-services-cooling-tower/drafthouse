@@ -2,7 +2,7 @@
 
 ## Summary
 
-Decision: Keep the Rust engine and its recorded validation as they are and delete the Bevy cockpit. Build a small engine-only WASM with three typed operations (open a catalog, size, rate), a public site on Blocks with a Three.js tower drawn from the engine's geometry and loaded only on demand, and one self-contained embeddable package per release. A rating runs in its own worker, so the tower follows every edit while a sizing is still running. All 299 recorded steps are replayed natively and through a test-only WASM build on every PR. This repo becomes the only source.
+Decision: Keep the Rust engine and its recorded validation as they are and delete the Bevy cockpit. Build a small engine-only WASM whose only entry is a set of typed `crates/api` commands, one per cockpit action, each with JSON input and output schemas, so the UI holds no rating or rule logic and later MCP tools call the same commands; a public site on Blocks with a Three.js tower drawn from the engine's geometry and loaded only on demand, and one self-contained embeddable package per release. A rating runs in its own worker, so the tower follows every edit while a sizing is still running. All 299 recorded steps are replayed natively and through a test-only WASM build on every PR. This repo becomes the only source.
 
 Slices: foundation with every gate on; engine carried over; typed API and WASM; geometry; the engine client, 3D tower and wizard packages; web app; release; then synergy-apps (deploy, pins, real catalog mapping, admin embed). Every slice leaves the whole tree building and every gate green.
 
@@ -44,16 +44,19 @@ written here under strict gates, without moving one recorded engine result?
 | 13 | Package manager | (a) pnpm; (b) npm workspaces | b | Lane hosts have npm. pnpm would be a host install. |
 | 14 | WASM parity once the shipped WASM drops the text commands | (a) compare only the typed operations, which covers 7 of the 299 recorded steps; (b) keep the text commands in the shipped WASM; (c) a second, test-only WASM build of the same crates that answers the text commands | c | (a) leaves the psychrometrics, Merkel, fan, crossflow and the other sections unproven in WASM. (b) costs the size budget. (c) replays all 299 steps through WASM, as today, and ships none of it. |
 | 15 | Where the C ABI lives | (a) in `api`; (b) its own crate, `wasm`, that picks its handler by a build feature | b | The test-only build needs the ABI over the text commands, and `cli` already depends on `api`. One ABI crate keeps the `unsafe` code in one file and `api` safe Rust. |
+| 16 | Where an app action lives | (a) in the wizard, calling `rate` and `size`; (b) every action one typed command in `crates/api`, with JSON input and output schemas | b | The owner's decision. (a) puts rule logic (layer snapping, pins, cell split) in TypeScript, where no MCP tool can reach it. (b) gives the UI, the embed's host and a later MCP server one surface, checked by one schema. |
 
 ## The decision
 
 1. **Engine.** `rust/` becomes five crates: `engine` (physics, unchanged, standard library only), `geometry`,
-   `api` (wire types, `open`, `size`, `rate`, the worked sheet), `cli` (the text commands, for replay) and `wasm`
+   `api` (wire types, the commands, the worked sheet), `cli` (the text commands, for replay) and `wasm`
    (the C ABI: `ct_alloc`, `ct_call`, `ct_free`), plus two small tool crates, `gen` and `blocks`.
    `engine.wasm` is `wasm` built for size over `api`. `replay.wasm` is the same crate built with the test-only
    feature `replay` over `cli`, under the same build profile; no release artifact holds it.
-2. **Contract.** Three operations and their types as in [shapes.md](shapes.md). TypeScript types are generated
-   from the Rust source by `just gen`.
+2. **Contract.** Every cockpit action is one command in `crates/api/src/commands/`, one file each, with the
+   types of [shapes.md](shapes.md) section 2. `just gen` writes the `Command` union, the TypeScript types and a
+   JSON Schema per input and output from the Rust source. The UI sends commands and keeps no rating or rule
+   logic; an MCP server added later lists the same schemas and calls the same entry.
 3. **Geometry.** `rate` returns `TowerGeometry`: cells, each with basin, shell, inlets, fill, nozzles, drift
    eliminators, plenum, fan and drive, plus flow paths and every dimension with its formula.
 4. **Packages.** `packages/engine` (two workers and the session), `packages/tower3d` (the scene),
@@ -91,7 +94,7 @@ written here under strict gates, without moving one recorded engine result?
 - Two WASM instances run in the page once a sizing is asked for, and the catalog is parsed in both. The file
   is fetched and compiled once.
 - CI builds a second WASM, `replay.wasm`, on every PR. It is tested and thrown away.
-- Two engine surfaces exist: the three operations (shipped) and the frozen text commands (replay only).
+- Two engine surfaces exist: the `crates/api` commands (shipped) and the frozen text commands (replay only).
 - Until `v1.0.0` is tagged, no release can be cut from this repo. Rollback is the existing v0.4.x assets.
 - The WASM, first-load and Lighthouse gates run in CI only; a lane host has neither `wasm32` nor a browser.
 
@@ -115,6 +118,7 @@ written here under strict gates, without moving one recorded engine result?
 |---|---|---|
 | `crates/api`, `crates/geometry` | `serde`, `serde_json` | the JSON boundary |
 | tests of `crates/engine` and `crates/cli` | `serde_json`, as a dev-dependency | they read the recorded vectors and the commands' JSON replies, as today |
+| `crates/api` | `schemars` | a JSON Schema per command input and output, for the UI's types and later MCP tools |
 | `crates/gen` | `ts-rs`; `blocks` at the Blocks pin | TypeScript types from the Rust source; prerender |
 | `crates/blocks` | `blocks-cli` at the Blocks pin | `blocks check` |
 | `packages/*`, `apps/web` | `@jirathip-dev/blocks` at the same pin; `three` | the UI; the tower |
@@ -152,6 +156,8 @@ above it, in the PR that creates the files it names.
 generate = "just gen"
 generated = [
   "packages/engine/src/gen/**",       # E2
+  "crates/api/src/commands/mod.rs",   # E2
+  "crates/api/schemas/**",            # E2
   "crates/api/src/worked/mod.rs",     # E2
   "crates/geometry/src/parts/mod.rs", # E3
   "packages/wizard/screens/**",       # P3
@@ -195,6 +201,12 @@ except = ["packages/tower3d/**"]
 reason = "the tower is imported on demand: import(), never a static import"
 
 [[ban]]
+pattern = "postMessage"
+paths = ["packages/**", "apps/**"]
+except = ["packages/engine/src/**"]
+reason = "an app action is a crates/api command, sent only through the engine client's generated call"
+
+[[ban]]
 pattern = "Math."
 paths = ["packages/wizard/src/**"]
 reason = "the wizard shows the engine's numbers and computes none"
@@ -231,7 +243,7 @@ mods = ["@drafthouse/engine"]
 may_use = []
 
 [[collect]]
-dir = "crates/api/src/ops"
+dir = "crates/api/src/commands"
 glob = "*.rs"
 
 [[collect]]
@@ -290,7 +302,7 @@ How each hot file is avoided:
 |---|---|---|
 | the worked sheet, one 300-line function in `rust/src/cli.rs` | `crates/api/src/worked/`, one file per section; `mod.rs` written by `just gen` | deleted with `cli.rs` in E2 |
 | the geometry derivation, one 560-line function in `web/geometry.js` | `crates/geometry/src/parts/` and `packages/tower3d/src/parts/`, one file per part | deleted in E3 |
-| the command match in `rust/src/cli.rs` | new behaviour is a file in `crates/api/src/ops/` | `crates/cli/src/commands.rs`, frozen |
+| the command match in `rust/src/cli.rs` | new behaviour is a file in `crates/api/src/commands/` | `crates/cli/src/commands.rs`, frozen |
 | the re-export list in `rust/src/lib.rs` | none: callers name the module path | moved as it is in E1, deleted in E2 with its last user, the adapter |
 | a wizard step list | `packages/wizard/src/steps/`, read by a glob | never created |
 | hand-written TypeScript wire types | `packages/engine/src/gen/`, written by `just gen` | none: `rust/wasm/binding.mjs` becomes the replay's raw caller in `tools/parity/` |

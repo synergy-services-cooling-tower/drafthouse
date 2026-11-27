@@ -1,7 +1,8 @@
 # Data shapes
 
 The Rust types in `crates/api` and `crates/geometry` are the source. `just gen` writes them as TypeScript to
-`packages/engine/src/gen/types.ts`. They are shown here in TypeScript because both callers read that.
+`packages/engine/src/gen/types.ts` and as one JSON Schema per command input and output to `crates/api/schemas/`.
+They are shown here in TypeScript because both callers read that.
 Every number is SI and its name carries the unit (`KgS`, `C`, `Pa`, `M`, `M2`, `KW`).
 
 ## 1. The WASM boundary
@@ -11,11 +12,12 @@ The three exports of today's `rust/src/wasm.rs` stay, in `crates/wasm`: `ct_allo
 the payload changes from a command line to JSON:
 
 ```ts
-type Call = { op: "open"; input: Catalog } | { op: "size"; input: SizeRequest } | { op: "rate"; input: RateRequest };
+type Call = { [C in Command]: { command: C; input: Input<C> } }[Command];   // generated from crates/api/src/commands/
 type Reply<T> = { ok: true; value: T } | { ok: false; error: Refusal };
 ```
 
-One WASM instance holds one opened catalog. `size` or `rate` before `open` is a `usage` refusal. The client runs
+Every call is one command of section 2. One WASM instance holds one opened catalog. Any command but `open`,
+`import` and `export` before `open` is a `usage` refusal. The client runs
 two instances of the one compiled module, one for `rate` and one for `size`, and opens the catalog in both.
 
 `replay.wasm` is the same crate built with the feature `replay`, under the same build profile. Its payload is a
@@ -23,7 +25,58 @@ recorded command line and its reply is today's envelope, so the parity harness r
 through it unchanged. It is built in CI, tested and discarded. `engine.wasm` answers a command line with a
 `usage` refusal.
 
-## 2. The operations
+## 2. The commands
+
+Every cockpit action is one typed command in `crates/api`, with a JSON input and a JSON output and a schema for
+each. The UI holds no rating or rule logic: it sends a command and shows the reply. A later MCP server lists the
+same schemas as its tools and calls the same `drafthouse_api::call`, unchanged. One command is one file in
+`crates/api/src/commands/`; `just gen` writes the `Command` union, the TypeScript types and the schemas from that
+folder, so a command cannot exist on one side only.
+
+The cockpit's whole state is a `Project`, and a command that edits it returns the new `Project` with its rating.
+Undo and redo keep a stack of the `Project` values the engine returned; they compute nothing.
+
+```ts
+type Command =
+  | "open" | "set-duty" | "set-fill-layers" | "set-cells" | "set-structure" | "pin" | "unpin"
+  | "rate" | "size" | "structural-check" | "compare" | "export" | "import";
+
+type Project = {
+  schema: 1;
+  duty: Duty; limits: Limits; objective: Objective;
+  cells: number;                       // identical cells; total flow splits evenly, one is rated and multiplied
+  structure: Structure;
+  design: Design;
+  pins: PartRef[];                     // parts the user dragged onto the tower; sizing ranks around them
+};
+type PartRef = { kind: "fill" | "drift" | "fan" | "nozzle" | "casing"; recordId: string };
+type Structure = { frame: "frp" | "steel" | "concrete"; code: "thai-dpt" | "asce-7"; site: LoadSite };
+type Edited = { project: Project; rating: Rating };
+```
+
+| Command | Input | Output | Refuses | Lands in |
+|---|---|---|---|---|
+| `open` | `Catalog` | `Opened` | `catalog` | E2 |
+| `set-duty` | `{ project; duty; limits?; objective? }` | `Edited` | `domain`, `infeasible` | E2 |
+| `set-fill-layers` | `{ project; layers: Design["fillLayers"] }` | `Edited`; each depth snapped to its fill's module step | `infeasible` | E2 |
+| `rate` | `{ project }` | `Rating` | `domain`, `infeasible` | E2 |
+| `size` | `{ project; limit? }` | `Sizing`, every candidate keeping the pins | `infeasible` | E2 |
+| `compare` | `{ projects: Project[] }`, one to three | `{ rows: { design: Design; headline: Rating["headline"] }[] }` | `usage` over three | E2 |
+| `export` | `{ project }` | `{ file: ProjectFile; link: string }`; the link carries the file in its fragment | none | E2 |
+| `import` | `{ text: string }`, a file or a link | `ProjectFile` | `usage` on an unknown `schema` | E2 |
+| `set-cells` | `{ project; cells: number }` | `Edited`; the geometry has `cells` side by side | `usage` under one | #2 |
+| `set-structure` | `{ project; structure: Structure }` | `Edited`; the casing part and the frame line follow | `usage` | #3 |
+| `structural-check` | `{ project }` | `{ loads; members; steps: WorkedSheet }` for the picked code and site | `domain` | #3 |
+| `pin` | `{ project; part: PartRef }` | `Edited` with the part in `pins` and in the design | `infeasible`, in plain words | #4 |
+| `unpin` | `{ project; part: PartRef }` | `Edited` | none | #4 |
+
+`ProjectFile` is `{ schema: 1; name: string; project: Project }`, the saved scenario. `LoadSite`, `loads` and
+`members` are #3's, and each load code has its own site fields. A command of #2, #3 or #4 is added as its file in
+that issue; until then the union does not hold it and the panel that sends it is not built.
+
+## 3. The operations
+
+The commands `open`, `size` and `rate` carry the engine's own types:
 
 ```ts
 type Catalog = {                       // record fields: docs/engine/CATALOG_SCHEMA.md, unchanged
@@ -49,8 +102,8 @@ type Design = {
   fillLayers: { fillId: string; depthM: number; thermalMultiplier?: number; pressureMultiplier?: number }[];   // top first
 };
 
-type SizeRequest = { duty: Duty; limits?: Limits; objective?: Objective; limit?: number };
-type SizeOptions = Omit<SizeRequest, "duty"> & { signal?: AbortSignal };    // the client's: abort ends the sizing
+type SizeRequest = { project: Project; limit?: number };
+type SizeOptions = { limit?: number; signal?: AbortSignal };              // the client's: abort ends the sizing
 type Sizing = {
   objective: Objective; feasibleCount: number; warning: string;
   candidates: Candidate[];             // ranked, at most `limit`
@@ -62,7 +115,7 @@ type Candidate = {
   electricalInputKW: number; makeupKgS: number; totalPressurePa: number; airflowM3S: number; footprintM2: number;
 };
 
-type RateRequest = { duty: Duty; limits?: Limits; design: Design };
+type RateRequest = { project: Project };
 type Rating = {
   design: Design;
   headline: {                          // the eleven numbers the cockpit showed first
@@ -104,7 +157,7 @@ How the issue's four words map: **rating** is `rate`; **sizing and ranking** is 
 design, about 12 ms natively. A `rate` call never waits for a `size` call: each has its own worker
 ([loading.md](loading.md) section 3).
 
-## 3. The geometry contract
+## 4. The geometry contract
 
 The engine says what is where and how big. It says nothing about meshes, materials or motion. Metres,
 right-handed, `y` up, `y = 0` at the basin floor, origin at the centre of the tower plan, cells along `+x`.
@@ -147,7 +200,7 @@ type Dimension = { key: string; label: string; value: number; unit: string; form
 - `flows` carries real values: air speed from the rated face velocity, water temperatures from hot to cold.
 - A new field is additive. A change of meaning raises `schema`, and the tower view refuses a schema it does not know.
 
-## 4. What the embed package exports
+## 5. What the embed package exports
 
 ```ts
 export function loadEngine(assets?: EngineAssets): Promise<Engine>;
@@ -159,7 +212,7 @@ export function mountTower(element: HTMLElement, options: { geometry: TowerGeome
   { show(geometry: TowerGeometry): void; set(view: Partial<TowerViewState>): void; destroy(): void };
 export type EngineAssets = { wasmUrl: string; workerUrl: string };    // only for a host whose bundler cannot resolve them
 export type TowerViewState = { cutaway: number; air: boolean; water: boolean; labels: boolean; paused: boolean };
-export type { Catalog, Duty, Limits, Objective, Design, Sizing, Candidate, Rating, TowerGeometry, Refusal };
+export type { Command, Call, Project, Catalog, Duty, Limits, Objective, Design, Sizing, Candidate, Rating, TowerGeometry, Refusal };
 export const version: string;
 ```
 
@@ -170,7 +223,7 @@ Files in the tarball: `index.js`, `index.d.ts`, a hashed tower chunk (Three.js i
 What the embed needs of its host: a bundler that resolves ES modules and asset URLs (or `EngineAssets`), and a
 page that may compile WebAssembly and start same-origin workers.
 
-## 5. Release assets and the pin
+## 6. Release assets and the pin
 
 | Asset of release `v<version>` | What it is |
 |---|---|

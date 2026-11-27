@@ -123,7 +123,8 @@ the head of that repo's `staging`. Nothing is waiting there to be published.
 | Reviews and checks | on `main` and `staging`: PR required, one review, `gates / done` required; on `staging` also `drover/review`. The owner sets this; `drover protection` checks it. |
 | Recipes | `.drover/design.md` (HTML mockups on Blocks, `docs/design/<slug>/`, 1440 and 390, light) and `.drover/verify.md` (start the built site, drive the wizard, screenshots at 1440 and 390) |
 
-`.drover/rules.md` starts with these lines:
+`.drover/rules.md` is created by this ADR's PR with the last line below, which the owner decided; F0 adds the
+others above it:
 
 ```
 - don't write a comment other than `// SAFETY:` or one `///` line on a public item (enforced by: core/arch comments)
@@ -145,7 +146,8 @@ the head of that repo's `staging`. Nothing is waiting there to be published.
 - don't run rate and size in one worker (enforced by: local/live)
 - don't delete a file another file still builds from (enforced by: gates / done, local/legacy)
 - don't add a dependency without its reason (enforced by: core/deps)
-- don't add a ct-engine command; new behaviour is an operation in crates/api (enforced by: core/arch frozen)
+- don't add a ct-engine command; new behaviour is a command in crates/api (enforced by: core/arch frozen)
+- don't add an app action outside a crates/api command (enforced by: core/arch generated command union, ban on `postMessage` outside packages/engine)
 ```
 
 The cost of an empty baseline falls on E1. The carried engine must pass pedantic clippy, the function-size and

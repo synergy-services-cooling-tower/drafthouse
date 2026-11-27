@@ -2,7 +2,7 @@
 
 ## Summary
 
-Decision: Keep the Rust engine and its recorded validation as they are and delete the Bevy cockpit. Build a small engine-only WASM with three typed operations (open a catalog, size, rate), a public site on Blocks with a Three.js tower drawn from the engine's geometry and loaded only on demand, and one self-contained embeddable package per release. A rating runs in its own worker, so the tower follows every edit while a sizing is still running. All 299 recorded steps are replayed natively and through a test-only WASM build on every PR. This repo becomes the only source.
+Decision: Keep the Rust engine and its recorded validation as they are and delete the Bevy cockpit. Build a small engine-only WASM whose only entry is a set of typed `crates/api` commands, one per cockpit action, each with JSON input and output schemas, so the UI holds no rating or rule logic and later MCP tools call the same commands; a public site on Blocks with a Three.js tower drawn from the engine's geometry and loaded only on demand, and one self-contained embeddable package per release. A rating runs in its own worker, so the tower follows every edit while a sizing is still running. All 299 recorded steps are replayed natively and through a test-only WASM build on every PR. This repo becomes the only source.
 
 Slices: foundation with every gate on; engine carried over; typed API and WASM; geometry; the engine client, 3D tower and wizard packages; web app; release; then synergy-apps (deploy, pins, real catalog mapping, admin embed). Every slice leaves the whole tree building and every gate green.
 
@@ -17,6 +17,7 @@ Open questions: (1) who supplies real tower cells and water-quality factors for 
 | 3. Rating must not wait behind sizing | Both: `rate` has its own worker, and the wizard cancels the running `size` on every edit. | [loading.md](loading.md) section 3, [tower3d.md](tower3d.md) section 2 |
 | 4. No TODO comments; serde in tests | Only `SAFETY:` and one doc line; a ban on `TODO`. The serde ban covers the engine's `src/` only. | [cutover.md](cutover.md) section 4, [adr.md](adr.md) last section |
 | 5. No internals of the private apps repo | Removed from the tree: its paths, its security policy file, its commit ids and what its code holds. The first commit of this branch still carries them: see the lane report. | every file |
+| Agent forward: every cockpit action is one `crates/api` command | Thirteen typed commands with JSON schemas generated from one folder; the UI and a later MCP server send the same calls. `.drover/rules.md` carries the line from this PR on. | [shapes.md](shapes.md) section 2, [adr.md](adr.md) option 16, [cutover.md](cutover.md) section 4 |
 | Scope: no dark theme | Superseded by the design amendments: one cockpit screen, dark by default with a light toggle, drawn at 1440 and 390. | [screens.md](screens.md) |
 
 ## Where each acceptance criterion is answered
@@ -24,9 +25,9 @@ Open questions: (1) who supplies real tower cells and water-quality factors for 
 | Issue AC | File |
 |---|---|
 | ADR: question, options, decision, consequences | [adr.md](adr.md) |
-| Engine WASM API; fate of `rust/wasm` and `rust/cockpit-adapter` | [shapes.md](shapes.md) sections 1 and 2, [cutover.md](cutover.md) section 1 |
+| Engine WASM API; fate of `rust/wasm` and `rust/cockpit-adapter` | [shapes.md](shapes.md) sections 1 to 3, [cutover.md](cutover.md) section 1 |
 | Package boundaries; what the embed exports | [boundaries.md](boundaries.md), [usage.md](usage.md) section 3 |
-| 3D geometry contract, scene mapping, live update | [shapes.md](shapes.md) section 3, [tower3d.md](tower3d.md) |
+| 3D geometry contract, scene mapping, live update | [shapes.md](shapes.md) section 4, [tower3d.md](tower3d.md) |
 | Lazy-load plan and the three CI gates | [loading.md](loading.md) |
 | Pipeline retirement and the SWA cut-over | [cutover.md](cutover.md) section 3 |
 | Screens and actions for the design lane | [screens.md](screens.md) |

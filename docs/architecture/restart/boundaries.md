@@ -6,7 +6,7 @@
 crates/
   engine/      the physics, selection and catalog schema. Standard library only. Numerics unchanged.
   geometry/    tower geometry from catalog records and a rated design. Layout arithmetic, no physics.
-  api/         wire types, the three operations, the worked sheet. Safe Rust.
+  api/         wire types, the commands (one per cockpit action, with JSON schemas), the worked sheet. Safe Rust.
   cli/         the text commands the recorded baseline replays, and the ct-engine bin. Never shipped.
   wasm/        the C ABI, the only unsafe code. Builds engine.wasm over api, and with the test-only
                feature `replay` builds replay.wasm over cli.
@@ -60,12 +60,12 @@ flowchart LR
 |---|---|---|
 | `crates/engine` | nothing in `src/`; its tests read JSON with `serde_json` | any dependency or `serde` in `src/`; geometry or wire types |
 | `crates/geometry` | `engine` record and result types | solve or correct a physical quantity |
-| `crates/api` | `engine`, `geometry` | hold physics of its own; any `unsafe` |
+| `crates/api` | `engine`, `geometry` | hold physics of its own; any `unsafe`; an action that is not a command |
 | `crates/cli` | `engine`, `api` (for the worked sheet) | be linked into `engine.wasm`; gain a command |
 | `crates/wasm` | `api`; `cli` only under the feature `replay` | hold anything but the ABI; put `replay` in a released file |
 | `packages/engine` | the generated types | the DOM, Blocks, Three.js; run `rate` and `size` in one worker |
 | `packages/tower3d` | Three.js; `packages/engine` types | call the engine; import Blocks or the wizard |
-| `packages/wizard` | `packages/engine`; Blocks core | import Three.js or `tower3d`; compute a number it shows |
+| `packages/wizard` | `packages/engine`; Blocks core | import Three.js or `tower3d`; compute a number it shows; hold a rule the engine owns (snapping, pins, cell split) |
 | `packages/embed`, `apps/web` | `engine`, `wizard`; `tower3d` through one dynamic import | a static import of `tower3d` or Three.js |
 
 The wizard names the tower by its tag, `drafthouse-tower`, inside a Blocks island. It never imports it. That is
@@ -80,7 +80,7 @@ text command, and a `packages/engine` test rates while a sizing runs.
 | Boundary | What crosses | Checked where |
 |---|---|---|
 | Host or site to `packages/engine` | a `Catalog`, a `Duty`, a `Design` | the engine's schema, in `open`; nothing downstream checks again |
-| `packages/engine` to its two workers | the JSON call and reply of [shapes.md](shapes.md) section 1 | types generated from the Rust source |
+| `packages/engine` to its two workers | the JSON call and reply of [shapes.md](shapes.md) sections 1 and 2: one command each | types generated from the Rust source |
 | Wizard to tower | island props `{ geometry, view }`; events `pick` and `view`. The props type lives in `packages/engine`, so neither side imports the other. | the tower refuses an unknown `schema` |
 | Release to synergy-apps | two archives and their digests | the host's pin, by sha256 |
 

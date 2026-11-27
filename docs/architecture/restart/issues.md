@@ -65,17 +65,20 @@ flowchart LR
   natively and 299 through the WASM build within 1e-12 of native; `validation/` is byte-identical; no test
   assertion changed; `local/legacy` passes on the adapter.
 
-**E2. `api: three typed operations over a JSON ABI, replay.wasm, and the WASM size gate`** `--serial engine`
-- Blocked on: E1. Builds: `crates/api` (wire types, `open`, `size`, `rate`, the worked sheet by section);
+**E2. `api: typed commands over a JSON ABI, replay.wasm, and the WASM size gate`** `--serial engine`
+- Blocked on: E1. Builds: `crates/api` (wire types, `Project`, one file per command in `src/commands/`: `open`,
+  `set-duty`, `set-fill-layers`, `rate`, `size`, `compare`, `export`, `import`; the worked sheet by section);
   `crates/wasm` answering JSON by default and the text commands under the test-only feature `replay`; the size
-  build profile for both; `crates/gen` writing `packages/engine/src/gen/types.ts`; the raw ABI caller in
+  build profile for both; `crates/gen` writing `packages/engine/src/gen/types.ts`, the `Command` union and a JSON
+  Schema per command input and output in `crates/api/schemas/`; the raw ABI caller in
   `packages/engine`; the `--engine api` parity leg; the `local/wasm` gate. Its first commit records the
   measured size of `engine.wasm` and the worst WASM spread over the 299 steps under the size profile. Deletes
   `rust/` (the adapter) and, with it, the re-export list in `crates/engine/src/lib.rs`.
 - Leaves: `web/geometry.js` only.
 - Done when: `engine.wasm` is at most 150,000 bytes gzip and answers a text command with a `usage` refusal;
   all 299 steps pass through `replay.wasm` within 1e-12 of native; WASM and native agree to 1e-12 on every
-  recorded `size`, `open` and `rate` case; `rate` reproduces the adapter's recorded run; `ct-engine select`
+  recorded `size`, `open` and `rate` case; every command's input and output validate against its generated
+  schema in a test that sends each one through `call`; `rate` reproduces the adapter's recorded run; `ct-engine select`
   prints the same worked values as before.
 
 **E3. `geometry: the tower as data from the engine`** `--serial engine`
@@ -85,7 +88,8 @@ flowchart LR
   vectors in the PR's first commit; `web/geometry.js` is deleted.
 
 **P1. `packages/engine: two workers, session, cancellable sizing`**
-- Blocked on: E2. Builds: `loadEngine`, `open`, `size` with its abort signal, `rate`, the refusal union, the
+- Blocked on: E2. Builds: `loadEngine`, the typed `call` over the generated `Command` union, `open`, `size` with
+  its abort signal, `rate`, the refusal union, the
   rate worker and the size worker, the `local/live` gate. Its first commit records the measured time of a `rate`
   beside a running `size`.
 - Done when: tests drive the real WASM: a catalog violation is a value; a `rate` issued while a `size` runs
@@ -100,7 +104,8 @@ flowchart LR
   change reuses the scene objects; no model, texture or environment file exists.
 
 **P3. `packages/wizard: the cockpit panels, ranking, calc drawer`**
-- Blocked on: P1, D1. Builds: the reducer, one file per panel in `src/steps/` (duty, build, ranking, picked, calc, compare,
+- Blocked on: P1, D1. Builds: the reducer, which sends every edit as a `crates/api` command and keeps the
+  returned `Project` values for undo and redo; one file per panel in `src/steps/` (duty, build, ranking, picked, calc, compare,
   scenarios), undo and redo, the Blocks screens, the screen fixtures for `blocks check`, the `local/guard` gate.
 - Done when: every state of [screens.md](screens.md) has a fixture with no guard finding; the wizard imports
   neither Three.js nor the tower.
@@ -129,6 +134,11 @@ flowchart LR
   the browser on the CI runner, then a gate at that number.
 - Done when: the baseline commit and the result are in the PR; the parity run is unchanged.
 
+**#2, #3, #4. `engine: cells`, `engine: structure and the structural check`, `engine: pinned parts`** (filed) `--serial engine`
+- Blocked on: E2. Each adds its commands as files in `crates/api/src/commands/` ([shapes.md](shapes.md)
+  section 2): `set-cells`; `set-structure` and `structural-check`; `pin` and `unpin`. The panel that sends a
+  command is built after its command exists.
+
 ## synergy-apps
 
 These are written from this repo's side of the contract: what the host must accept, pin and provide. Where
@@ -144,7 +154,7 @@ each change lands in the host repo is for its own lanes; none of its files are n
 - Blocked on: S1, R1 and the tag. Done when: the staging site serves the new cockpit.
 
 **S3. `drafthouse catalog: every list the engine needs, and the engine mapping`** (waits for open question 1)
-- Builds: whatever the host's catalog lacks of the engine's `Catalog` ([shapes.md](shapes.md) section 2), and a
+- Builds: whatever the host's catalog lacks of the engine's `Catalog` ([shapes.md](shapes.md) section 3), and a
   mapping from approved records to it. The mapping and the data stay in synergy-apps.
 - Done when: the approved catalog opens in the engine with no violation.
 
@@ -155,7 +165,7 @@ each change lands in the host repo is for its own lanes; none of its files are n
 
 **S5. `admin: the sizing section`** `--design`
 - Blocked on: S3, S4. Builds: the cockpit and tower mounted in admin on the real catalog; the page may compile
-  WebAssembly and start same-origin workers ([shapes.md](shapes.md) section 4).
+  WebAssembly and start same-origin workers ([shapes.md](shapes.md) section 5).
 - Done when: a signed-in user sizes a tower on approved records in admin; no frame is involved.
 
 **S6. `drafthouse pins: production to v1.0.0`** (the owner's promote step)

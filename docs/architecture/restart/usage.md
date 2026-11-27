@@ -6,7 +6,8 @@ illustrative and follow Blocks' own docs.
 ## 1. The engine client (`packages/engine`)
 
 A catalog is opened once. Only an opened catalog can be sized or rated, so an unchecked catalog cannot reach the
-physics. A refusal is a value, never an exception.
+physics. A refusal is a value, never an exception. Every call is one `crates/api` command
+([shapes.md](shapes.md) section 2); the client's methods are typed wrappers over the one generated `call`.
 
 ```ts
 import { loadEngine, type Catalog, type Duty } from "@drafthouse/engine";
@@ -16,11 +17,13 @@ const opened = await engine.open(catalog);            // checks every record aga
 if (!opened.ok) return showViolations(opened.error.violations);
 const session = opened.value;
 
-const sizing = await session.size(duty, { objective: "least-over-capacity", limit: 30 });
+const sizing = await session.size(project, { limit: 30 });
 if (!sizing.ok) return showRefusal(sizing.error);
-const best = sizing.value.candidates[0];
+const best = { ...project, design: sizing.value.candidates[0].design };
 
-const rating = await session.rate(duty, best.design); // numbers, calc steps and geometry of one design
+const rating = await session.rate(best);              // numbers, calc steps and geometry of one design
+const edited = await session.call("set-fill-layers", { project: best, layers });   // any command, by name
+if (edited.ok) show(edited.value.project, edited.value.rating);
 ```
 
 `rate` and `size` run in separate workers, so a rating never waits for a sizing. A `size` call takes an
@@ -71,29 +74,32 @@ export const step: Step = {
 };
 ```
 
-A duty edit does three things: it cancels the running sizing, rates the current design at once, and asks for a
-new ranking when the edits pause.
+Every edit is one command, sent the same way: it cancels the running sizing, sends the edit to the rate worker,
+which answers with the new `Project` and its rating at once, and asks for a new ranking when the edits pause.
+The panel never rates, snaps or checks anything itself.
 
 ```ts
 // packages/wizard/src/run.ts
-function dutyChanged(duty: Duty) {
+function edited<C extends EditCommand>(command: C, input: Omit<Input<C>, "project">) {
   ranking.abort();                                                // the size worker stops now
   ranking = new AbortController();
-  void follow(duty);                                              // rate worker: the tower follows this edit
-  afterPause(250, () => rank(duty, ranking.signal));
+  void follow(command, input);                                    // rate worker: the tower follows this edit
+  afterPause(250, () => rank(ranking.signal));
 }
 
-async function follow(duty: Duty) {
-  const rating = await session.rate(duty, state.design);          // tens of ms, never behind a sizing
-  if (rating.ok) show(rating.value);
+async function follow<C extends EditCommand>(command: C, input: Omit<Input<C>, "project">) {
+  const reply = await session.call(command, { ...input, project: state.project });   // tens of ms
+  if (!reply.ok) return refuse(reply.error);                      // plain words, from the engine
+  history.push(reply.value.project);                              // undo and redo step through these
+  show(reply.value.project, reply.value.rating);
 }
 
-async function rank(duty: Duty, signal: AbortSignal) {
-  const sizing = await session.size(duty, { objective, signal }); // seconds today, in its own worker
+async function rank(signal: AbortSignal) {
+  const sizing = await session.size(state.project, { signal });   // seconds today, in its own worker
   if (!sizing.ok) return sizing.error.kind === "superseded" ? undefined : refuse(sizing.error);
-  const design = keepOrFirst(state.design, sizing.value.candidates);
-  const rating = await session.rate(duty, design);
-  if (rating.ok) show(rating.value, sizing.value);
+  const project = keepOrFirst(state.project, sizing.value.candidates);
+  const rating = await session.rate(project);
+  if (rating.ok) show(project, rating.value, sizing.value);
 }
 ```
 
@@ -145,11 +151,20 @@ export const part: Part<Cell["fan"]> = {
 
 ## 5. Inside the Rust API (`crates/api`)
 
-An operation takes the opened catalog and a typed request and returns a typed reply or a refusal.
+A command is one file in `src/commands/`: its input, its output and the function between them. `just gen`
+collects the folder into the `Command` union, the TypeScript types and the JSON Schemas, and `call` dispatches
+by name. The same `call` answers the WASM ABI today and an MCP tool later.
 
 ```rust
-pub fn rate(catalog: &OpenCatalog, request: &RateRequest) -> Result<Rating, Refusal> {
-    let run = one_design_run(catalog, &request.duty, &request.design)?;
+// crates/api/src/commands/rate.rs
+#[derive(Deserialize, JsonSchema, TS)]
+pub struct Input {
+    pub project: Project,
+}
+
+pub fn run(catalog: &OpenCatalog, input: &Input) -> Result<Rating, Refusal> {
+    let project = &input.project;
+    let run = one_design_run(catalog, &project.duty, &project.design)?;
     let candidate = run.candidates.first().ok_or_else(|| Refusal::infeasible(&run))?;
     Ok(Rating {
         headline: headline(&run, candidate),

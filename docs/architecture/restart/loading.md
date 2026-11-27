@@ -86,7 +86,7 @@ stateDiagram-v2
   copy of Blocks' core into the bundle; W1 proves that with the gate.
 - **WASM.** Today's 624,593 raw bytes include the text command parser and are built for speed. The new build
   leaves the parser out, builds for size (`opt-level = "s"`, `lto`, one codegen unit, symbols stripped) and
-  exports three operations. E2's first commit records the measured size. If it does not fit after those steps,
+  answers only the `crates/api` commands. E2's first commit records the measured size. If it does not fit after those steps,
   E2 stops and asks the owner; the limit is not raised quietly. `replay.wasm` is under no budget: it is in no
   artifact.
 - **Lighthouse.** A lab score moves by a point or two between runs. The gate takes the median of three with

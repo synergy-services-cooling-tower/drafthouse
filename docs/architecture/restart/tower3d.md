@@ -1,6 +1,6 @@
 # The 3D tower
 
-The engine emits `TowerGeometry` ([shapes.md](shapes.md) section 3). `packages/tower3d` turns it into a Three.js
+The engine emits `TowerGeometry` ([shapes.md](shapes.md) section 4). `packages/tower3d` turns it into a Three.js
 scene. There is no model file, no texture file and no environment file: every mesh is built from numbers.
 
 ## 1. How the scene maps the geometry
